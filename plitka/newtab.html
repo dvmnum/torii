@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Новая вкладка</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="css/gridstack.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="is-loading">
+  <!-- фон -->
+  <div id="bg" aria-hidden="true">
+    <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+    <div class="bg-image"></div>
+    <div class="grain"></div>
+  </div>
+
+  <!-- направляющие сетки в режиме редактирования -->
+  <div id="guides" aria-hidden="true"></div>
+
+  <main class="grid-stack" id="grid"></main>
+
+  <!-- плавающие кнопки -->
+  <div class="dock" id="dock">
+    <button class="dock-btn" id="btn-edit" title="Редактировать раскладку (E)">
+      <svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>
+    </button>
+    <button class="dock-btn" id="btn-settings" title="Настройки">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+
+  <!-- панель режима редактирования -->
+  <div class="editbar" id="editbar">
+    <span class="editbar-hint">Тащи блоки, тяни за углы и края</span>
+    <div class="add-wrap">
+      <button class="pill" id="btn-add">+ Виджет</button>
+      <div class="add-menu" id="add-menu"></div>
+    </div>
+    <button class="pill pill-accent" id="btn-done">Готово</button>
+  </div>
+
+  <!-- панель настроек -->
+  <aside class="panel" id="settings" aria-hidden="true">
+    <header class="panel-head">
+      <h2>Настройки</h2>
+      <button class="icon-btn" data-close title="Закрыть">✕</button>
+    </header>
+    <div class="panel-body" id="settings-body"></div>
+  </aside>
+
+  <!-- модалка -->
+  <div class="modal-backdrop" id="modal">
+    <div class="modal">
+      <h3 id="modal-title"></h3>
+      <form id="modal-form"></form>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" hidden>
+
+  <script src="js/lib/gridstack-all.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/widgets.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

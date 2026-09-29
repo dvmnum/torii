@@ -1,0 +1,15 @@
+{
+  "name": "plitka",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Новая вкладка со свободной раскладкой виджетов (Chrome MV3)",
+  "scripts": {
+    "test": "node tests/e2e.mjs",
+    "zip": "node -e \"console.log('TODO: упаковка plitka/ в zip для стора')\""
+  },
+  "devDependencies": {
+    "gridstack": "^14.0.0",
+    "playwright": "^1.56.0"
+  }
+}
