@@ -15,15 +15,8 @@
   const ACCENTS = ['#9b8cff', '#5cc8ff', '#b4f05a', '#ff7a9c', '#ffc35c', '#f2f2f2'];
 
   // меш-градиент (js/mesh.js): координаты точек в долях экрана
-  const DEFAULT_MESH = {
-    points: [
-      { x: 0.12, y: 0.12, color: '#5b3cff' },
-      { x: 0.88, y: 0.28, color: '#00b3c7' },
-      { x: 0.42, y: 0.92, color: '#c2359d' },
-      { x: 0.62, y: 0.5, color: '#0a0820' },
-    ],
-    warp: 0.55, speed: 0.35, grain: 0.3,
-  };
+  const fromPreset = ({ id, title, ...p }) => structuredClone(p);
+  const DEFAULT_MESH = fromPreset(Mesh.PRESETS[0]);
 
   const DEFAULT_SETTINGS = {
     name: '',
@@ -113,6 +106,8 @@
     m.warp = unit(raw.warp, m.warp);
     m.speed = unit(raw.speed, m.speed);
     m.grain = unit(raw.grain, m.grain);
+    m.density = unit(raw.density, m.density);
+    m.mode = Mesh.MODES[raw.mode] ? raw.mode : 'mesh';
     return m;
   }
 
@@ -173,7 +168,7 @@
   function applyMesh() {
     const on = settings.bg === 'mesh' && !settings.bgImage;
     const bg = document.getElementById('bg');
-    bg.style.setProperty('--grain', on ? settings.mesh.grain * 0.22 : '');
+    bg.style.setProperty('--grain', on ? settings.mesh.grain * 0.4 : '');
     // запасной вид (нет WebGL / первый кадр) — CSS-градиенты из тех же точек
     bg.style.background = on ? Mesh.cssPreview(settings.mesh) : '';
     if (!on) { meshBg?.destroy(); meshBg = null; document.body.classList.remove('mesh-on'); return; }
@@ -496,7 +491,7 @@
   }
 
   let closeDropdown = null; // открыт максимум один список
-  function dropdown(options, value) {
+  function dropdown(options, value, onChange) {
     let cur = options.some(([v]) => v === value) ? value : options[0][0];
     const label = h('span', { class: 'dd-label' });
     const btn = h('button', { type: 'button', class: 'dd-btn', 'aria-haspopup': 'listbox' }, label,
@@ -514,7 +509,11 @@
     }, t));
     list.append(...items);
     const highlight = (i) => { hi = (i + items.length) % items.length; items.forEach((it, j) => it.classList.toggle('hi', j === hi)); };
-    const pick = (i) => { cur = options[i][0]; paint(); close(); btn.focus(); };
+    const pick = (i) => {
+      const changed = cur !== options[i][0];
+      cur = options[i][0]; paint(); close(); btn.focus();
+      if (changed) onChange?.(cur);
+    };
 
     const onOutside = (e) => { if (!list.contains(e.target) && !btn.contains(e.target)) close(); };
     function open() {
@@ -689,12 +688,33 @@
     };
     const pct = (v) => Math.round(v * 100) + '%';
 
+    // заготовки: применяются целиком, дальше их можно докрутить
+    const presets = h('div', { class: 'mesh-presets' }, Mesh.PRESETS.map(p => {
+      const src = presetThumb(p);
+      return h('button', {
+        type: 'button', class: 'mesh-preset', 'data-preset': p.id, title: p.title,
+        style: src ? null : `background:${Mesh.cssPreview(p)}`,
+        onclick: () => { settings.mesh = fromPreset(p); meshSel = 0; setSetting('mesh', settings.mesh); renderSettings(); },
+      }, src ? h('img', { src, alt: '' }) : null, h('span', {}, p.title));
+    }));
+
+    const mode = dropdown(Object.entries(Mesh.MODES), m.mode, (v) => { m.mode = v; commit(); renderSettings(); });
+
     box.style.background = Mesh.cssPreview(m);
     paint();
-    return h('div', { class: 'mesh-editor' }, box, tools, colorInp,
+    return h('div', { class: 'mesh-editor' }, presets, box, tools, colorInp,
+      h('div', { class: 'field' }, h('span', {}, 'Узор'), mode.el),
+      m.mode !== 'mesh' ? sl('Плотность', 'density', pct) : null,
       sl('Искажение', 'warp', pct),
       sl('Скорость', 'speed', (v) => v ? pct(v) : 'стоит'),
       sl('Зерно', 'grain', pct));
+  }
+
+  // миниатюры пресетов рисуются WebGL один раз и кэшируются
+  const thumbs = new Map();
+  function presetThumb(p) {
+    if (!thumbs.has(p.id)) thumbs.set(p.id, Mesh.thumb(p));
+    return thumbs.get(p.id);
   }
 
   function renderSettings() {

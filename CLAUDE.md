@@ -29,7 +29,9 @@ tests/e2e.mjs          Playwright-смоук (npm test)
 
 ## Модель данных (chrome.storage.local)
 - `settings` — `{ name, bg, bgImage(dataURL|null), bgDim, accent, glassBlur, glassAlpha, radius, motion, mesh }`
-  - `bg: 'mesh'` — свой меш-фон; `mesh = { points: [{ x, y, color:'#rrggbb' }] (2..6, x/y — доли экрана), warp, speed, grain }` (всё 0..1), чистится `cleanMesh()`.
+  - `bg: 'mesh'` — свой меш-фон; `mesh = { mode, points: [{ x, y, color:'#rrggbb' }] (2..6, x/y — доли экрана), warp, speed, grain, density }` (числа 0..1), чистится `cleanMesh()`.
+    `mode` — узор поверх меша: `mesh` (пятна) | `ribbed` (рифлёное стекло) | `halftone` | `flow` (неоновые ленты) | `ripple` (рельеф); всё в одном шейдере (`uMode`).
+    Заготовки — `Mesh.PRESETS` (точка 0 обычно самая тёмная — она же фон у полутона и неона), миниатюры рисует `Mesh.thumb()` на общем невидимом канвасе.
     Весит ~200 байт — годится для `storage.sync`. Без WebGL — CSS-градиенты из тех же точек (`Mesh.cssPreview`).
 - `widgets` — массив `{ id, type, data }`, общий для всех экранов; `data` = дефолты виджета + пользовательские поля
 - `layouts` — `{ md?, lg? }`, в каждом `{ [id]: { x, y, w, h } }`. Диапазоны по `innerWidth` (CSS px): `sm` <700, `md` 700–1399, `lg` ≥1400.

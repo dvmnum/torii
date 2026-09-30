@@ -347,6 +347,34 @@ await page.waitForTimeout(1000);
 const cleaned = await page.evaluate(() => window.__plitka.settings().mesh);
 check(cleaned.points.length === 4 && cleaned.speed === 1, 'меш: кривые параметры чистятся');
 
+// пресеты: миниатюры, применение, скрин каждого на весь экран
+await page.click('#btn-settings');
+await page.waitForTimeout(400);
+const thumbsOk = await page.$$eval('.mesh-preset img', imgs => imgs.length === 8 && imgs.every(i => i.src.startsWith('data:image/jpeg') && i.naturalWidth > 0));
+check(thumbsOk, 'пресеты: 8 миниатюр отрисованы WebGL');
+await page.screenshot({ path: `${out}/23-presets-panel.png` });
+const ids = await page.$$eval('.mesh-preset', els => els.map(e => e.dataset.preset));
+for (const id of ids) {
+  if (!(await page.locator('#settings.open').count())) { await page.click('#btn-settings'); await page.waitForTimeout(400); }
+  await page.click(`.mesh-preset[data-preset="${id}"]`);
+  await page.waitForTimeout(300);
+  await page.click('.panel [data-close]');
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: `${out}/24-preset-${id}.png` });
+}
+const last = await page.evaluate(() => window.__plitka.settings().mesh);
+check(last.mode === 'mesh' && last.points[1].color === '#ff5a3c', 'пресеты: последний («Закат») применился');
+
+// смена узора через выпадающий список
+await page.click('#btn-settings');
+await page.waitForTimeout(400);
+await page.click('.mesh-editor .dd-btn');
+await page.click('body > .dd-list .dd-item:has-text("Полутон")');
+await page.waitForTimeout(400);
+check(await page.evaluate(() => window.__plitka.settings().mesh.mode) === 'halftone', 'узор: переключился на полутон');
+check(await page.locator('.mesh-editor .field-range:has-text("Плотность")').count() === 1, 'узор: появился ползунок плотности');
+await page.click('.panel [data-close]');
+
 const real = errors.filter(e => !/Failed to load resource/i.test(e));
 if (fails.length) { console.error('FAIL:', fails.join('; ')); process.exitCode = 1; }
 console.log('errors:', real.length ? real.join('\n') : 'none');
