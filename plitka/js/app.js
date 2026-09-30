@@ -6,6 +6,18 @@
 
   const ACCENTS = ['#9b8cff', '#5cc8ff', '#b4f05a', '#ff7a9c', '#ffc35c', '#f2f2f2'];
 
+  // иконка вкладки: часы и помодоро — «живые», перерисовываются
+  const TAB_ICONS = [['logo', 'Plitka'], ['emoji', 'Эмодзи'], ['letter', 'Буква'], ['clock', 'Часы'], ['pomodoro', 'Помодоро'], ['image', 'Своя']];
+  // шрифт и тень текста в блоках: глобально и с переопределением у блока («Как везде»)
+  const FONT_STACK = {
+    manrope: "'Manrope', system-ui, sans-serif",
+    system: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+    serif: "Georgia, 'Times New Roman', serif",
+    mono: "ui-monospace, 'Cascadia Mono', Consolas, 'Courier New', monospace",
+  };
+  const FONTS = [['manrope', 'Manrope'], ['system', 'Системный'], ['serif', 'С засечками'], ['mono', 'Моноширинный']];
+  const SHADOWS = [['none', 'Нет'], ['soft', 'Мягкая'], ['strong', 'Сильная']];
+
   // меш-градиент (js/mesh.js): координаты точек в долях экрана
   // mesh.preset — id заготовки, пока её не правили (для подсветки в панели)
   const fromPreset = ({ id, title, ...p }) => ({ ...structuredClone(p), preset: id });
@@ -34,12 +46,16 @@
     mesh: DEFAULT_MESH,
     photo: DEFAULT_PHOTO,
     fx: Mesh.FX_DEFAULTS,
+    tab: { title: 'Новая вкладка', icon: 'logo', emoji: '🌙', letter: 'P', image: null },
+    text: { font: 'manrope', shadow: 'none' },
   };
 
   // оформление, общее для всех виджетов: цвет текста и подложки
-  const STYLE_DEFAULTS = { ink: 'auto', tint: null };
+  const STYLE_DEFAULTS = { ink: 'auto', tint: null, font: 'inherit', shadow: 'inherit' };
   const STYLE_SETTINGS = [
-    { key: 'ink', label: 'Текст', type: 'select', options: [['auto', 'Авто'], ['light', 'Светлый'], ['dark', 'Тёмный']] },
+    { key: 'ink', label: 'Цвет текста', type: 'select', options: [['auto', 'Авто'], ['light', 'Светлый'], ['dark', 'Тёмный']] },
+    { key: 'font', label: 'Шрифт', type: 'select', options: [['inherit', 'Как везде'], ...FONTS] },
+    { key: 'shadow', label: 'Тень текста', type: 'select', options: [['inherit', 'Как везде'], ...SHADOWS] },
     { key: 'tint', label: 'Цвет подложки', type: 'color', empty: 'Стекло' },
   ];
 
@@ -102,6 +118,8 @@
       else if (k === 'mesh') s.mesh = cleanMesh(v);
       else if (k === 'photo') s.photo = cleanPhoto(v);
       else if (k === 'fx') s.fx = cleanFx(v);
+      else if (k === 'tab') s.tab = cleanTab(v);
+      else if (k === 'text') s.text = cleanText(v);
       else if (typeof v === typeof DEFAULT_SETTINGS[k] && (typeof v !== 'number' || Number.isFinite(v))) s[k] = v;
     }
     // старый CSS-фон → та же палитра на меше
@@ -140,6 +158,24 @@
   }
 
   function cleanPhoto(raw) { return cleanLook(raw, DEFAULT_PHOTO); }
+
+  function cleanTab(raw) {
+    const t = { ...DEFAULT_SETTINGS.tab };
+    if (!raw || typeof raw !== 'object') return t;
+    if (typeof raw.title === 'string') t.title = raw.title.slice(0, 80);
+    if (TAB_ICONS.some(([k]) => k === raw.icon)) t.icon = raw.icon;
+    if (typeof raw.emoji === 'string' && raw.emoji.trim()) t.emoji = [...raw.emoji.trim()].slice(0, 4).join('');
+    if (typeof raw.letter === 'string' && raw.letter.trim()) t.letter = [...raw.letter.trim()].slice(0, 2).join('');
+    t.image = typeof raw.image === 'string' && raw.image.startsWith('data:image/') && raw.image.length < 300000 ? raw.image : null;
+    return t;
+  }
+
+  function cleanText(raw) {
+    return {
+      font: FONT_STACK[raw?.font] ? raw.font : 'manrope',
+      shadow: SHADOWS.some(([k]) => k === raw?.shadow) ? raw.shadow : 'none',
+    };
+  }
 
   function cleanFx(raw) {
     const f = { ...Mesh.FX_DEFAULTS };
@@ -185,6 +221,8 @@
     item.data = { ...STYLE_DEFAULTS, ...structuredClone(def.defaults), ...(item.data || {}) };
     if (!['auto', 'light', 'dark'].includes(item.data.ink)) item.data.ink = 'auto';
     if (!/^#[0-9a-f]{6}$/i.test(item.data.tint)) item.data.tint = null;
+    if (item.data.font !== 'inherit' && !FONT_STACK[item.data.font]) item.data.font = 'inherit';
+    if (!['inherit', ...SHADOWS.map(([k]) => k)].includes(item.data.shadow)) item.data.shadow = 'inherit';
   }
 
   // ---------- тема ----------
@@ -198,10 +236,82 @@
     document.body.classList.toggle('has-image', !!settings.bgImage);
     document.body.classList.toggle('no-motion', !settings.motion);
     document.querySelector('#bg .bg-image').style.backgroundImage = settings.bgImage ? `url("${settings.bgImage}")` : '';
+    r.setProperty('--w-font', FONT_STACK[settings.text.font]);
+    document.body.dataset.ts = settings.text.shadow;
     applyMesh();
+    applyTab();
     // фон поменялся — пересчитать «авто»-цвет текста у блоков (после инициализации сетки)
     setTimeout(refreshInk, 60);
   }
+
+  // ---------- вкладка: заголовок и иконка ----------
+  // В заголовке можно {время}, {дата}, {день}. Помодоро временно занимает его через Tab.set (widgets-more.js).
+  function tabTitle() {
+    const d = new Date();
+    const t = (settings.tab.title || '')
+      .replace(/\{время\}/gi, d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }))
+      .replace(/\{дата\}/gi, d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }))
+      .replace(/\{день\}/gi, d.toLocaleDateString('ru-RU', { weekday: 'long' }));
+    return t.trim() || '​'; // пустой заголовок Chrome заменит адресом — ставим невидимый символ
+  }
+
+  // рисует иконку в 64×64 и возвращает dataURL (или путь к файлу для логотипа)
+  function tabIcon(kind = settings.tab.icon) {
+    const tab = settings.tab;
+    if (kind === 'logo' || (kind === 'image' && !tab.image)) return 'icons/icon32.png';
+    if (kind === 'image') return tab.image;
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d');
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    if (kind === 'emoji') {
+      g.font = '54px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+      g.fillText(tab.emoji, 32, 36);
+    } else if (kind === 'letter') {
+      g.fillStyle = settings.accent;
+      g.beginPath(); g.roundRect(2, 2, 60, 60, 16); g.fill();
+      g.fillStyle = '#0b0b12';
+      g.font = `800 ${tab.letter.length > 1 ? 30 : 40}px Manrope, sans-serif`;
+      g.fillText(tab.letter, 32, 35);
+    } else if (kind === 'clock') {
+      const d = new Date();
+      g.fillStyle = '#15151d'; g.beginPath(); g.arc(32, 32, 30, 0, 7); g.fill();
+      g.strokeStyle = settings.accent; g.lineWidth = 3; g.stroke();
+      const hand = (a, len, w, col) => { g.strokeStyle = col; g.lineWidth = w; g.lineCap = 'round'; g.beginPath(); g.moveTo(32, 32); g.lineTo(32 + Math.sin(a) * len, 32 - Math.cos(a) * len); g.stroke(); };
+      const m = d.getMinutes() + d.getSeconds() / 60;
+      hand((d.getHours() % 12 + m / 60) / 12 * Math.PI * 2, 14, 6, '#fff');
+      hand(m / 60 * Math.PI * 2, 22, 4, '#fff');
+      g.fillStyle = settings.accent; g.beginPath(); g.arc(32, 32, 4, 0, 7); g.fill();
+    } else if (kind === 'pomodoro') {
+      // кольцо оставшегося времени и минуты в центре; таймер не идёт — полное тусклое кольцо
+      const p = Tab.pomo;
+      const col = p?.phase === 'rest' ? '#6fe3b0' : settings.accent;
+      g.fillStyle = '#15151d'; g.beginPath(); g.arc(32, 32, 30, 0, 7); g.fill();
+      g.lineWidth = 7; g.lineCap = 'round';
+      g.strokeStyle = 'rgba(255,255,255,.15)'; g.beginPath(); g.arc(32, 32, 24, 0, 7); g.stroke();
+      if (p) {
+        g.strokeStyle = col;
+        g.beginPath(); g.arc(32, 32, 24, -Math.PI / 2, -Math.PI / 2 + (1 - p.progress) * Math.PI * 2); g.stroke();
+        g.fillStyle = '#fff';
+        g.font = '800 24px Manrope, sans-serif';
+        g.fillText(String(p.min), 32, 34);
+      } else {
+        g.fillStyle = col; g.beginPath(); g.arc(32, 32, 8, 0, 7); g.fill();
+      }
+    }
+    return c.toDataURL('image/png');
+  }
+
+  let lastIcon = '';
+  function applyTab() {
+    document.title = Tab.override || tabTitle();
+    const href = tabIcon();
+    if (href !== lastIcon) { document.querySelector('link[rel="icon"]').href = href; lastIcon = href; }
+  }
+  Tab.update = applyTab;
+  // часы и {время} меняются сами — раз в секунду сверяем (иконка перезаписывается, только если изменилась)
+  setInterval(() => { if (!document.hidden || settings.tab.icon === 'clock' || settings.tab.icon === 'pomodoro') applyTab(); }, 1000);
 
   // Живой фон на WebGL — и для меша, и для своей картинки (она становится текстурой, узоры работают поверх).
   // Без WebGL: CSS-градиенты из точек меша или обычная картинка (.bg-image).
@@ -277,6 +387,9 @@
     rec.shell.classList.toggle('glass', !!item.data.glass);
     rec.shell.classList.toggle('tinted', !!item.data.tint);
     rec.shell.style.setProperty('--tint', item.data.tint || '');
+    // шрифт и тень: своё у блока или глобальное (тогда атрибута нет — работает body[data-ts] / --w-font)
+    rec.shell.style.setProperty('--wf', item.data.font !== 'inherit' ? FONT_STACK[item.data.font] : '');
+    if (item.data.shadow !== 'inherit') rec.shell.dataset.ts = item.data.shadow; else delete rec.shell.dataset.ts;
     rec.shell.dataset.type = item.type;
     rec.inst = Widgets[item.type].render(rec.body, item.data, ctxFor(item)) || null;
     applyInk(item);
@@ -471,8 +584,14 @@
 
   // добавление
   const addMenu = document.getElementById('add-menu');
-  for (const [type, def] of Object.entries(Widgets)) {
-    addMenu.append(h('button', { class: 'add-item', onclick: () => { addWidget(type); closeAddMenu(); } }, def.title));
+  // карточки по группам: иконка, название, что умеет
+  for (const [g, gTitle] of WIDGET_GROUPS) {
+    const items = Object.entries(Widgets).filter(([, def]) => (def.group || 'mood') === g);
+    if (!items.length) continue;
+    addMenu.append(h('div', { class: 'add-group' }, gTitle),
+      ...items.map(([type, def]) => h('button', { class: 'add-item', type: 'button', onclick: () => { addWidget(type); closeAddMenu(); } },
+        h('span', { class: 'add-ico', html: def.icon || '' }),
+        h('span', { class: 'add-txt' }, h('b', {}, def.title), h('small', {}, def.desc || '')))));
   }
   const closeAddMenu = () => addMenu.classList.remove('open');
   document.getElementById('btn-add').addEventListener('click', (e) => { e.stopPropagation(); addMenu.classList.toggle('open'); });
@@ -1152,6 +1271,7 @@
     panelBody.replaceChildren(
       section('Ты',
         h('label', { class: 'field' }, h('span', {}, 'Имя для приветствия'), nameInp)),
+      section('Вкладка', ...tabSettings()),
       section('Фон', meshPresets(), bgRow,
         img ? slider('Затемнение картинки', 'bgDim', 0, 0.8, 0.05, v => Math.round(v * 100) + '%') : null,
         meshOpen ? bgEditor() : null,
@@ -1168,6 +1288,10 @@
         slider('Размытие', 'glassBlur', 0, 40, 1, v => v + 'px'),
         slider('Плотность', 'glassAlpha', 0, 0.3, 0.01, v => Math.round(v * 100) + '%'),
         slider('Скругление', 'radius', 0, 36, 1, v => v + 'px')),
+      section('Текст в блоках',
+        h('div', { class: 'field' }, h('span', {}, 'Шрифт'), dropdown(FONTS, settings.text.font, (v) => setSetting('text', { ...settings.text, font: v })).el),
+        h('div', { class: 'field' }, h('span', {}, 'Тень'), segmented(SHADOWS, settings.text.shadow, (v) => setSetting('text', { ...settings.text, shadow: v })).el),
+        h('p', { class: 'field-hint' }, 'У каждого блока можно поставить своё — в его настройках, «Оформление».')),
       section('Акцент', accents),
       section('Раскладка',
         h('div', { class: 'row' },
@@ -1184,6 +1308,62 @@
       meshPreview = Mesh.create(mc, { scale: 1 });
       meshPreview?.set(bgParams());
     }
+  }
+
+  // секция «Вкладка»: название с подстановками и иконка — плитки с живым превью
+  function tabSettings() {
+    const setTab = (patch) => setSetting('tab', { ...settings.tab, ...patch });
+    const title = h('input', { type: 'text', value: settings.tab.title, placeholder: 'Новая вкладка', 'data-tab': 'title' });
+    title.addEventListener('input', debounce(() => setTab({ title: title.value }), 250));
+    const tokens = h('div', { class: 'tab-tokens' }, 'Вставить:', ['{время}', '{дата}', '{день}'].map(tk =>
+      h('button', {
+        type: 'button', class: 'chip',
+        // вставляем туда, где курсор, и ставим курсор после вставки
+        onclick: () => {
+          const a = title.selectionStart ?? title.value.length, b = title.selectionEnd ?? a;
+          title.value = title.value.slice(0, a) + tk + title.value.slice(b);
+          title.focus();
+          title.setSelectionRange(a + tk.length, a + tk.length);
+          setTab({ title: title.value });
+        },
+      }, tk)));
+
+    const tiles = h('div', { class: 'tab-icons' }, TAB_ICONS.map(([k, label]) =>
+      h('button', {
+        type: 'button', class: 'tab-icon' + (settings.tab.icon === k ? ' active' : ''), 'data-icon': k, title: label,
+        onclick: () => { setTab({ icon: k }); renderSettings(); },
+      }, h('img', { src: tabIcon(k), alt: '' }), h('span', {}, label))));
+
+    // поле под выбранный вариант
+    let extra = null;
+    if (settings.tab.icon === 'emoji' || settings.tab.icon === 'letter') {
+      const key = settings.tab.icon;
+      const inp = h('input', { type: 'text', value: settings.tab[key], maxlength: key === 'emoji' ? 8 : 2, 'data-tab': key, class: 'tab-extra' });
+      inp.addEventListener('input', () => { if (inp.value.trim()) { setTab({ [key]: inp.value }); tiles.querySelector(`[data-icon="${key}"] img`).src = tabIcon(key); } });
+      extra = h('label', { class: 'field field-row' }, h('span', {}, key === 'emoji' ? 'Эмодзи' : 'Буква (1–2)'), inp);
+    } else if (settings.tab.icon === 'image') {
+      extra = h('div', { class: 'row' }, h('button', { type: 'button', class: 'pill small', onclick: () => pickFile('image/*', loadTabImage) }, settings.tab.image ? 'Другая картинка' : 'Выбрать картинку'));
+    } else if (settings.tab.icon === 'pomodoro') {
+      extra = h('p', { class: 'field-hint' }, 'Пока идёт помодоро — в иконке кольцо и минуты. Нужен виджет «Помодоро».');
+    }
+    return [
+      h('label', { class: 'field' }, h('span', {}, 'Название'), title), tokens,
+      h('div', { class: 'field' }, h('span', {}, 'Иконка'), tiles), extra,
+    ];
+  }
+
+  // своя иконка вкладки: ужимаем до 64×64 PNG
+  function loadTabImage(file) {
+    const img = new Image();
+    img.onload = () => {
+      const c = h('canvas', { width: 64, height: 64 });
+      const k = Math.max(64 / img.width, 64 / img.height); // заполнить квадрат
+      c.getContext('2d').drawImage(img, (64 - img.width * k) / 2, (64 - img.height * k) / 2, img.width * k, img.height * k);
+      URL.revokeObjectURL(img.src);
+      setSetting('tab', { ...settings.tab, image: c.toDataURL('image/png') });
+      renderSettings();
+    };
+    img.src = URL.createObjectURL(file);
   }
 
   // эффекты поверх любого фона

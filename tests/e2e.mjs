@@ -318,6 +318,7 @@ check(await page.evaluate(() => document.body.classList.contains('mesh-on')), '�
 check(await page.locator('.mesh-preview .mesh-dot').count() === 4, 'меш: 4 точки в редакторе');
 await page.screenshot({ path: `${out}/20-mesh-editor.png` });
 
+await page.locator('.mesh-preview').scrollIntoViewIfNeeded();
 const dot = await page.locator('.mesh-dot').first().boundingBox();
 const prev = await page.locator('.mesh-preview').boundingBox();
 await page.mouse.move(dot.x + 10, dot.y + 10);
@@ -685,6 +686,7 @@ check(+dockOp > 0.2 && +dockOp < 0.5, `док: приглушён (opacity ${doc
 // ---------- «подглядывание» панели ----------
 await page.click('#btn-settings');
 await page.waitForTimeout(400);
+await page.locator('input[data-fx="vignette"]').scrollIntoViewIfNeeded();
 const vig = await page.locator('input[data-fx="vignette"]').boundingBox();
 await page.mouse.move(vig.x + vig.width * 0.5, vig.y + vig.height / 2);
 await page.mouse.down();
@@ -717,6 +719,63 @@ for (const a of ['breathe', 'waves', 'glitch', 'shimmer', 'kenburns']) {
 }
 await page.screenshot({ path: `${out}/39-live-kenburns.png` });
 check(await page.evaluate(() => window.__plitka.settings().photo.anim) === 'kenburns', 'живые обои: анимации переключаются без ошибок');
+await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
+
+// ---------- вкладка: название и иконка ----------
+await freshLayout();
+await page.reload();
+await page.waitForTimeout(1200);
+check(await page.title() === 'Новая вкладка', 'вкладка: название по умолчанию');
+await page.click('#btn-settings');
+await page.waitForTimeout(300);
+await page.fill('input[data-tab="title"]', '');
+await page.click('.tab-tokens .chip:has-text("{время}")');
+await page.keyboard.type(' · Plitka'); // курсор уже в поле, после вставленного {время}
+await page.waitForTimeout(500);
+check(/^\d\d:\d\d · Plitka$/.test(await page.title()), `вкладка: {время} подставляется («${await page.title()}»)`);
+const iconHref = () => page.evaluate(() => document.querySelector('link[rel="icon"]').href);
+await page.click('.tab-icon[data-icon="clock"]');
+await page.waitForTimeout(300);
+const clockIco = await iconHref();
+check(clockIco.startsWith('data:image/png'), 'вкладка: иконка-часы нарисована');
+await page.click('.tab-icon[data-icon="emoji"]');
+await page.waitForTimeout(200);
+await page.fill('input[data-tab="emoji"]', '🐱');
+await page.waitForTimeout(300);
+const emojiIco = await iconHref();
+check(emojiIco.startsWith('data:image/png') && emojiIco !== clockIco, 'вкладка: иконка-эмодзи');
+await page.screenshot({ path: `${out}/40-tab-settings.png` });
+await page.reload();
+await page.waitForTimeout(1000);
+check(/· Plitka$/.test(await page.title()) && (await iconHref()).startsWith('data:image/png'), 'вкладка: название и иконка пережили перезагрузку');
+
+// ---------- текст: шрифт и тень глобально и у блока ----------
+const clockBody = '.grid-stack-item[gs-id="w-clock"] .w-body';
+const css = (sel, prop) => page.$eval(sel, (el, p) => getComputedStyle(el)[p], prop);
+check(await css(clockBody + ' .clock-sub', 'textShadow') === 'none', 'текст: по умолчанию без тени');
+await page.click('#btn-settings');
+await page.waitForTimeout(300);
+await page.click('.panel .seg-btn:has-text("Мягкая")');
+await page.click('.panel .panel-sec:has-text("Текст в блоках") .dd-btn');
+await page.click('body > .dd-list .dd-item:has-text("С засечками")');
+await page.click('.panel [data-close]');
+await page.waitForTimeout(300);
+check(await css(clockBody + ' .clock-sub', 'textShadow') !== 'none', 'текст: глобальная мягкая тень');
+check(/Georgia/.test(await css(clockBody, 'fontFamily')), 'текст: глобальный шрифт с засечками');
+await openSettings('w-clock');
+await page.click('.inspector .field:has-text("Тень текста") .dd-btn');
+await page.click('body > .dd-list .dd-item:has-text("Нет")');
+await page.waitForTimeout(200);
+check(await css(clockBody + ' .clock-sub', 'textShadow') === 'none', 'текст: у блока своя тень («Нет») перебивает глобальную');
+await page.keyboard.press('Escape');
+
+// меню «+ Виджет» с иконками и группами
+await page.click('#btn-add');
+await page.waitForTimeout(300);
+check(await page.locator('.add-menu .add-item .add-ico svg').count() === await page.locator('.add-menu .add-item').count() && await page.locator('.add-group').count() === 5, 'меню: у каждого виджета иконка, 5 групп');
+await page.screenshot({ path: `${out}/41-add-menu.png` });
+await page.click('#btn-add');
+await page.keyboard.press('Escape');
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
 const real = errors.filter(e => !/Failed to load resource/i.test(e));

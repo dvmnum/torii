@@ -41,6 +41,8 @@ tests/debug.mjs        открыть вкладку расширения и в�
     Заготовки — `Mesh.PRESETS` (точка 0 обычно самая тёмная — она же фон у полутона и неона), миниатюры рисует `Mesh.thumb()` на общем невидимом канвасе. `mesh.preset` — id заготовки, пока её не правили (подсветка в панели); любая правка его удаляет.
     Весит ~200 байт — годится для `storage.sync`. Без WebGL — CSS-градиенты из тех же точек (`Mesh.cssPreview`).
 - `photo` — те же `mode/warp/speed/grain/density/clear/duo`, но для своей картинки (без точек), по умолчанию матовое стекло с чистой полосой. Хранится отдельно от `mesh`, чтобы переключение туда-обратно ничего не теряло.
+- `tab` — `{ title, icon: logo|emoji|letter|clock|pomodoro|image, emoji, letter, image }`: заголовок вкладки (подстановки `{время}`, `{дата}`, `{день}`) и иконка — рисуется на canvas 64×64 в `tabIcon()`, «живые» (часы, помодоро) сверяются раз в секунду. Виджеты занимают заголовок/иконку через глобальный `Tab.set(title, pomo)` (widgets-more.js), не трогая `document.title` напрямую.
+- `text` — `{ font, shadow }`: шрифт (`FONT_STACK`) и тень текста в блоках по умолчанию (тени по умолчанию нет). У блока свои `data.font` / `data.shadow` (`inherit` — как везде): CSS через `--w-font`/`--wf` и `body[data-ts]`/`.w[data-ts]`.
 - `fx` — эффекты поверх любого фона: `{ vignette, bloom, particles, chroma, scan }` (0..1) + `mouse` (линза за курсором), `daycycle` (оттенок по часам) — bool. Виньетку рисует шейдер; CSS-виньетка только без WebGL.
 - `widgets` — массив `{ id, type, data }`, общий для всех экранов; `data` = `STYLE_DEFAULTS` + дефолты виджета + пользовательские поля.
   - Оформление у всех виджетов (`STYLE_SETTINGS`, добавляется в модалку автоматически): `ink: 'auto'|'light'|'dark'` — цвет текста, `tint: '#rrggbb'|null` — цвет подложки.
@@ -65,6 +67,7 @@ myWidget: {
   size: { w, h }, min: { w, h },     // размер по умолчанию и минимальный (в ячейках)
   defaults: { glass: true, ... },    // дефолтный data
   perm: 'topSites',                  // необязательное разрешение, спрашивается при добавлении (если нужно)
+  // group, desc, icon (svg) — для меню «+ Виджет»; для второй партии задаются в WIDGET_META (widgets-more.js)
   settings: [ { key, label, type: 'toggle'|'select'|'text'|'links'|'align'|'color', options? } ],
   render(body, data, ctx) {          // body — .w-body (container-type: size)
     // ctx.save()      — сохранить layout (после мутации data)

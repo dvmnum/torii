@@ -1,6 +1,14 @@
 // Вторая партия виджетов. Подключается после widgets.js и дописывает реестр Widgets.
 // Общие хелперы (h, favicon, hostOf, Store, GLASS_SETTING, ICONS) — из widgets.js / store.js.
 
+// Заголовок и иконка вкладки. Виджет может временно их «занять» (помодоро), остальное рисует app.js по настройкам.
+const Tab = {
+  override: null, // текст заголовка поверх настроенного
+  pomo: null,     // { progress, phase, min } — для иконки-помодоро
+  set(title, pomo = null) { this.override = title; this.pomo = pomo; this.update(); },
+  update() {},    // подменяет app.js
+};
+
 const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const dayIndex = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
 const plural = (n, [one, few, many]) => {
@@ -154,7 +162,8 @@ Object.assign(Widgets, {
         toggle.innerHTML = running() ? SVG.pause : SVG.play;
         toggle.title = running() ? 'Пауза' : 'Старт';
         count.textContent = data.stats.count ? `Сегодня: ${data.stats.count}` : '';
-        if (running() && data.state.owner === me) document.title = `${time.textContent} · ${phase.textContent}`;
+        // пока идёт — занимаем заголовок и иконку вкладки (только вкладка, которая запустила)
+        if (data.state.owner === me) Tab.set(running() ? `${time.textContent} · ${phase.textContent}` : null, running() ? { progress: 1 - l / len(data.state.phase), phase: data.state.phase, min: Math.ceil(l / 60000) } : null);
       };
       const setState = (s) => { data.state = s; ctx.save(); paint(); };
       const next = (finished) => {
@@ -164,7 +173,7 @@ Object.assign(Widgets, {
           data.stats.count++;
         }
         if (finished && data.sound) Pomo.beep();
-        document.title = 'Новая вкладка';
+        Tab.set(null);
         setState({ phase: ph, left: len(ph) });
       };
 
@@ -173,7 +182,7 @@ Object.assign(Widgets, {
         if (running()) setState({ phase: data.state.phase, left: left() });
         else setState({ phase: data.state.phase, endsAt: Date.now() + left(), owner: me });
       });
-      const reset = h('button', { type: 'button', class: 'pomo-btn', title: 'Сначала', html: SVG.reset, onclick: () => { document.title = 'Новая вкладка'; setState({ phase: data.state.phase, left: len(data.state.phase) }); } });
+      const reset = h('button', { type: 'button', class: 'pomo-btn', title: 'Сначала', html: SVG.reset, onclick: () => { Tab.set(null); setState({ phase: data.state.phase, left: len(data.state.phase) }); } });
       const skip = h('button', { type: 'button', class: 'pomo-btn', title: 'Следующая фаза', html: SVG.skip, onclick: () => next(false) });
 
       const t = setInterval(() => {
@@ -182,7 +191,7 @@ Object.assign(Widgets, {
       }, 250);
       paint();
       body.append(h('div', { class: 'w-pomo' + (data.state.phase === 'rest' ? ' rest' : '') }, ring, h('div', { class: 'pomo-ctrl' }, reset, toggle, skip), count));
-      return { destroy: () => { clearInterval(t); if (data.state.owner === me) document.title = 'Новая вкладка'; } };
+      return { destroy: () => { clearInterval(t); if (data.state.owner === me) Tab.set(null); } };
     },
   },
 
@@ -448,6 +457,30 @@ Object.assign(Widgets, {
     },
   },
 });
+
+// ---------- меню «+ Виджет»: иконка, описание, группа ----------
+// Иконки 24×24: контур currentColor + полупрозрачная заливка для объёма
+const WI = (body) => `<svg viewBox="0 0 24 24">${body}</svg>`;
+const F = 'fill="currentColor" fill-opacity=".18" stroke="none"';
+const WIDGET_GROUPS = [['time', 'Время'], ['work', 'Дела'], ['nav', 'Навигация'], ['info', 'Информация'], ['mood', 'Настроение']];
+const WIDGET_META = {
+  clock: { group: 'time', desc: 'Цифровые или стрелочные, приветствие', icon: WI(`<circle cx="12" cy="12" r="9" ${F}/><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>`) },
+  pomodoro: { group: 'time', desc: 'Фокус и перерывы по таймеру', icon: WI(`<circle cx="12" cy="13" r="8" ${F}/><circle cx="12" cy="13" r="8"/><path d="M12 13V9M9.5 2.5h5M12 2.5V5"/><path d="M12 5a8 8 0 0 1 8 8" stroke-width="2.6" opacity=".9"/>`) },
+  countdown: { group: 'time', desc: 'Сколько осталось до события', icon: WI(`<path d="M7 3h10M7 21h10" /><path d="M8 3c0 4 8 5 8 9s-8 5-8 9M16 3c0 4-8 5-8 9s8 5 8 9"/><path d="M9.5 19.5c1-1.6 4-1.6 5 0z" ${F.replace('.18', '.5')}/>`) },
+  todo: { group: 'work', desc: 'Список дел с галочками', icon: WI(`<rect x="3" y="4" width="18" height="16" rx="3" ${F}/><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 9l1.5 1.5L11 8M7 15l1.5 1.5L11 14M13.5 9.5H17M13.5 15.5H17"/>`) },
+  notes: { group: 'work', desc: 'Быстрые заметки, сохраняются сами', icon: WI(`<path d="M5 3h10l4 4v14H5z" ${F}/><path d="M5 3h10l4 4v14H5z"/><path d="M15 3v4h4M8 11h8M8 14.5h8M8 18h5"/>`) },
+  habits: { group: 'work', desc: 'Отмечай привычки каждый день', icon: WI(`<rect x="3" y="4" width="18" height="17" rx="3" ${F}/><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5V6M16 2.5V6"/><circle cx="8" cy="13.5" r="1.3" fill="currentColor"/><circle cx="12" cy="13.5" r="1.3" fill="currentColor"/><circle cx="16" cy="13.5" r="1.3"/><circle cx="8" cy="17.5" r="1.3" fill="currentColor"/><circle cx="12" cy="17.5" r="1.3"/>`) },
+  search: { group: 'nav', desc: 'Яндекс, Google, DuckDuckGo, Bing', icon: WI(`<circle cx="10.5" cy="10.5" r="6.5" ${F}/><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20.5 20.5" stroke-width="2.4"/>`) },
+  links: { group: 'nav', desc: 'Свои закладки плитками', icon: WI(`<rect x="3" y="3" width="7.5" height="7.5" rx="2" ${F}/><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2" ${F}/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>`) },
+  topsites: { group: 'nav', desc: 'Сайты, куда ходишь чаще всего', icon: WI(`<path d="M12 3l2.6 5.5 6 .8-4.4 4.1 1.1 6L12 16.6 6.7 19.4l1.1-6L3.4 9.3l6-.8z" ${F}/><path d="M12 3l2.6 5.5 6 .8-4.4 4.1 1.1 6L12 16.6 6.7 19.4l1.1-6L3.4 9.3l6-.8z"/>`) },
+  recent: { group: 'nav', desc: 'Вернуть случайно закрытую вкладку', icon: WI(`<path d="M4 8h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" ${F}/><path d="M4 8V6a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M9 14.5a3.5 3.5 0 1 0 1-2.4M9 10.5v2h2"/>`) },
+  weather: { group: 'info', desc: 'Сейчас или на неделю', icon: WI(`<circle cx="9" cy="8" r="3.5" ${F}/><path d="M9 2.5v1.2M3.5 8h1.2M5.1 4.1l.9.9M12.9 4.1l-.9.9"/><circle cx="9" cy="8" r="3.5"/><path d="M8 20h9.5a3.5 3.5 0 0 0 .4-7 5 5 0 0 0-9.4.9A3.1 3.1 0 0 0 8 20z" ${F}/><path d="M8 20h9.5a3.5 3.5 0 0 0 .4-7 5 5 0 0 0-9.4.9A3.1 3.1 0 0 0 8 20z"/>`) },
+  rates: { group: 'info', desc: 'Доллар, евро, юань по ЦБ', icon: WI(`<circle cx="12" cy="12" r="9" ${F}/><circle cx="12" cy="12" r="9"/><path d="M10 17V7h3.2a2.6 2.6 0 0 1 0 5.2H8.5M8.5 14.8h5"/>`) },
+  quote: { group: 'mood', desc: 'Цитата из аниме каждый день', icon: WI(`<path d="M4 5h16v11H9l-5 4z" ${F}/><path d="M4 5h16v11H9l-5 4z"/><path d="M8.5 12.5c.3-1.5 1-2.5 2-3M12.5 12.5c.3-1.5 1-2.5 2-3" stroke-width="2"/>`) },
+  word: { group: 'mood', desc: 'Редкое слово и что оно значит', icon: WI(`<path d="M4 4.5h6a2 2 0 0 1 2 2V20a2 2 0 0 0-2-2H4z" ${F}/><path d="M4 4.5h6a2 2 0 0 1 2 2V20a2 2 0 0 0-2-2H4zM20 4.5h-6a2 2 0 0 0-2 2V20a2 2 0 0 1 2-2h6z"/><path d="M15 9h2.5M15 12h2.5"/>`) },
+  pic: { group: 'mood', desc: 'Котики, аниме-гифки или своя', icon: WI(`<rect x="3" y="4" width="18" height="16" rx="3" ${F}/><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="M3.5 17l5-4.5 3.5 3 3-2.5 5.5 4.5"/>`) },
+};
+for (const [k, m] of Object.entries(WIDGET_META)) if (Widgets[k]) Object.assign(Widgets[k], m);
 
 // ---------- данные для виджетов ----------
 
