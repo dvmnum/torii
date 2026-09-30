@@ -249,27 +249,29 @@ const openSettings = async (id) => {
 
 // секунды не двигают основное время
 await openSettings('w-clock');
-await page.click('.modal .field-toggle:has-text("Секунды")');
-await page.click('.modal button[type=submit]');
+await page.click('.inspector .field-toggle:has-text("Секунды")');
+await page.keyboard.press('Escape'); // закрыть инспектор — всё уже применилось
 await page.keyboard.press('Escape');
+// замеры группируем по минуте: при смене минуты основное время честно меняет ширину
 const colonX = [];
 for (let i = 0; i < 4; i++) {
-  colonX.push(await page.$eval('.clock-time .colon', el => el.getBoundingClientRect().left));
+  colonX.push(await page.$eval('.clock-time', el => ({ x: el.querySelector('.colon').getBoundingClientRect().left, hm: el.textContent.slice(0, 5) })));
   await page.waitForTimeout(1000);
 }
-console.log('colon x по секундам', colonX.join(', '));
-check(colonX.every(x => Math.abs(x - colonX[0]) < 0.5), 'часы: секунды не двигают основное время');
+console.log('colon x по секундам', colonX.map(c => `${c.hm}@${c.x}`).join(', '));
+const sameMinute = colonX.filter(c => c.hm === colonX[colonX.length - 1].hm);
+check(sameMinute.length >= 2 && sameMinute.every(c => Math.abs(c.x - sameMinute[0].x) < 0.5), 'часы: секунды не двигают основное время');
 await page.screenshot({ path: `${out}/15-clock-seconds.png` });
 
 // модалка часов: сегменты + схема выравнивания
 await openSettings('w-clock');
-check(await page.locator('.modal select').count() === 0, 'модалка: системных select нет');
-check(await page.locator('.modal .align-picker .al-cell').count() === 9, 'модалка: выравнивание — 9 позиций');
-check(await page.locator('.modal .al-cell[data-v="middle-center"].active').count() === 1, 'модалка: текущее выравнивание подсвечено');
-await page.click('.modal .seg-btn:has-text("Стрелочные")');
-await page.click('.modal .al-cell[data-v="top-left"]');
+check(await page.locator('.inspector select').count() === 0, 'инспектор: системных select нет');
+check(await page.locator('.inspector .align-picker .al-cell').count() === 9, 'инспектор: выравнивание — 9 позиций');
+check(await page.locator('.inspector .al-cell[data-v="middle-center"].active').count() === 1, 'инспектор: текущее выравнивание подсвечено');
+await page.click('.inspector .seg-btn:has-text("Стрелочные")');
+await page.click('.inspector .al-cell[data-v="top-left"]');
 await page.screenshot({ path: `${out}/16-clock-modal.png` });
-await page.click('.modal button[type=submit]');
+await page.keyboard.press('Escape'); // закрыть инспектор — всё уже применилось
 await page.keyboard.press('Escape');
 await page.waitForTimeout(400);
 check(await page.locator('.w-clock.is-analog.v-top.h-left svg.clock-face .hand-s').count() === 1, 'часы: стрелочные, сверху слева, с секундной');
@@ -288,17 +290,17 @@ check(await page.locator('.w-clock.v-middle.h-right').count() === 1, 'часы: 
 
 // поиск: выпадающий список с клавиатуры
 await openSettings('w-search');
-await page.click('.modal .dd-btn');
+await page.click('.inspector .dd-btn');
 await page.waitForTimeout(250);
 check(await page.locator('body > .dd-list .dd-item').count() === 4, 'поиск: список поисковиков открыт');
 await page.screenshot({ path: `${out}/18-dropdown.png` });
 await page.keyboard.press('ArrowDown');
 await page.keyboard.press('Enter');
-check(await page.locator('.dd-list').count() === 0 && (await page.textContent('.modal .dd-label')) === 'Google', 'поиск: выбор стрелкой + Enter');
-await page.click('.modal .dd-btn');
+check(await page.locator('.dd-list').count() === 0 && (await page.textContent('.inspector .dd-label')) === 'Google', 'поиск: выбор стрелкой + Enter');
+await page.click('.inspector .dd-btn');
 await page.keyboard.press('Escape');
-check(await page.locator('.dd-list').count() === 0 && await page.locator('#modal.open').count() === 1, 'поиск: Esc закрывает список, а не модалку');
-await page.click('.modal button[type=submit]');
+check(await page.locator('.dd-list').count() === 0 && await page.locator('.inspector').count() === 1, 'поиск: Esc закрывает список, а не инспектор');
+await page.keyboard.press('Escape'); // закрыть инспектор — всё уже применилось
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
 check(await page.evaluate(() => window.__plitka.layout.find(i => i.id === 'w-search').data.engine) === 'google', 'поиск: поисковик сохранён');
@@ -416,15 +418,15 @@ await page.screenshot({ path: `${out}/26-auto-ink-petal.png` });
 
 // вручную: светлый текст + своя подложка
 await openSettings('w-weather');
-check(await page.locator('.modal .modal-sub:has-text("Оформление")').count() === 1, 'оформление: секция в настройках виджета');
-await page.click('.modal .seg-btn:has-text("Светлый")');
-await page.click('.modal .color-btn');
+check(await page.locator('.inspector .modal-sub:has-text("Оформление")').count() === 1, 'оформление: секция в настройках виджета');
+await page.click('.inspector .seg-btn:has-text("Светлый")');
+await page.click('.inspector .color-btn');
 await page.waitForTimeout(200);
 await page.click('.cp-quick button[title="#141418"]');
 await page.screenshot({ path: `${out}/27-widget-style-modal.png` });
 await page.keyboard.press('Escape');
-check(await page.locator('#modal.open').count() === 1, 'оформление: Esc закрыл пикер, модалка на месте');
-await page.click('.modal button[type=submit]');
+check(await page.locator('.inspector').count() === 1, 'оформление: Esc закрыл пикер, инспектор на месте');
+await page.keyboard.press('Escape'); // закрыть инспектор — всё уже применилось
 await page.keyboard.press('Escape');
 await page.waitForTimeout(400);
 const wx = await page.evaluate(() => {
@@ -639,19 +641,83 @@ check((await page.textContent('.word-w')).length > 2 && (await page.textContent(
 check(await page.evaluate(() => { const i = document.querySelector('.w-pic img'); return !!i && i.src.includes('cataas.com') && i.naturalWidth > 0; }), 'картинка: котик загрузился');
 // погода — режим «неделя»
 await openSettings(await idOf('weather'));
-await page.click('.modal .seg-btn:has-text("Неделя")');
-await page.click('.modal button[type=submit]');
+await page.click('.inspector .seg-btn:has-text("Неделя")');
+await page.keyboard.press('Escape'); // закрыть инспектор — всё уже применилось
 await page.keyboard.press('Escape');
 await page.waitForTimeout(600);
 check(await page.locator('.w-weather.is-week .wx-day').count() === 7, 'погода: неделя — 7 дней');
 // картинка — аниме
 await openSettings(await idOf('pic'));
-await page.click('.modal .seg-btn:has-text("Аниме")');
-await page.click('.modal button[type=submit]');
+await page.click('.inspector .seg-btn:has-text("Аниме")');
+await page.keyboard.press('Escape'); // закрыть инспектор — всё уже применилось
 await page.keyboard.press('Escape');
 await page.waitForTimeout(800);
 check(await page.evaluate(() => { const i = document.querySelector('.w-pic img'); return !!i && i.src.includes('pics.test'); }) && (await page.textContent('.pic-cap')) === 'Тестовое аниме', 'картинка: аниме-гифка с подписью');
 await page.screenshot({ path: `${out}/35-widgets-b.png` });
+
+// ---------- инспектор блока: сбоку, без затемнения, применяется сразу ----------
+await freshLayout();
+await page.reload();
+await page.waitForTimeout(1200);
+await openSettings('w-clock');
+const insp = await page.evaluate(() => {
+  const i = document.querySelector('.inspector').getBoundingClientRect();
+  const c = document.querySelector('.grid-stack-item[gs-id="w-clock"]').getBoundingClientRect();
+  const overlap = i.left < c.right && c.left < i.right && i.top < c.bottom && c.top < i.bottom;
+  return { overlap, modal: document.getElementById('modal').classList.contains('open'), inspecting: document.querySelector('.grid-stack-item[gs-id="w-clock"]').classList.contains('inspecting') };
+});
+check(!insp.overlap && !insp.modal && insp.inspecting, 'инспектор: рядом с блоком, не перекрывает, без затемнения, блок подсвечен');
+await page.click('.inspector .seg-btn:has-text("Стрелочные")');
+await page.waitForTimeout(200);
+check(await page.locator('.grid-stack-item[gs-id="w-clock"] .clock-face').count() === 1, 'инспектор: изменение видно сразу, без «Сохранить»');
+await page.screenshot({ path: `${out}/36-inspector.png` });
+await page.mouse.click(1200, 700); // клик мимо
+await page.waitForTimeout(200);
+check(await page.locator('.inspector').count() === 0 && await page.evaluate(() => window.__plitka.layout.find(i => i.id === 'w-clock').data.style) === 'analog', 'инспектор: клик мимо закрывает, настройка сохранена');
+await page.keyboard.press('Escape');
+
+// ---------- док: еле видимый ----------
+await page.mouse.move(700, 400);
+await page.waitForTimeout(400);
+const dockOp = await page.evaluate(() => getComputedStyle(document.getElementById('dock')).opacity);
+check(+dockOp > 0.2 && +dockOp < 0.5, `док: приглушён (opacity ${dockOp})`);
+
+// ---------- «подглядывание» панели ----------
+await page.click('#btn-settings');
+await page.waitForTimeout(400);
+const vig = await page.locator('input[data-fx="vignette"]').boundingBox();
+await page.mouse.move(vig.x + vig.width * 0.5, vig.y + vig.height / 2);
+await page.mouse.down();
+await page.mouse.move(vig.x + vig.width * 0.8, vig.y + vig.height / 2, { steps: 4 });
+await page.waitForTimeout(250);
+check(await page.evaluate(() => document.getElementById('settings').classList.contains('peek')), 'панель: пока тянешь ползунок — прозрачная');
+await page.screenshot({ path: `${out}/37-panel-peek.png` });
+await page.mouse.up();
+await page.waitForTimeout(250);
+check(!(await page.evaluate(() => document.getElementById('settings').classList.contains('peek'))), 'панель: отпустил — вернулась');
+
+// ---------- живые обои: анимация на картинке ----------
+await page.evaluate(async (url) => {
+  await chrome.storage.local.set({ settings: { bgImage: url, bgDim: 0.1, photo: { mode: 'frosted', anim: 'rain', animAmt: 0.8, speed: 0.4, clear: null } } });
+}, photoUrl);
+await page.click('.panel [data-close]');
+await page.reload();
+await page.waitForTimeout(1500);
+const f1 = await page.screenshot({ clip: { x: 200, y: 300, width: 400, height: 300 } });
+await page.waitForTimeout(1200);
+const f2 = await page.screenshot({ clip: { x: 200, y: 300, width: 400, height: 300 } });
+check(!f1.equals(f2), 'живые обои: «дождь по стеклу» двигается');
+await page.screenshot({ path: `${out}/38-live-rain.png` });
+for (const a of ['breathe', 'waves', 'glitch', 'shimmer', 'kenburns']) {
+  await page.evaluate(async ([url, anim]) => {
+    await chrome.storage.local.set({ settings: { bgImage: url, bgDim: 0.1, photo: { mode: 'mesh', anim, animAmt: 1, speed: 0.5, clear: null } } });
+  }, [photoUrl, a]);
+  await page.reload();
+  await page.waitForTimeout(1300);
+}
+await page.screenshot({ path: `${out}/39-live-kenburns.png` });
+check(await page.evaluate(() => window.__plitka.settings().photo.anim) === 'kenburns', 'живые обои: анимации переключаются без ошибок');
+await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
 const real = errors.filter(e => !/Failed to load resource/i.test(e));
 if (fails.length) { console.error('FAIL:', fails.join('; ')); process.exitCode = 1; }

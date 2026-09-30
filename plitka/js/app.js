@@ -12,11 +12,11 @@
   const unit = (v, d) => Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d;
   const isHex = (c) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
   const DEFAULT_DUO = ['#120c24', '#ffd2a8'];
-  const DEFAULT_MESH = { clear: null, duo: DEFAULT_DUO, ...fromPreset(Mesh.PRESETS[0]) };
+  const DEFAULT_MESH = { clear: null, duo: DEFAULT_DUO, anim: 'none', animAmt: 0.5, ...fromPreset(Mesh.PRESETS[0]) };
   // своя картинка: узор и эффекты отдельно от меша, чтобы переключение туда-обратно ничего не теряло.
   // По умолчанию — матовое стекло с чистой полосой по центру.
   const DEFAULT_PHOTO = {
-    mode: 'frosted', warp: 0, speed: 0.15, density: 0.55, grain: 0.3,
+    mode: 'frosted', warp: 0, speed: 0.15, density: 0.55, grain: 0.3, anim: 'none', animAmt: 0.5,
     clear: { x: 0.3, y: 0.34, w: 0.4, h: 0.16 }, duo: DEFAULT_DUO,
   };
   // до v0.2 фоны были CSS-пятнами: settings.bg → заготовка меша с той же палитрой
@@ -114,7 +114,8 @@
   function cleanLook(raw, def) {
     const m = structuredClone(def);
     if (!raw || typeof raw !== 'object') return m;
-    for (const k of ['warp', 'speed', 'grain', 'density']) m[k] = unit(raw[k], m[k]);
+    for (const k of ['warp', 'speed', 'grain', 'density', 'animAmt']) m[k] = unit(raw[k], m[k]);
+    m.anim = Mesh.ANIMS[raw.anim] ? raw.anim : 'none';
     m.mode = Mesh.MODES[raw.mode] ? raw.mode : def.mode;
     const c = raw.clear;
     m.clear = c && typeof c === 'object' && [c.x, c.y, c.w, c.h].every(Number.isFinite)
@@ -422,6 +423,7 @@
       if (it) syncGeom(it);
     }
     if (!mounting) commitPositions();
+    placeInspector?.();
     refreshInk();
   });
 
@@ -461,7 +463,7 @@
     document.body.classList.toggle('editing', on);
     grid.setStatic(!on);
     if (on) drawGuides();
-    else closeAddMenu();
+    else { closeAddMenu(); closeInspector?.(); }
   }
 
   document.getElementById('btn-edit').addEventListener('click', () => setEditing(!editing));
@@ -498,6 +500,7 @@
   function removeWidget(item) {
     const rec = live.get(item.id);
     if (!rec) return;
+    if (rec.el.classList.contains('inspecting')) closeInspector?.();
     rec.inst?.destroy?.();
     grid.removeWidget(rec.el);
     live.delete(item.id);
@@ -515,34 +518,96 @@
     });
   }
 
+  // ---------- инспектор блока: настройки сбоку от него, применяются сразу ----------
+  let closeInspector = null;
+  let placeInspector = null;
   function openWidgetSettings(item) {
+    closeInspector?.();
     const def = Widgets[item.type];
-    openModal({
-      title: def.title,
-      fields: [...def.settings, { type: 'heading', label: 'Оформление' }, ...STYLE_SETTINGS]
-        .map(s => ({ ...s, value: structuredClone(item.data[s.key]) })),
-      submit: 'Сохранить',
-      onSubmit: (v) => {
-        Object.assign(item.data, v);
-        saveLayout();
-        renderWidget(item);
-      },
-    });
+    const rec = live.get(item.id);
+    if (!rec) return;
+    const fields = [...def.settings, { type: 'heading', label: 'Оформление' }, ...STYLE_SETTINGS]
+      .map(s => ({ ...s, value: structuredClone(item.data[s.key]) }));
+
+    let getters = {};
+    let t = null;
+    const apply = () => {
+      clearTimeout(t);
+      const v = {};
+      for (const k in getters) v[k] = getters[k]();
+      // ничего не поменялось — не перерисовываем (таймеры и фокус виджета не сбиваем)
+      if (Object.keys(v).every(k => JSON.stringify(v[k]) === JSON.stringify(item.data[k]))) return;
+      Object.assign(item.data, v);
+      saveLayout();
+      renderWidget(item);
+    };
+    // клики применяем сразу, набор текста — с небольшой задержкой
+    const notify = (typing) => { clearTimeout(t); t = setTimeout(apply, typing ? 300 : 0); };
+    const built = buildFields(fields, notify);
+    getters = built.getters;
+
+    const el = h('aside', { class: 'inspector', role: 'dialog', 'aria-label': def.title },
+      h('header', { class: 'insp-head' },
+        h('h3', {}, def.title),
+        h('button', { type: 'button', class: 'icon-btn', title: 'Закрыть (Esc)', onclick: () => close() }, '✕')),
+      h('div', { class: 'insp-body' }, ...built.nodes));
+    document.body.append(el);
+    rec.el.classList.add('inspecting');
+
+    // сбоку от блока: справа, если влезает, иначе слева, иначе поверх края экрана
+    const place = () => {
+      const r = rec.el.getBoundingClientRect();
+      const W = el.offsetWidth, H = el.offsetHeight, gap = 12;
+      let left = r.right + gap;
+      if (left + W > innerWidth - gap) left = r.left - gap - W;
+      if (left < gap) left = innerWidth - W - gap;
+      const top = Math.min(Math.max(gap, r.top), innerHeight - H - gap);
+      el.style.left = left + 'px';
+      el.style.top = Math.max(gap, top) + 'px';
+    };
+    place();
+    requestAnimationFrame(() => el.classList.add('open'));
+
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || closePicker || closeDropdown) return; // сначала закрываются пикер и список
+      e.stopImmediatePropagation();
+      close();
+    };
+    const onDown = (e) => {
+      if (el.contains(e.target) || rec.el.contains(e.target) || e.target.closest('.cp, .dd-list, .toast')) return;
+      close();
+    };
+    const onMove = () => place();
+    window.addEventListener('keydown', onKey, true);
+    document.addEventListener('mousedown', onDown, true);
+    window.addEventListener('resize', onMove);
+    placeInspector = place; // блок подвинули — инспектор едет за ним (зовётся из обработчика change)
+
+    function close() {
+      apply(); // недописанный текст не теряем
+      el.remove();
+      rec.el.classList.remove('inspecting');
+      window.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('mousedown', onDown, true);
+      window.removeEventListener('resize', onMove);
+      placeInspector = null;
+      closePicker?.();
+      closeDropdown?.();
+      if (closeInspector === close) closeInspector = null;
+    }
+    closeInspector = close;
   }
 
-  // ---------- модалка ----------
-  const modal = document.getElementById('modal');
-  const modalForm = document.getElementById('modal-form');
-
-  function openModal({ title, fields, submit = 'OK', onSubmit }) {
-    document.getElementById('modal-title').textContent = title;
-    modalForm.replaceChildren();
+  // ---------- поля настроек: общие для инспектора и модалки ----------
+  // notify(typing) — зовётся на каждое изменение (typing — набор текста, можно подождать)
+  function buildFields(fields, notify = () => {}) {
+    const nodes = [];
     const getters = {};
     for (const f of fields) {
-      const id = 'f-' + f.key;
+      const id = 'f-' + f.key + '-' + Math.random().toString(36).slice(2, 6);
       let control;
       if (f.type === 'heading') {
-        modalForm.append(h('h4', { class: 'modal-sub' }, f.label));
+        nodes.push(h('h4', { class: 'modal-sub' }, f.label));
         continue;
       }
       if (f.type === 'color') {
@@ -550,6 +615,7 @@
         let cur = f.value || null;
         const dot = h('i');
         const text = h('span');
+        const reset = h('button', { type: 'button', class: 'pill small', onclick: () => { cur = null; paint(); notify(); } }, 'Сбросить');
         const paint = () => {
           dot.style.background = cur || '';
           dot.classList.toggle('none', !cur);
@@ -558,27 +624,24 @@
         };
         const btn = h('button', {
           type: 'button', class: 'color-btn',
-          onclick: () => colorPicker(btn, cur || '#8a7cff', (c) => { cur = c; paint(); }),
+          onclick: () => colorPicker(btn, cur || '#8a7cff', (c) => { cur = c; paint(); notify(); }),
         }, dot, text);
-        const reset = h('button', { type: 'button', class: 'pill small', onclick: () => { cur = null; paint(); } }, 'Сбросить');
         paint();
         control = h('div', { class: 'field field-row' }, h('span', {}, f.label), h('div', { class: 'row' }, reset, btn));
         getters[f.key] = () => cur;
-        modalForm.append(control);
-        continue;
-      }
-      if (f.type === 'toggle') {
+      } else if (f.type === 'toggle') {
         const inp = h('input', { type: 'checkbox', id });
         inp.checked = !!f.value;
+        inp.addEventListener('change', () => notify());
         control = h('label', { class: 'field field-toggle', for: id }, h('span', {}, f.label), h('span', { class: 'switch' }, inp, h('i')));
         getters[f.key] = () => inp.checked;
       } else if (f.type === 'select') {
         // до трёх вариантов — сегменты (всё видно сразу), больше — выпадающий список
-        const c = f.options.length <= 3 ? segmented(f.options, f.value) : dropdown(f.options, f.value);
+        const c = f.options.length <= 3 ? segmented(f.options, f.value, () => notify()) : dropdown(f.options, f.value, () => notify());
         control = h('div', { class: 'field' }, h('span', {}, f.label), c.el);
         getters[f.key] = c.get;
       } else if (f.type === 'align') {
-        const c = alignPicker(f.value);
+        const c = alignPicker(f.value, () => notify());
         control = h('div', { class: 'field field-row' }, h('span', {}, f.label), c.el);
         getters[f.key] = c.get;
       } else if (f.type === 'links') {
@@ -587,10 +650,10 @@
         const paint = () => {
           box.replaceChildren(...list.map((l, i) => h('div', { class: 'le-row' },
             h('span', { class: 'le-ico' }, favicon(l.url, l.title, 32)),
-            h('input', { type: 'text', value: l.title, placeholder: hostOf(l.url), oninput: (e) => { l.title = e.target.value; } }),
-            h('input', { type: 'text', value: l.url, class: 'le-url', oninput: (e) => { l.url = e.target.value; } }),
-            h('button', { type: 'button', class: 'tool', title: 'Выше', disabled: i === 0, onclick: () => { [list[i - 1], list[i]] = [list[i], list[i - 1]]; paint(); }, html: '<svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>' }),
-            h('button', { type: 'button', class: 'tool danger', title: 'Удалить', onclick: () => { list.splice(i, 1); paint(); }, html: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>' }),
+            h('input', { type: 'text', value: l.title, placeholder: hostOf(l.url), oninput: (e) => { l.title = e.target.value; notify(true); } }),
+            h('input', { type: 'text', value: l.url, class: 'le-url', oninput: (e) => { l.url = e.target.value; notify(true); } }),
+            h('button', { type: 'button', class: 'tool', title: 'Выше', disabled: i === 0, onclick: () => { [list[i - 1], list[i]] = [list[i], list[i - 1]]; paint(); notify(); }, html: '<svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>' }),
+            h('button', { type: 'button', class: 'tool danger', title: 'Удалить', onclick: () => { list.splice(i, 1); paint(); notify(); }, html: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>' }),
           )), h('button', { type: 'button', class: 'pill small', onclick: () => { list.push({ title: '', url: 'https://' }); paint(); box.querySelector('.le-row:last-of-type .le-url')?.focus(); } }, '+ Ссылка'));
         };
         paint();
@@ -599,12 +662,23 @@
       } else {
         const inp = h('input', { type: 'text', id, placeholder: f.placeholder || '', required: f.required });
         inp.value = f.value ?? '';
+        inp.addEventListener('input', () => notify(true));
         control = h('label', { class: 'field', for: id }, h('span', {}, f.label), inp);
         getters[f.key] = () => inp.value;
       }
-      modalForm.append(control);
+      nodes.push(control);
     }
-    modalForm.append(h('div', { class: 'modal-actions' },
+    return { nodes, getters };
+  }
+
+  // ---------- модалка: только там, где нужно явное «Добавить» (например, новая ссылка) ----------
+  const modal = document.getElementById('modal');
+  const modalForm = document.getElementById('modal-form');
+
+  function openModal({ title, fields, submit = 'OK', onSubmit }) {
+    document.getElementById('modal-title').textContent = title;
+    const { nodes, getters } = buildFields(fields);
+    modalForm.replaceChildren(...nodes, h('div', { class: 'modal-actions' },
       h('button', { type: 'button', class: 'pill', onclick: closeModal }, 'Отмена'),
       h('button', { type: 'submit', class: 'pill pill-accent' }, submit),
     ));
@@ -616,16 +690,16 @@
       onSubmit(v);
     };
     modal.classList.add('open');
-    setTimeout(() => modalForm.querySelector('input[type=text], select')?.focus(), 30);
+    setTimeout(() => modalForm.querySelector('input[type=text]')?.focus(), 30);
   }
   function closeModal() { closeDropdown?.(); closePicker?.(); modal.classList.remove('open'); }
 
   // ---------- свои контролы вместо системных ----------
   // каждый → { el, get() }
 
-  function segmented(options, value) {
+  function segmented(options, value, onChange) {
     let cur = options.some(([v]) => v === value) ? value : options[0][0];
-    const btns = options.map(([v, t]) => h('button', { type: 'button', class: 'seg-btn', role: 'radio', onclick: () => { cur = v; paint(); } }, t));
+    const btns = options.map(([v, t]) => h('button', { type: 'button', class: 'seg-btn', role: 'radio', onclick: () => { const ch = cur !== v; cur = v; paint(); if (ch) onChange?.(v); } }, t));
     const paint = () => btns.forEach((b, i) => {
       const on = options[i][0] === cur;
       b.classList.toggle('active', on);
@@ -774,10 +848,12 @@
       window.removeEventListener('keydown', onKey, true);
       document.removeEventListener('mousedown', onOutside, true);
       if (closePicker === close) closePicker = null;
+      if (anchor.closest?.("#settings")) panelPeek(null);
     }
     window.addEventListener('keydown', onKey, true);
     document.addEventListener('mousedown', onOutside, true);
     closePicker = close;
+    if (anchor.closest?.("#settings")) panelPeek(anchor); // цвет из панели — тоже «подглядываем»
 
     document.body.append(pop);
     const a = anchor.getBoundingClientRect();
@@ -789,7 +865,7 @@
     paint(false);
   }
 
-  function alignPicker(value) {
+  function alignPicker(value, onChange) {
     let cur = normAlign(value);
     const cells = [];
     for (const v of ['top', 'middle', 'bottom']) for (const hz of ['left', 'center', 'right']) {
@@ -797,7 +873,7 @@
       cells.push(h('button', {
         type: 'button', class: 'al-cell', 'data-v': key, role: 'radio',
         title: { top: 'Сверху', middle: 'По центру', bottom: 'Снизу' }[v] + ' · ' + { left: 'слева', center: 'по центру', right: 'справа' }[hz],
-        onclick: () => { cur = key; paint(); },
+        onclick: () => { const ch = cur !== key; cur = key; paint(); if (ch) onChange?.(key); },
       }, h('i')));
     }
     const paint = () => cells.forEach(c => {
@@ -814,6 +890,18 @@
   const panel = document.getElementById('settings');
   const panelBody = document.getElementById('settings-body');
   const fileInput = document.getElementById('file-input');
+
+  // «подглядывание»: тянешь ползунок в панели — панель прячется, остаётся только он, и видно весь экран
+  function panelPeek(el) {
+    panel.querySelectorAll('.peek-path, .peek-keep').forEach(x => x.classList.remove('peek-path', 'peek-keep'));
+    panel.classList.toggle('peek', !!el);
+    if (!el) return;
+    const keep = el.closest('.field, .row') || el;
+    keep.classList.add('peek-keep');
+    for (let p = keep.parentElement; p && p !== panelBody; p = p.parentElement) p.classList.add('peek-path');
+  }
+  panel.addEventListener('pointerdown', (e) => { if (e.target.matches('input[type=range]')) panelPeek(e.target); });
+  window.addEventListener('pointerup', () => { if (panel.classList.contains('peek') && !closePicker) panelPeek(null); });
 
   function openSettings() { renderSettings(); panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false'); }
   function closeSettings() { closePicker?.(); meshPreview?.destroy(); meshPreview = null; panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); }
@@ -984,6 +1072,8 @@
     const pct = (v) => Math.round(v * 100) + '%';
 
     const mode = dropdown(Object.entries(Mesh.MODES), m.mode, (v) => { m.mode = v; commit(); renderSettings(); });
+    // живые обои: анимация поверх любого узора
+    const anim = dropdown(Object.entries(Mesh.ANIMS), m.anim, (v) => { m.anim = v; commit(); renderSettings(); });
 
     if (!img) box.style.background = Mesh.cssPreview(m);
     paint();
@@ -991,6 +1081,8 @@
     return h('div', { class: 'mesh-editor' }, box,
       img ? null : tools,
       h('div', { class: 'field' }, h('span', {}, 'Узор'), mode.el),
+      h('div', { class: 'field' }, h('span', {}, 'Анимация'), anim.el),
+      m.anim !== 'none' ? sl('Сила анимации', 'animAmt', pct) : null,
       h('div', { class: 'row' }, clearBtn, m.mode === 'duotone' ? duoBtn(0, 'Тени') : null, m.mode === 'duotone' ? duoBtn(1, 'Света') : null),
       !['mesh', 'duotone'].includes(m.mode) ? sl(m.mode === 'frosted' ? 'Мелкость стекла' : 'Плотность', 'density', pct) : null,
       sl(img ? 'Жидкость' : 'Искажение', 'warp', pct),
@@ -1008,7 +1100,8 @@
         style: src ? null : `background:${Mesh.cssPreview(p)}`,
         onclick: () => {
           const had = settings.bgImage;
-          settings.mesh = { ...fromPreset(p), clear: settings.mesh.clear, duo: settings.mesh.duo };
+          const { clear, duo, anim, animAmt } = settings.mesh; // своё оформление поверх заготовки сохраняем
+          settings.mesh = { ...fromPreset(p), clear, duo, anim, animAmt };
           settings.bgImage = null;
           meshSel = 0;
           setSetting('mesh', settings.mesh);
@@ -1195,7 +1288,7 @@
       if (typing) e.target.blur();
       return;
     }
-    if (typing || e.ctrlKey || e.metaKey || e.altKey || modal.classList.contains('open')) return;
+    if (typing || e.ctrlKey || e.metaKey || e.altKey || modal.classList.contains('open') || closeInspector) return;
     if (e.key === 'e' || e.key === 'E' || e.key === 'у' || e.key === 'У') { e.preventDefault(); setEditing(!editing); }
     if (e.key === '/') {
       const s = document.querySelector('[data-search]');

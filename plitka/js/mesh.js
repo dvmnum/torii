@@ -22,7 +22,18 @@ const Mesh = (() => {
   };
   // номер режима в шейдере (uMode) — не зависит от порядка в меню
   const MODE_NUM = { mesh: 0, ribbed: 1, halftone: 2, flow: 3, ripple: 4, frosted: 5, duotone: 6 };
-  const FX_DEFAULTS = { vignette: 0.5, chroma: 0, scan: 0, bloom: 0, particles: 0, mouse: false, daycycle: false };
+  // живые обои: анимация поверх любого узора (номера — uAnim в шейдере)
+  const ANIMS = {
+    none: 'Нет',
+    breathe: 'Дыхание',
+    kenburns: 'Наезд камеры',
+    waves: 'Марево',
+    rain: 'Дождь по стеклу',
+    glitch: 'Глитч',
+    shimmer: 'Блик',
+  };
+  const ANIM_NUM = { none: 0, breathe: 1, kenburns: 2, waves: 3, rain: 4, glitch: 5, shimmer: 6 };
+  const FX_DEFAULTS ={ vignette: 0.5, chroma: 0, scan: 0, bloom: 0, particles: 0, mouse: false, daycycle: false };
 
   const VERT = `
 attribute vec2 aPos;
@@ -54,6 +65,8 @@ uniform float uBloom;
 uniform float uPart;
 uniform vec3 uDayTint;
 uniform float uDayAmt;
+uniform int uAnim;
+uniform float uAnimAmt;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -103,7 +116,54 @@ vec2 coverUV(vec2 q, float asp) {
   return (q - 0.5) * s + 0.5;
 }
 
+// дождь по стеклу: капли-линзы сползают вниз, каждая по своей колонке и со своей скоростью
+// → xy: смещение выборки (линза), z: маска капли (0..1)
+vec3 rain(vec2 q, float t, float asp) {
+  vec2 off = vec2(0.0);
+  float mask = 0.0;
+  for (int L = 0; L < 2; L++) {
+    float fl = float(L);
+    float n = 8.0 + fl * 7.0;
+    vec2 g = vec2(q.x * asp, q.y) * n;
+    vec2 id = floor(g);
+    float h = hash(id + fl * 21.3);
+    if (h < 0.35) continue; // не в каждой клетке
+    vec2 c = vec2(0.25 + 0.5 * hash(id + 5.1), fract(h * 5.0 + t * (0.04 + h * 0.07)));
+    vec2 f = fract(g) - c;
+    float r = 0.16 - fl * 0.05;
+    float m = smoothstep(r, r * 0.55, length(f * vec2(1.25, 1.0)));
+    off -= vec2(f.x / asp, f.y) * m * 1.6 / n; // линза: картинка в капле перевёрнута
+    // след — над каплей (она сползает вниз), тонкий и тающий
+    float trail = smoothstep(0.03, 0.0, abs(f.x)) * smoothstep(-0.05, -0.12, f.y) * smoothstep(-0.8, -0.25, f.y);
+    off += vec2(0.0, 0.0025) * trail;
+    mask = max(mask, max(m, trail * 0.3));
+  }
+  return vec3(off, mask);
+}
+
+// живые обои: анимация двигает координаты источника — работает с любым узором
+vec2 animUV(vec2 q, float t, float asp) {
+  if (uAnim == 1) { // дыхание: медленный зум туда-обратно
+    return (q - 0.5) * (1.0 - uAnimAmt * 0.06 * (0.5 + 0.5 * sin(t * 0.35))) + 0.5;
+  }
+  if (uAnim == 2) { // наезд камеры: зум + дрейф
+    float s = 1.0 - uAnimAmt * 0.12 * (0.5 + 0.5 * sin(t * 0.12));
+    return (q - 0.5) * s + 0.5 + uAnimAmt * 0.035 * vec2(sin(t * 0.09), cos(t * 0.07));
+  }
+  if (uAnim == 3) { // марево: волны, как над асфальтом в жару
+    return q + uAnimAmt * vec2(0.0045 * sin(q.y * 38.0 + t * 1.6), 0.003 * sin(q.x * 22.0 + t * 1.1));
+  }
+  if (uAnim == 4) return q + rain(q, t, asp).xy * (0.4 + uAnimAmt) * 0.35; // по всему стеклу — лёгкая рябь
+  if (uAnim == 5) { // глитч: время от времени сдвигаются горизонтальные полосы
+    float row = floor(q.y * 26.0), tt = floor(t * 4.0);
+    float on = step(0.84, hash(vec2(row, tt))) * step(0.55, hash(vec2(tt, 7.0)));
+    return q + vec2((hash(vec2(row, tt + 3.0)) - 0.5) * 0.1 * uAnimAmt * on, 0.0);
+  }
+  return q;
+}
+
 vec3 base(vec2 q, float t, float asp) {
+  q = animUV(q, t, asp);
   if (uHasImg == 1) return texture2D(uImg, coverUV(q, asp)).rgb * (1.0 - uDim);
   return meshAt(q, t, asp);
 }
@@ -217,6 +277,21 @@ void main() {
     col = src(warp(uv, t, asp), t, asp);
   }
 
+  // капли — прозрачные линзы поверх любого узора: в них картинка чёткая и перевёрнутая, по краю блик
+  if (uAnim == 4) {
+    vec3 rn = rain(uv, t, asp);
+    float m = rn.z * (0.55 + 0.45 * uAnimAmt);
+    vec3 drop = src(uv + rn.xy * (0.4 + uAnimAmt), t, asp) * 1.04 + 0.03;
+    col = mix(col, drop, m);
+    col += smoothstep(0.35, 0.9, rn.z) * (1.0 - smoothstep(0.9, 1.0, rn.z)) * 0.06;
+  }
+
+  // блик: полоса света медленно проходит по диагонали
+  if (uAnim == 6) {
+    float x = uv.x * 0.8 + uv.y * 0.6 - fract(t * 0.07) * 2.6 + 0.5;
+    col += uAnimAmt * 0.28 * exp(-x * x * 55.0) * vec3(1.0, 0.98, 0.95);
+  }
+
   // чистая область: там узора нет, источник как есть
   if (uClear.z > 0.0) {
     vec2 a = uClear.xy, b = uClear.xy + uClear.zw;
@@ -316,7 +391,7 @@ void main() {
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
     const u = Object.fromEntries(['uRes', 'uTime', 'uCount', 'uPos', 'uCol', 'uWarp', 'uDensity', 'uMode', 'uImg', 'uHasImg', 'uImgAsp', 'uDim',
-      'uClear', 'uDuoA', 'uDuoB', 'uMouse', 'uMouseAmt', 'uVig', 'uChroma', 'uScan', 'uBloom', 'uPart', 'uDayTint', 'uDayAmt']
+      'uClear', 'uDuoA', 'uDuoB', 'uMouse', 'uMouseAmt', 'uVig', 'uChroma', 'uScan', 'uBloom', 'uPart', 'uDayTint', 'uDayAmt', 'uAnim', 'uAnimAmt']
       .map(n => [n, gl.getUniformLocation(prog, n)]));
 
     // текстура своей картинки (NPOT: только CLAMP и без мипмапов)
@@ -394,17 +469,22 @@ void main() {
       gl.uniform1f(u.uPart, fx.particles);
       gl.uniform3f(u.uDayTint, day[0], day[1], day[2]);
       gl.uniform1f(u.uDayAmt, day[3]);
+      gl.uniform1i(u.uAnim, ANIM_NUM[params.anim] ?? 0);
+      gl.uniform1f(u.uAnimAmt, params.animAmt ?? 0.5);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       if (!ready) { ready = true; onReady?.(); }
     };
 
-    const animated = () => params.speed > 0 || params.fx?.particles > 0;
+    // что-то движется: скорость, частицы или анимация «живых обоев»; «Живой фон» выключен (still) — стоим
+    const hasAnim = () => params.anim && params.anim !== 'none';
+    const animated = () => !params.fx?.still && (params.speed > 0 || params.fx?.particles > 0 || hasAnim());
     const loop = (now) => {
       raf = requestAnimationFrame(loop);
       if (now - last < 1000 / fps - 2) return;
       const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
       last = now;
-      time += dt * Math.max(params.speed, params.fx?.particles > 0 ? 0.15 : 0) * 2.2;
+      // у анимации своя минимальная скорость — иначе при «Скорость 0» обои бы стояли
+      time += dt * Math.max(params.speed, hasAnim() ? 0.3 : 0, params.fx?.particles > 0 ? 0.15 : 0) * 2.2;
       // курсор догоняется плавно
       mouse = mouse.map((v, i) => v + (mouseT[i] - v) * 0.18);
       draw();
@@ -568,5 +648,5 @@ void main() {
       `, ${p.points[0].color}`;
   }
 
-  return { create, thumb, random, cssPreview, lumAt, hsl, dayTint, PRESETS, MODES, FX_DEFAULTS, MAX };
+  return { create, thumb, random, cssPreview, lumAt, hsl, dayTint, PRESETS, MODES, ANIMS, FX_DEFAULTS, MAX };
 })();

@@ -467,19 +467,22 @@ body.no-motion .clock-time .colon { animation: none; }
 .w-pic .w-more { background: rgba(0,0,0,.45); color: #fff; }
 
 /* ================= ДОК И ПАНЕЛИ ================= */
+/* еле видны, пока не нужны: иконки без подложки, с тенью — читаются на любом фоне; при наведении проявляются */
 .dock {
-  position: fixed; right: 18px; bottom: 18px; z-index: 20; display: flex; gap: 8px;
-  opacity: .0; transition: opacity .3s;
+  position: fixed; right: 14px; bottom: 14px; z-index: 20; display: flex; gap: 2px; padding: 4px;
+  opacity: .35; transition: opacity .3s;
 }
-body:hover .dock, .dock:focus-within, body.editing .dock { opacity: 1; }
+.dock:hover, .dock:focus-within, body.editing .dock { opacity: 1; }
 .dock-btn {
-  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line);
-  background: rgba(20,20,30,.55); backdrop-filter: blur(16px);
-  display: grid; place-items: center; font-size: 18px; color: var(--ink-2);
-  transition: background .2s, color .2s, transform .25s var(--ease);
+  width: 38px; height: 38px; border-radius: 50%; border: 1px solid transparent;
+  background: transparent;
+  display: grid; place-items: center; font-size: 18px; color: #fff;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.55));
+  transition: background .2s, border-color .2s, transform .25s var(--ease);
 }
-.dock-btn:hover { color: var(--ink); background: rgba(40,40,56,.75); transform: translateY(-2px); }
-body.editing #btn-edit { background: var(--accent); color: #0b0b12; border-color: transparent; }
+.dock:hover .dock-btn { background: rgba(20,20,30,.55); border-color: var(--line); filter: none; }
+.dock-btn:hover { background: rgba(40,40,56,.8) !important; transform: translateY(-2px); }
+body.editing #btn-edit { background: var(--accent); color: #0b0b12; border-color: transparent; filter: none; }
 
 .editbar {
   position: fixed; left: 50%; bottom: 20px; z-index: 21;
@@ -517,14 +520,37 @@ body.editing .editbar { transform: translate(-50%, 0); opacity: 1; }
 .add-item { text-align: left; border: 0; background: none; padding: 10px 12px; border-radius: 10px; font-size: 14px; font-weight: 500; }
 .add-item:hover { background: rgba(255,255,255,.08); }
 
+/* панель плотная, без размытия — фон за ней не превращается в кашу */
 .panel {
   position: fixed; top: 12px; right: 12px; bottom: 12px; width: 340px; z-index: 30;
-  background: var(--surface); border: 1px solid var(--line-2); border-radius: 24px;
-  backdrop-filter: blur(28px) saturate(160%);
+  background: rgba(16, 16, 24, .94); border: 1px solid var(--line-2); border-radius: 24px;
   box-shadow: 0 30px 80px -20px rgba(0,0,0,.7);
   display: flex; flex-direction: column;
-  transform: translateX(calc(100% + 24px)); transition: transform .45s var(--ease);
+  transform: translateX(calc(100% + 24px)); transition: transform .45s var(--ease), background .25s, border-color .25s, box-shadow .25s;
 }
+/* «подглядывание»: пока тянешь ползунок или выбираешь цвет, от панели остаётся только этот контрол */
+.panel.peek { background: transparent; border-color: transparent; box-shadow: none; }
+.panel-head, .panel-body * { transition: opacity .2s; }
+.panel.peek .panel-head,
+.panel.peek .panel-body *:not(.peek-path):not(.peek-keep):not(.peek-keep *) { opacity: 0; }
+.panel.peek .peek-keep {
+  background: rgba(16, 16, 24, .82); border-radius: 12px; padding: 8px 10px; margin: -8px -10px;
+  box-shadow: 0 10px 30px -10px rgba(0,0,0,.6);
+}
+
+/* инспектор блока: сбоку от него, без затемнения, всё применяется сразу */
+.inspector {
+  position: fixed; z-index: 35; width: 300px; max-height: calc(100vh - 24px); overflow-y: auto;
+  background: rgba(16, 16, 24, .96); border: 1px solid var(--line-2); border-radius: 18px;
+  box-shadow: 0 24px 60px -16px rgba(0,0,0,.75);
+  opacity: 0; transform: scale(.97); transition: opacity .15s, transform .2s var(--ease);
+  scrollbar-width: thin;
+}
+.inspector.open { opacity: 1; transform: none; }
+.insp-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 4px 18px; position: sticky; top: 0; background: inherit; z-index: 1; }
+.insp-head h3 { margin: 0; font-size: 15px; font-weight: 700; }
+.insp-body { display: flex; flex-direction: column; gap: 12px; padding: 8px 18px 18px; }
+.grid-stack-item.inspecting .w { outline: 2px solid var(--accent) !important; outline-offset: 2px; }
 .panel.open { transform: none; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 20px 8px 24px; }
 .panel-head h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
