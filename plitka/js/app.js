@@ -259,10 +259,12 @@
 
   function ctxFor(item) {
     return {
+      id: item.id,
       settings: () => settings,
       save: saveLayout,
       rerender: () => renderWidget(item),
       modal: openModal,
+      toast,
     };
   }
 
@@ -476,6 +478,8 @@
 
   function addWidget(type) {
     const def = Widgets[type];
+    // необязательное разрешение спрашиваем сразу — пока клик ещё «свежий»; откажут — виджет покажет кнопку
+    if (def.perm) chrome.permissions?.request({ permissions: [def.perm] }).then((ok) => { if (ok) renderWidget(item); }).catch(() => {});
     const item = { id: 'w-' + Math.random().toString(36).slice(2, 9), type, w: def.size.w, h: def.size.h };
     fillDefaults(item);
     if (!grid.willItFit({ w: item.w, h: item.h })) {

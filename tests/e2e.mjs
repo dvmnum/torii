@@ -104,13 +104,14 @@ const check = (ok, what) => { console.log((ok ? 'ok   ' : 'FAIL ') + what); if (
 // погода без сети: заглушка, потом сама подтягивается, когда сеть вернулась
 await ctx.unroute('https://api.open-meteo.com/**');
 await ctx.route('https://api.open-meteo.com/**', r => r.abort('internetdisconnected'));
-await page.evaluate(() => chrome.storage.local.remove('wx:москва'));
+await page.evaluate(() => chrome.storage.local.remove('wx2:москва'));
 await page.reload();
 await page.waitForTimeout(1200);
 check(await page.locator('.w-weather.is-error:has-text("Нет связи")').count() === 1, 'погода: заглушка без сети');
 await page.screenshot({ path: `${out}/08-weather-offline.png` });
 await ctx.unroute('https://api.open-meteo.com/**');
-await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ json: { current: { temperature_2m: 3, weather_code: 61 }, daily: { temperature_2m_max: [5], temperature_2m_min: [1] } } }));
+const week = (t) => ({ time: [...Array(7)].map((_, i) => new Date(Date.now() + i * 864e5).toISOString().slice(0, 10)), weather_code: [61, 3, 2, 0, 71, 95, 45], temperature_2m_max: [t + 2, 7, 9, 12, 1, 8, 6], temperature_2m_min: [t - 2, 2, 3, 5, -3, 4, 2] });
+await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ json: { current: { temperature_2m: 3, weather_code: 61 }, daily: week(3) } }));
 await page.evaluate(() => window.dispatchEvent(new Event('online')));
 await page.waitForTimeout(800);
 check(await page.locator('.w-weather .wx-temp:has-text("3°")').count() === 1, 'погода: восстановилась после online');
@@ -526,6 +527,131 @@ check(!!(await page.evaluate(() => window.__plitka.settings().bgImage)), 'заг
 // эффекты — обратно в спокойные, чтобы не мешать остальному
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 await page.click('.panel [data-close]');
+
+// ---------- новые виджеты ----------
+// сеть: курс ЦБ, котики, аниме-гифки
+const png = await page.screenshot({ clip: { x: 0, y: 0, width: 320, height: 320 } });
+await ctx.route('https://www.cbr-xml-daily.ru/**', r => r.fulfill({ json: {
+  Date: new Date().toISOString(),
+  Valute: { USD: { Nominal: 1, Value: 81.72, Previous: 81.4 }, EUR: { Nominal: 1, Value: 95.1, Previous: 95.6 }, CNY: { Nominal: 1, Value: 11.38, Previous: 11.38 } },
+} }));
+await ctx.route('https://cataas.com/**', r => r.fulfill({ body: png, contentType: 'image/png' }));
+await ctx.route('https://nekos.best/**', r => r.fulfill({ json: { results: [{ url: 'https://pics.test/anime.png', anime_name: 'Тестовое аниме' }] } }));
+await ctx.route('https://pics.test/**', r => r.fulfill({ body: png, contentType: 'image/png' }));
+
+const freshLayout = () => page.evaluate(() => chrome.storage.local.set({
+  widgets: [{ id: 'w-clock', type: 'clock', data: {} }], layouts: { lg: { 'w-clock': { x: 0, y: 0, w: 5, h: 2 } } }, settings: {},
+}));
+const addViaMenu = async (title) => {
+  if (!(await page.evaluate(() => document.body.classList.contains('editing')))) { await page.keyboard.press('e'); await page.waitForTimeout(300); }
+  await page.click('#btn-add');
+  await page.waitForTimeout(150);
+  await page.click(`.add-item:has-text("${title}")`);
+  await page.waitForTimeout(400);
+};
+const idOf = (type) => page.evaluate((t) => window.__plitka.layout.find(i => i.type === t)?.id, type);
+const inW = (type, sel) => page.evaluate(([t, s]) => {
+  const id = window.__plitka.layout.find(i => i.type === t)?.id;
+  return document.querySelector(`.grid-stack-item[gs-id="${id}"] ${s}`);
+}, [type, sel]);
+
+await freshLayout();
+await page.reload();
+await page.waitForTimeout(1200);
+await page.keyboard.press('e');
+await page.waitForTimeout(300);
+await page.click('#btn-add');
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${out}/33-add-menu-2col.png` });
+await page.click('#btn-add');
+await addViaMenu('Список дел');
+for (const t of ['Помодоро', 'Курсы ЦБ', 'Обратный отсчёт', 'Привычки', 'Цитата']) await addViaMenu(t);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(500);
+
+// список дел
+const todoSel = `.grid-stack-item[gs-id="${await idOf('todo')}"]`;
+for (const t of ['Купить молоко', 'Позвонить маме', 'Дописать Plitka']) { await page.fill(`${todoSel} .todo-new`, t); await page.press(`${todoSel} .todo-new`, 'Enter'); }
+await page.click(`${todoSel} .todo-item:has-text("Купить молоко") .todo-check`);
+await page.waitForTimeout(200);
+const todoOrder = await page.$$eval(`${todoSel} .todo-text`, els => els.map(e => e.textContent));
+check(todoOrder.join('|') === 'Позвонить маме|Дописать Plitka|Купить молоко', 'дела: сделанное уехало вниз');
+await page.dblclick(`${todoSel} .todo-text:has-text("Позвонить маме")`);
+await page.keyboard.press('Control+A');
+await page.keyboard.type('Позвонить бабушке');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(200);
+check(await page.locator(`${todoSel} .todo-text:has-text("Позвонить бабушке")`).count() === 1, 'дела: двойной клик — правка');
+
+// помодоро
+const pomoSel = `.grid-stack-item[gs-id="${await idOf('pomodoro')}"]`;
+const t0 = await page.textContent(`${pomoSel} .pomo-time`);
+await page.click(`${pomoSel} .pomo-btn.main`);
+await page.waitForTimeout(1600);
+const t1 = await page.textContent(`${pomoSel} .pomo-time`);
+check(t0 === '25:00' && t1 !== t0, `помодоро: идёт (${t0} → ${t1})`);
+check((await page.title()).includes('Фокус'), 'помодоро: время в заголовке вкладки');
+await page.click(`${pomoSel} .pomo-btn.main`);
+
+// курсы, отсчёт, привычки, цитата
+check(!(await page.textContent('.w-rates')).includes('null'), 'курсы: без мусора «null»');
+check(await page.locator('.rate:has-text("USD"):has-text("81,72")').count() === 1 && await page.locator('.rate-d.up').count() === 1 && await page.locator('.rate-d.down').count() === 1, 'курсы: USD 81,72 ₽, рост и падение');
+check(/^\d+$/.test((await page.textContent('.cd-big')).trim()) && /дн|день/.test(await page.textContent('.cd-unit')), 'отсчёт: дни до Нового года');
+const hbSel = `.grid-stack-item[gs-id="${await idOf('habits')}"]`;
+await page.click(`${hbSel} .hb-dot >> nth=6`);
+await page.waitForTimeout(200);
+check(await page.locator(`${hbSel} .hb-dot.on`).count() === 1 && (await page.textContent(`${hbSel} .hb-streak >> nth=0`)).startsWith('1'), 'привычки: отметка за сегодня и серия 1');
+const q0 = await page.textContent('.w-quote blockquote');
+await page.hover('.w-quote');
+await page.click('.w-quote .w-more');
+await page.waitForTimeout(200);
+check(q0 !== await page.textContent('.w-quote blockquote'), 'цитата: «ещё» листает');
+await page.screenshot({ path: `${out}/34-widgets-a.png` });
+
+// перезагрузка — дела и привычки на месте
+await page.reload();
+await page.waitForTimeout(1200);
+check(await page.locator(`${todoSel} .todo-item`).count() === 3 && await page.locator(`${hbSel} .hb-dot.on`).count() === 1, 'дела и привычки пережили перезагрузку');
+
+// вторая партия: частые сайты, недавно закрытые, слово, картинка, погода на неделю
+await freshLayout();
+await page.reload();
+await page.waitForTimeout(1200);
+for (const t of ['Частые сайты', 'Недавно закрытые', 'Слово дня', 'Картинка', 'Погода']) await addViaMenu(t);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(800);
+check(await page.locator(`.grid-stack-item[gs-id="${await idOf('topsites')}"] button:has-text("Разрешить")`).count() === 1, 'частые сайты: без разрешения — кнопка «Разрешить»');
+// sessions — разрешение без предупреждения, Chrome выдаёт его молча; тогда виджет показывает список (или просит обновить вкладку)
+const recentText = await page.evaluate(() => {
+  const it = window.__plitka.layout.find(i => i.type === 'recent');
+  return document.querySelector(`.grid-stack-item[gs-id="${it.id}"] .w-body`)?.innerText || '';
+});
+check(/Разрешить|Пока ничего не закрывали|обнови вкладку/.test(recentText), `недавно закрытые: понятное состояние («${recentText.replace(/\s+/g, ' ').trim()}»)`);
+await page.reload();
+await page.waitForTimeout(1200);
+// после перезагрузки: если доступ уже есть — должен быть список, а не просьба обновить
+const recentAfter = await page.evaluate(() => {
+  const it = window.__plitka.layout.find(i => i.type === 'recent');
+  return document.querySelector(`.grid-stack-item[gs-id="${it.id}"] .w-body`)?.innerText || '';
+});
+check(!/обнови вкладку/.test(recentAfter), `недавно закрытые: после перезагрузки API на месте («${recentAfter.replace(/\s+/g, ' ').trim()}»)`);
+check((await page.textContent('.word-w')).length > 2 && (await page.textContent('.word-m')).length > 5, 'слово дня: слово и значение');
+check(await page.evaluate(() => { const i = document.querySelector('.w-pic img'); return !!i && i.src.includes('cataas.com') && i.naturalWidth > 0; }), 'картинка: котик загрузился');
+// погода — режим «неделя»
+await openSettings(await idOf('weather'));
+await page.click('.modal .seg-btn:has-text("Неделя")');
+await page.click('.modal button[type=submit]');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(600);
+check(await page.locator('.w-weather.is-week .wx-day').count() === 7, 'погода: неделя — 7 дней');
+// картинка — аниме
+await openSettings(await idOf('pic'));
+await page.click('.modal .seg-btn:has-text("Аниме")');
+await page.click('.modal button[type=submit]');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(800);
+check(await page.evaluate(() => { const i = document.querySelector('.w-pic img'); return !!i && i.src.includes('pics.test'); }) && (await page.textContent('.pic-cap')) === 'Тестовое аниме', 'картинка: аниме-гифка с подписью');
+await page.screenshot({ path: `${out}/35-widgets-b.png` });
 
 const real = errors.filter(e => !/Failed to load resource/i.test(e));
 if (fails.length) { console.error('FAIL:', fails.join('; ')); process.exitCode = 1; }

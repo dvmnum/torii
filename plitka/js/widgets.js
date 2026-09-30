@@ -266,9 +266,10 @@ const Widgets = {
   weather: {
     title: 'Погода',
     size: { w: 6, h: 2 }, min: { w: 3, h: 1 },
-    defaults: { glass: true, city: 'Москва' },
+    defaults: { glass: true, city: 'Москва', view: 'now' },
     settings: [
       { key: 'city', label: 'Город', type: 'text' },
+      { key: 'view', label: 'Вид', type: 'select', options: [['now', 'Сейчас'], ['week', 'Неделя']] },
       GLASS_SETTING,
     ],
     render(body, data, ctx) {
@@ -278,9 +279,23 @@ const Widgets = {
       let retryT = null;
       let attempt = 0;
 
-      const paint = (w, stale) => {
-        const [desc, ico] = weatherInfo(w.code);
+      // неделя: колонка на день — день недели, иконка, макс/мин
+      const paintWeek = (w, stale) => {
+        const wd = (iso, i) => i === 0 ? 'Сегодня' : new Date(iso + 'T12:00').toLocaleDateString('ru-RU', { weekday: 'short' });
         box.classList.remove('is-loading', 'is-error');
+        box.classList.toggle('is-stale', stale);
+        box.classList.add('is-week');
+        box.replaceChildren(...w.days.map((d, i) => h('div', { class: 'wx-day' + (i === 0 ? ' today' : '') },
+          h('div', { class: 'wx-dname' }, wd(d.date, i)),
+          h('div', { class: 'wx-dico', html: ICONS[weatherInfo(d.code)[1]], title: weatherInfo(d.code)[0] }),
+          h('div', { class: 'wx-dt' }, `${Math.round(d.max)}°`, h('span', {}, `${Math.round(d.min)}°`)),
+        )));
+      };
+
+      const paint = (w, stale) => {
+        if (data.view === 'week' && w.days?.length > 1) return paintWeek(w, stale);
+        const [desc, ico] = weatherInfo(w.code);
+        box.classList.remove('is-loading', 'is-error', 'is-week');
         box.classList.toggle('is-stale', stale);
         box.replaceChildren(
           h('div', { class: 'wx-ico', html: ICONS[ico] }),
@@ -328,7 +343,7 @@ const Widgets = {
 // → { w, stale }. Без сети отдаёт старый кэш (не старше суток) со stale: true.
 // Ошибка с code 'notfound' — город не найден, повторять бессмысленно; остальные — сеть.
 async function loadWeather(city) {
-  const key = 'wx:' + city.toLowerCase();
+  const key = 'wx2:' + city.toLowerCase(); // wx2 — с прогнозом на неделю
   const cached = await Store.get(key, null);
   if (cached && Date.now() - cached.at < 30 * 60 * 1000) return { w: cached.w, stale: false };
 
@@ -340,13 +355,15 @@ async function loadWeather(city) {
     const geo = await get(`https://geocoding-api.open-meteo.com/v1/search?count=1&language=ru&name=${encodeURIComponent(city)}`);
     const p = geo.results && geo.results[0];
     if (!p) throw Object.assign(new Error('city not found'), { code: 'notfound' });
-    const f = await get(`https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1`);
+    const f = await get(`https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=7`);
+    const dl = f.daily;
     const w = {
       place: p.name,
       temp: f.current.temperature_2m,
       code: f.current.weather_code,
-      max: f.daily.temperature_2m_max[0],
-      min: f.daily.temperature_2m_min[0],
+      max: dl.temperature_2m_max[0],
+      min: dl.temperature_2m_min[0],
+      days: (dl.time || []).map((date, i) => ({ date, code: dl.weather_code?.[i] ?? 0, max: dl.temperature_2m_max[i], min: dl.temperature_2m_min[i] })),
     };
     Store.set(key, { at: Date.now(), w });
     return { w, stale: false };

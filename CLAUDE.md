@@ -11,7 +11,8 @@
 - Сетка — `gridstack.js` v14 (`js/lib/gridstack-all.js`, UMD, глобал `GridStack` — это сам класс).
   Обновлять: `npm i gridstack@latest` → скопировать `node_modules/gridstack/dist/gridstack-all.js` и `gridstack.min.css`.
 - Шрифт Manrope (variable, cyrillic + latin) локально в `plitka/fonts/`.
-- Минимум permissions: сейчас только `storage`, `unlimitedStorage`. Каждое новое разрешение — осознанно (ревью в сторах).
+- Минимум permissions: `storage`, `unlimitedStorage`. Плюс необязательные (`optional_permissions`) `topSites`, `sessions` — спрашиваются только при добавлении виджета (поле `perm` у виджета), без них виджет показывает кнопку «Разрешить». Каждое новое разрешение — осознанно (ревью в сторах).
+- Внешние сервисы: Open-Meteo (погода), cbr-xml-daily.ru (курсы ЦБ), cataas.com (котики), nekos.best (аниме-гифки), Google s2 / favicon.yandex.net (иконки). В тестах всё замокано.
 - Никакой аналитики и сбора данных.
 
 ## Структура
@@ -22,7 +23,10 @@ plitka/
   css/style.css        весь дизайн (CSS-переменные в :root, секции по компонентам)
   js/store.js          Store.get/set/remove — chrome.storage.local, фолбэк localStorage (для открытия файла напрямую)
   js/widgets.js        хелпер h(), favicon(), ENGINES, реестр Widgets, loadWeather()
-  js/mesh.js           Mesh: меш-градиент на WebGL1 (create/random/cssPreview), без библиотек
+  js/content.js        тексты для «Цитаты» (QUOTES, аниме) и «Слова дня» (WORDS)
+  js/widgets-more.js   вторая партия виджетов: дела, помодоро, частые сайты, недавно закрытые, курсы ЦБ,
+                       отсчёт, привычки, цитата, слово дня, картинка — дописывает Widgets через Object.assign
+  js/mesh.js           Mesh: живой фон на WebGL1 (create/random/cssPreview/lumAt), без библиотек
   js/app.js            IIFE: настройки, тема, сетка, редактор, модалки, панель, тосты, хоткеи
 tests/e2e.mjs          Playwright-смоук (npm test)
 tests/debug.mjs        открыть вкладку расширения и вывести ошибки консоли (npm run debug) — когда e2e падает на старте
@@ -59,12 +63,14 @@ myWidget: {
   title: 'Название',                 // в меню «+ Виджет» и в тулбаре блока
   size: { w, h }, min: { w, h },     // размер по умолчанию и минимальный (в ячейках)
   defaults: { glass: true, ... },    // дефолтный data
-  settings: [ { key, label, type: 'toggle'|'select'|'text'|'links'|'align', options? } ],
+  perm: 'topSites',                  // необязательное разрешение, спрашивается при добавлении (если нужно)
+  settings: [ { key, label, type: 'toggle'|'select'|'text'|'links'|'align'|'color', options? } ],
   render(body, data, ctx) {          // body — .w-body (container-type: size)
     // ctx.save()      — сохранить layout (после мутации data)
     // ctx.rerender()  — перерисовать этот виджет
     // ctx.modal({...})— модалка с полями
     // ctx.settings()  — глобальные настройки
+    // ctx.id, ctx.toast(text) — id блока (например, для своего ключа в Store) и тост
     return { destroy() {} };         // обязательно чистить таймеры/слушатели
   },
 }
@@ -89,6 +95,8 @@ myWidget: {
 - На `body` стоит `font-feature-settings: 'tnum' 0`, а оно перебивает `font-variant-numeric: tabular-nums`. Нужны моноширинные цифры — пиши `font-feature-settings: 'tnum' 1`. Для основного времени часов tnum не включать: единица становится слишком широкой.
 - Меш-фон рендерится в ~0.35 разрешения экрана и ≤30 fps (градиент гладкий, растяжение не видно); в скрытой вкладке rAF и так стоит. Цвета смешиваются в sRGB, не в линейном — в линейном всё выцветает. Под ним стеклянные блоки пересчитывают `backdrop-filter` каждый кадр — на слабом железе проверять.
 - Функции, которые зовутся при загрузке (`cleanSettings` и всё, что из неё), объявляй через `function`, а константы для них — наверху IIFE: `const` ниже вызова даёт TDZ, и вкладка падает целиком (уже три раза ловили).
+- `el.replaceChildren(…, null)` — DOM API, а не `h()`: `null` превращается в текст «null». Условные дети передавай через `...(cond ? [x] : [])`.
+- `sessions` — разрешение без предупреждения, Chrome выдаёт его молча; API `chrome.sessions`/`chrome.topSites` в уже открытой вкладке может появиться только после перезагрузки — виджеты это обрабатывают.
 - Иконки сайтов: Google s2 → favicon.yandex.net → буква-монограмма. Внутренний `_favicon` Chrome отдаёт серый глобус для непосещённых сайтов — поэтому не используется.
 - `chrome.storage.local` без `unlimitedStorage` — 10 МБ; фон-картинка ужимается до 2560px JPEG.
 - Если нужен `chrome.storage.sync`: лимит ~100 КБ всего и 8 КБ на ключ — картинки туда нельзя.
