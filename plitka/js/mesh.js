@@ -1,20 +1,28 @@
-// Меш-градиент на WebGL: цветные точки + искажение шумом + медленный дрейф, поверх — узор.
-// Mesh.create(canvas, { scale }) → { set(params), destroy() } или null, если WebGL нет.
+// Живой фон на WebGL. Источник — меш-градиент (цветные точки) или своя картинка;
+// поверх — узор (рифлёнка, полутон, матовое стекло…), «чистая область» без узора и эффекты.
+// Mesh.create(canvas, { scale, onReady }) → { set(params), pointer(x, y), destroy() } или null, если WebGL нет.
 // params: {
-//   points: [{ x, y, color:'#rrggbb' }] (2..6, x/y в 0..1),
-//   warp, speed, grain, density — 0..1,
-//   mode: 'mesh' | 'ribbed' | 'halftone' | 'flow' | 'ripple'
+//   points: [{ x, y, color:'#rrggbb' }] (2..6, x/y в 0..1) — для меша,
+//   image: dataURL | null, dim: 0..1 — своя картинка и её затемнение,
+//   mode: ключ MODES, warp, speed, density — 0..1,
+//   clear: { x, y, w, h } | null — область без узора (доли экрана),
+//   duo: ['#тёмный', '#светлый'] — для дуотона,
+//   fx: { vignette, chroma, scan, bloom, particles — 0..1; mouse, daycycle — bool }
 // }
 const Mesh = (() => {
   const MAX = 6;
   const MODES = {
-    mesh: 'Пятна',
+    mesh: 'Без узора',
+    frosted: 'Матовое стекло',
     ribbed: 'Рифлёное стекло',
     halftone: 'Полутон',
+    duotone: 'Дуотон',
     flow: 'Неоновые линии',
     ripple: 'Рельеф',
   };
-  const MODE_IDS = Object.keys(MODES);
+  // номер режима в шейдере (uMode) — не зависит от порядка в меню
+  const MODE_NUM = { mesh: 0, ribbed: 1, halftone: 2, flow: 3, ripple: 4, frosted: 5, duotone: 6 };
+  const FX_DEFAULTS = { vignette: 0.5, chroma: 0, scan: 0, bloom: 0, particles: 0, mouse: false, daycycle: false };
 
   const VERT = `
 attribute vec2 aPos;
@@ -30,6 +38,22 @@ uniform vec3 uCol[${MAX}];
 uniform float uWarp;
 uniform float uDensity;
 uniform int uMode;
+uniform sampler2D uImg;
+uniform int uHasImg;
+uniform float uImgAsp;
+uniform float uDim;
+uniform vec4 uClear;
+uniform vec3 uDuoA;
+uniform vec3 uDuoB;
+uniform vec2 uMouse;
+uniform float uMouseAmt;
+uniform float uVig;
+uniform float uChroma;
+uniform float uScan;
+uniform float uBloom;
+uniform float uPart;
+uniform vec3 uDayTint;
+uniform float uDayAmt;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -45,12 +69,16 @@ float fbm(vec2 p) {
 }
 float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 
-// «жидкое» искажение координат
-vec2 warp(vec2 uv, float t) {
+// «жидкое» искажение координат + линза под курсором
+vec2 warp(vec2 uv, float t, float asp) {
   vec2 q = uv;
   q += uWarp * 0.32 * vec2(noise(uv * 2.2 + vec2(t * 0.07, -t * 0.05)) - 0.5,
                            noise(uv * 2.2 + vec2(5.2 - t * 0.06, 1.3 + t * 0.08)) - 0.5);
   q += uWarp * 0.06 * vec2(sin(q.y * 5.0 + t * 0.3), cos(q.x * 4.0 - t * 0.25));
+  if (uMouseAmt > 0.0) {
+    vec2 d = (uv - uMouse) * vec2(asp, 1.0);
+    q -= (uv - uMouse) * exp(-dot(d, d) * 14.0) * uMouseAmt * 0.4;
+  }
   return q;
 }
 
@@ -69,8 +97,28 @@ vec3 meshAt(vec2 q, float t, float asp) {
   return acc / wsum;
 }
 
+// картинка «cover»: заполняет экран без искажения пропорций
+vec2 coverUV(vec2 q, float asp) {
+  vec2 s = asp > uImgAsp ? vec2(1.0, uImgAsp / asp) : vec2(asp / uImgAsp, 1.0);
+  return (q - 0.5) * s + 0.5;
+}
+
+vec3 base(vec2 q, float t, float asp) {
+  if (uHasImg == 1) return texture2D(uImg, coverUV(q, asp)).rgb * (1.0 - uDim);
+  return meshAt(q, t, asp);
+}
+// источник с хроматической аберрацией (каналы чуть разъезжаются)
+vec3 src(vec2 q, float t, float asp) {
+  if (uChroma > 0.0) {
+    vec2 d = vec2(uChroma * 0.007, 0.0);
+    return vec3(base(q + d, t, asp).r, base(q, t, asp).g, base(q - d, t, asp).b);
+  }
+  return base(q, t, asp);
+}
+
 // самый тёмный цвет палитры — фон для полутона и неона
 vec3 darkest() {
+  if (uHasImg == 1) return vec3(0.05);
   vec3 d = uCol[0];
   for (int i = 1; i < ${MAX}; i++) {
     if (i >= uCount) break;
@@ -82,8 +130,31 @@ vec3 vivid(vec3 c) { return c / max(max(c.r, max(c.g, c.b)), 0.001) * 0.97; }
 
 // поле для неоновых лент: целые значения — изолинии, по ним идут ленты (обычно 1–3 штуки)
 float flowField(vec2 uv, float t, float asp) {
-  vec2 q = warp(uv, t);
+  vec2 q = warp(uv, t, asp);
   return fbm(vec2(q.x * asp, q.y) * mix(0.8, 2.0, uDensity) + vec2(t * 0.04, -t * 0.03)) * 3.0;
+}
+
+// матовое «пупырчатое» стекло: наклон из шума высокой частоты сдвигает выборку, плюс размытие и дымка
+vec3 frosted(vec2 uv, float t, float asp) {
+  float f = mix(26.0, 110.0, uDensity);
+  vec2 p = vec2(uv.x * asp, uv.y) * f;
+  float e = 0.35;
+  float n0 = noise(p) + 0.5 * noise(p * 2.3 + 7.0);
+  vec2 px = p + vec2(e, 0.0), py = p + vec2(0.0, e);
+  float nx = noise(px) + 0.5 * noise(px * 2.3 + 7.0);
+  float ny = noise(py) + 0.5 * noise(py * 2.3 + 7.0);
+  vec2 g = vec2(nx - n0, ny - n0) / e;
+  vec2 q = warp(uv, t, asp) + g * 0.016;
+  vec3 acc = vec3(0.0);
+  for (int i = 0; i < 10; i++) {
+    float fi = float(i);
+    float a = fi * 2.39996;
+    vec2 o = vec2(cos(a) / asp, sin(a)) * 0.03 * sqrt((fi + 0.5) / 10.0);
+    acc += src(q + o, t, asp);
+  }
+  vec3 col = mix(acc / 10.0, vec3(0.8, 0.81, 0.84), 0.1);
+  float spec = pow(max(0.0, dot(normalize(vec3(-g * 0.9, 1.0)), normalize(vec3(-0.5, -0.7, 0.9)))), 24.0);
+  return col + spec * 0.05;
 }
 
 void main() {
@@ -99,49 +170,96 @@ void main() {
     float sx = uv.x * n;
     float f = fract(sx) - 0.5;
     vec2 q = vec2((floor(sx) + 0.5 - f * 3.0) / n, uv.y + f * 0.11);
-    col = meshAt(warp(q, t), t, asp);
-    col *= 0.86 + 0.24 * smoothstep(-0.5, 0.5, f);      // одна грань полоски темнее
-    col += 0.07 * pow(max(0.0, 1.0 - abs(f - 0.3) * 5.0), 3.0); // блик
+    col = src(warp(q, t, asp), t, asp);
+    col *= 0.86 + 0.24 * smoothstep(-0.5, 0.5, f);
+    col += 0.07 * pow(max(0.0, 1.0 - abs(f - 0.3) * 5.0), 3.0);
   } else if (uMode == 2) {
-    // полутон: точка тем больше, чем ярче меш под ней
+    // полутон: точка тем больше, чем ярче источник под ней
     float cell = uRes.x / mix(38.0, 130.0, uDensity);
     vec2 p = gl_FragCoord.xy / cell;
     vec2 f = fract(p) - 0.5;
     vec2 cuv = (floor(p) + 0.5) * cell / uRes;
     cuv.y = 1.0 - cuv.y;
-    vec3 c = meshAt(warp(cuv, t), t, asp);
+    vec3 c = src(warp(cuv, t, asp), t, asp);
     vec3 bg = darkest() * 0.7;
     float r = 0.52 * smoothstep(lum(bg) + 0.03, lum(bg) + 0.45, lum(c));
     float aa = 1.2 / cell;
-    col = mix(bg, vivid(c), 1.0 - smoothstep(r - aa, r + aa, length(f)));
+    vec3 dotc = uHasImg == 1 ? mix(vec3(lum(c)), c, 0.6) * 1.15 : vivid(c);
+    col = mix(bg, dotc, 1.0 - smoothstep(r - aa, r + aa, length(f)));
   } else if (uMode == 3) {
-    // неоновые ленты вдоль изолиний шумового поля. Расстояние до изолинии = значение / градиент —
-    // так лента одной толщины и там, где поле пологое (иначе расплывается в пятно)
+    // неоновые ленты вдоль изолиний: расстояние до изолинии = значение / градиент — толщина везде одна
     vec2 px = 1.0 / uRes;
     float v = flowField(uv, t, asp);
     vec2 g = vec2(flowField(uv + vec2(px.x, 0.0), t, asp) - v, flowField(uv + vec2(0.0, px.y), t, asp) - v);
-    float sd = (v - floor(v + 0.5)) / max(length(g), 1e-5); // знаковое расстояние в пикселях
-    float s = clamp(sd / (uRes.y * mix(0.035, 0.018, uDensity)), -2.0, 2.0); // в полуширинах ленты
-    // поперёк ленты цвет берём из соседних мест меша — края уходят в другие оттенки
-    vec3 c = vivid(meshAt(warp(uv, t) + vec2(s * 0.14, -s * 0.07), t, asp));
-    vec3 bg = darkest() * 0.55;
-    col = mix(bg, c, exp(-s * s * 1.6));
-    col += 0.28 * exp(-s * s * 14.0) * vec3(1.0); // светлая сердцевина
+    float sd = (v - floor(v + 0.5)) / max(length(g), 1e-5);
+    float s = clamp(sd / (uRes.y * mix(0.035, 0.018, uDensity)), -2.0, 2.0);
+    vec3 c = vivid(src(warp(uv, t, asp) + vec2(s * 0.14, -s * 0.07), t, asp));
+    col = mix(darkest() * 0.55, c, exp(-s * s * 1.6));
+    col += 0.28 * exp(-s * s * 14.0) * vec3(1.0);
   } else if (uMode == 4) {
     // рельеф: завихрение + частые гребни, которые затеняют цвет как выдавленные волны
-    vec2 q = warp(uv, t);
+    vec2 q = warp(uv, t, asp);
     vec2 c0 = vec2(0.55, 0.45);
     vec2 d = (q - c0) * vec2(asp, 1.0);
     float a = 1.6 * uWarp * exp(-dot(d, d) * 2.5);
     q = c0 + mat2(cos(a), -sin(a), sin(a), cos(a)) * (q - c0);
     float fl = fbm(vec2(q.x * asp, q.y) * 1.8 + t * 0.03);
     float ridge = sin(fl * mix(55.0, 150.0, uDensity) + t * 0.6);
-    col = meshAt(q, t, asp);
+    col = src(q, t, asp);
     col *= 0.88 + 0.1 * ridge;
     col += 0.08 * smoothstep(0.6, 1.0, ridge) * vivid(col);
+  } else if (uMode == 5) {
+    col = frosted(uv, t, asp);
+  } else if (uMode == 6) {
+    // дуотон: яркость → градиент из двух цветов
+    col = mix(uDuoA, uDuoB, smoothstep(0.06, 0.94, lum(src(warp(uv, t, asp), t, asp))));
   } else {
-    col = meshAt(warp(uv, t), t, asp);
+    col = src(warp(uv, t, asp), t, asp);
   }
+
+  // чистая область: там узора нет, источник как есть
+  if (uClear.z > 0.0) {
+    vec2 a = uClear.xy, b = uClear.xy + uClear.zw;
+    float e = 1.5 / uRes.y;
+    float m = smoothstep(a.x - e, a.x + e, uv.x) * (1.0 - smoothstep(b.x - e, b.x + e, uv.x))
+            * smoothstep(a.y - e, a.y + e, uv.y) * (1.0 - smoothstep(b.y - e, b.y + e, uv.y));
+    if (m > 0.0) col = mix(col, src(uv, t, asp), m);
+  }
+
+  // свечение: светлые места источника расплываются ореолом
+  if (uBloom > 0.0) {
+    vec3 b = vec3(0.0);
+    for (int i = 0; i < 8; i++) {
+      float fi = float(i);
+      float a = fi * 2.39996 + 0.5;
+      vec2 o = vec2(cos(a) / asp, sin(a)) * 0.07 * sqrt((fi + 0.5) / 8.0);
+      b += max(src(warp(uv + o, t, asp), t, asp) - 0.5, 0.0);
+    }
+    col += b / 8.0 * uBloom * 2.4;
+  }
+
+  // частицы: мелкая пыль, медленно плывёт вверх и мерцает
+  if (uPart > 0.0) {
+    for (int L = 0; L < 2; L++) {
+      float fl = float(L);
+      float n = 24.0 + fl * 20.0;
+      vec2 g = vec2(uv.x * asp, uv.y + t * (0.012 + fl * 0.01)) * n;
+      vec2 id = floor(g);
+      vec2 f = fract(g) - 0.5;
+      float h = hash(id + fl * 13.1);
+      if (h > 1.0 - uPart * 0.5) {
+        vec2 c = vec2(hash(id + 3.1), hash(id + 7.7)) - 0.5;
+        float d = length(f - c * 0.7);
+        float tw = 0.6 + 0.4 * sin(t * 2.0 + h * 40.0);
+        col += smoothstep(0.07 - fl * 0.02, 0.0, d) * tw * (0.35 + 0.5 * h);
+      }
+    }
+  }
+
+  if (uScan > 0.0) col *= 1.0 - uScan * 0.4 * (0.5 + 0.5 * sin(uv.y * 3.14159 * 360.0));
+  col = mix(col, col * uDayTint, uDayAmt);
+  vec2 vd = (uv - vec2(0.5, 0.42)) * vec2(1.0, 1.15);
+  col *= 1.0 - uVig * 0.8 * smoothstep(0.3, 0.95, length(vd));
 
   col += (hash(gl_FragCoord.xy + t) - 0.5) / 255.0; // дизеринг против полос
   gl_FragColor = vec4(col, 1.0);
@@ -152,10 +270,24 @@ void main() {
     return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
   };
 
-  // scale — доля разрешения экрана. Пятна гладкие, им хватает 0.35; узорам (точки, полоски) нужно больше.
+  // оттенок по времени суток: ночь — темнее и синее, утро — тёплое, вечер — розовое
+  const DAY_KEYS = [ // [час, r, g, b, сила]
+    [0, 0.55, 0.62, 0.9, 0.55], [5, 0.6, 0.66, 0.9, 0.5], [8, 1.1, 0.96, 0.84, 0.4],
+    [12, 1, 1, 1, 0], [16, 1, 1, 1, 0], [19, 1.12, 0.84, 0.82, 0.45], [22, 0.6, 0.64, 0.9, 0.5], [24, 0.55, 0.62, 0.9, 0.55],
+  ];
+  function dayTint(date = new Date()) {
+    const hr = date.getHours() + date.getMinutes() / 60;
+    const i = DAY_KEYS.findIndex(k => k[0] > hr);
+    const a = DAY_KEYS[i - 1], b = DAY_KEYS[i];
+    const k = (hr - a[0]) / (b[0] - a[0]);
+    return [1, 2, 3, 4].map(j => a[j] + (b[j] - a[j]) * k);
+  }
+
+  // scale — доля разрешения экрана. Пятна гладкие, им хватает 0.35; узорам и фото нужно больше.
   // size — фиксированный размер (для миниатюр), тогда канвасу не нужно быть в DOM.
-  function create(canvas, { scale = 0.35, fps = 30, size = null } = {}) {
-    const gl = canvas.getContext('webgl', { antialias: false, depth: false, stencil: false, alpha: false, powerPreference: 'low-power' });
+  // onReady — после первого кадра с текущим источником (картинка грузится асинхронно).
+  function create(canvas, { scale = 0.35, fps = 30, size = null, onReady = null } = {}) {
+    const gl = canvas.getContext('webgl', { antialias: false, depth: false, stencil: false, alpha: false, powerPreference: 'low-power', preserveDrawingBuffer: !!size });
     if (!gl) return null;
 
     const sh = (type, src) => {
@@ -183,18 +315,44 @@ void main() {
     gl.enableVertexAttribArray(aPos);
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
-    const u = Object.fromEntries(['uRes', 'uTime', 'uCount', 'uPos', 'uCol', 'uWarp', 'uDensity', 'uMode']
+    const u = Object.fromEntries(['uRes', 'uTime', 'uCount', 'uPos', 'uCol', 'uWarp', 'uDensity', 'uMode', 'uImg', 'uHasImg', 'uImgAsp', 'uDim',
+      'uClear', 'uDuoA', 'uDuoB', 'uMouse', 'uMouseAmt', 'uVig', 'uChroma', 'uScan', 'uBloom', 'uPart', 'uDayTint', 'uDayAmt']
       .map(n => [n, gl.getUniformLocation(prog, n)]));
+
+    // текстура своей картинки (NPOT: только CLAMP и без мипмапов)
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    for (const [k, v] of [[gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE], [gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+    gl.uniform1i(u.uImg, 0);
+    let texSrc = null, imgAsp = 1, imgReady = false;
 
     let params = null;
     let time = 20 + Math.random() * 80; // накопленное время: смена скорости не дёргает картинку
-    let last = 0, raf = 0;
+    let last = 0, raf = 0, ready = false;
+    let mouse = [0.5, 0.5], mouseT = [0.5, 0.5];
 
+    const loadImage = (srcUrl) => {
+      texSrc = srcUrl;
+      imgReady = false;
+      if (!srcUrl) return;
+      const img = new Image();
+      img.onload = () => {
+        if (texSrc !== srcUrl) return; // пока грузилась, выбрали другую
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
+        imgAsp = img.width / img.height;
+        imgReady = true;
+        if (params) draw();
+      };
+      img.src = srcUrl;
+    };
+
+    const detailed = () => params.image || (params.mode && params.mode !== 'mesh') || params.fx?.scan > 0 || params.fx?.particles > 0;
     const resize = () => {
       let w, h;
       if (size) [w, h] = size;
       else {
-        const s = params.mode && params.mode !== 'mesh' ? Math.min(1, scale * 2.2) : scale;
+        const s = detailed() ? Math.min(1, scale * 2.4) : scale;
         w = Math.round(canvas.clientWidth * s);
         h = Math.round(canvas.clientHeight * s);
       }
@@ -204,44 +362,80 @@ void main() {
     };
 
     const draw = () => {
+      if (params.image && !imgReady) return; // ждём картинку, старый кадр остаётся
       resize();
-      const pts = params.points.slice(0, MAX);
+      const fx = { ...FX_DEFAULTS, ...(params.fx || {}) };
+      const pts = (params.points || []).slice(0, MAX);
       const pos = new Float32Array(MAX * 2), col = new Float32Array(MAX * 3);
       pts.forEach((p, i) => { pos.set([p.x, p.y], i * 2); col.set(hexToRgb(p.color), i * 3); });
+      const duo = params.duo || ['#120c24', '#ffd2a8'];
+      const c = params.clear;
+      const day = fx.daycycle ? dayTint() : [1, 1, 1, 0];
       gl.uniform2f(u.uRes, canvas.width, canvas.height);
       gl.uniform1f(u.uTime, time);
-      gl.uniform1i(u.uCount, pts.length);
+      gl.uniform1i(u.uCount, Math.max(1, pts.length));
       gl.uniform2fv(u.uPos, pos);
       gl.uniform3fv(u.uCol, col);
-      gl.uniform1f(u.uWarp, params.warp);
+      gl.uniform1f(u.uWarp, params.warp ?? 0);
       gl.uniform1f(u.uDensity, params.density ?? 0.5);
-      gl.uniform1i(u.uMode, Math.max(0, MODE_IDS.indexOf(params.mode)));
+      gl.uniform1i(u.uMode, MODE_NUM[params.mode] ?? 0);
+      gl.uniform1i(u.uHasImg, params.image ? 1 : 0);
+      gl.uniform1f(u.uImgAsp, imgAsp);
+      gl.uniform1f(u.uDim, params.image ? (params.dim ?? 0) : 0);
+      gl.uniform4f(u.uClear, c ? c.x : 0, c ? c.y : 0, c ? c.w : 0, c ? c.h : 0);
+      gl.uniform3fv(u.uDuoA, hexToRgb(duo[0]));
+      gl.uniform3fv(u.uDuoB, hexToRgb(duo[1]));
+      gl.uniform2fv(u.uMouse, mouse);
+      gl.uniform1f(u.uMouseAmt, fx.mouse ? 1 : 0);
+      gl.uniform1f(u.uVig, fx.vignette);
+      gl.uniform1f(u.uChroma, fx.chroma);
+      gl.uniform1f(u.uScan, fx.scan);
+      gl.uniform1f(u.uBloom, fx.bloom);
+      gl.uniform1f(u.uPart, fx.particles);
+      gl.uniform3f(u.uDayTint, day[0], day[1], day[2]);
+      gl.uniform1f(u.uDayAmt, day[3]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (!ready) { ready = true; onReady?.(); }
     };
 
+    const animated = () => params.speed > 0 || params.fx?.particles > 0;
     const loop = (now) => {
       raf = requestAnimationFrame(loop);
       if (now - last < 1000 / fps - 2) return;
       const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
       last = now;
-      time += dt * params.speed * 2.2;
+      time += dt * Math.max(params.speed, params.fx?.particles > 0 ? 0.15 : 0) * 2.2;
+      // курсор догоняется плавно
+      mouse = mouse.map((v, i) => v + (mouseT[i] - v) * 0.18);
       draw();
+    };
+    const startStop = () => {
+      if (animated() && !raf) { last = 0; raf = requestAnimationFrame(loop); }
+      if (!animated() && raf) { cancelAnimationFrame(raf); raf = 0; }
     };
 
     const ro = size ? null : new ResizeObserver(() => { if (params) draw(); });
     ro?.observe(canvas);
 
+    let once = 0;
     return {
       set(p) {
         params = p;
-        if (p.speed > 0 && !raf) { last = 0; raf = requestAnimationFrame(loop); }
-        if (!(p.speed > 0) && raf) { cancelAnimationFrame(raf); raf = 0; }
+        if ((p.image || null) !== texSrc) loadImage(p.image || null);
+        startStop();
         draw();
       },
       // для миниатюр: один кадр с заданным временем
       frame(p, at) { params = p; time = at; draw(); },
+      // курсор в долях экрана; без анимации — отдельный кадр
+      pointer(x, y) {
+        mouseT = [x, y];
+        if (!params?.fx?.mouse) return;
+        if (!raf && !once) once = requestAnimationFrame(() => { once = 0; mouse = mouseT; draw(); });
+      },
       destroy() {
         cancelAnimationFrame(raf);
+        cancelAnimationFrame(once);
         raf = 0;
         ro?.disconnect();
         gl.getExtension('WEBGL_lose_context')?.loseContext();
@@ -360,6 +554,11 @@ void main() {
       return bg * (1 - cover) + vivid * cover;
     }
     if (p.mode === 'flow') return dark + (l - dark) * 0.2; // ленты узкие, почти всё — тёмный фон
+    if (p.mode === 'frosted') return l * 0.9 + 0.08;
+    if (p.mode === 'duotone') {
+      const [a, b] = (p.duo || ['#120c24', '#ffd2a8']).map(x => luma(hexToRgb(x)));
+      return a + (b - a) * l;
+    }
     return l;
   }
 
@@ -369,5 +568,5 @@ void main() {
       `, ${p.points[0].color}`;
   }
 
-  return { create, thumb, random, cssPreview, lumAt, hsl, PRESETS, MODES, MAX };
+  return { create, thumb, random, cssPreview, lumAt, hsl, dayTint, PRESETS, MODES, FX_DEFAULTS, MAX };
 })();

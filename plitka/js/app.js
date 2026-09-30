@@ -9,7 +9,16 @@
   // меш-градиент (js/mesh.js): координаты точек в долях экрана
   // mesh.preset — id заготовки, пока её не правили (для подсветки в панели)
   const fromPreset = ({ id, title, ...p }) => ({ ...structuredClone(p), preset: id });
-  const DEFAULT_MESH = fromPreset(Mesh.PRESETS[0]);
+  const unit = (v, d) => Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d;
+  const isHex = (c) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
+  const DEFAULT_DUO = ['#120c24', '#ffd2a8'];
+  const DEFAULT_MESH = { clear: null, duo: DEFAULT_DUO, ...fromPreset(Mesh.PRESETS[0]) };
+  // своя картинка: узор и эффекты отдельно от меша, чтобы переключение туда-обратно ничего не теряло.
+  // По умолчанию — матовое стекло с чистой полосой по центру.
+  const DEFAULT_PHOTO = {
+    mode: 'frosted', warp: 0, speed: 0.15, density: 0.55, grain: 0.3,
+    clear: { x: 0.3, y: 0.34, w: 0.4, h: 0.16 }, duo: DEFAULT_DUO,
+  };
   // до v0.2 фоны были CSS-пятнами: settings.bg → заготовка меша с той же палитрой
   const LEGACY_BG = { aurora: 'aurora', dusk: 'dusk', lagoon: 'lagoon', forest: 'forest', mono: 'graphite' };
 
@@ -23,6 +32,8 @@
     radius: 22,
     motion: true,
     mesh: DEFAULT_MESH,
+    photo: DEFAULT_PHOTO,
+    fx: Mesh.FX_DEFAULTS,
   };
 
   // оформление, общее для всех виджетов: цвет текста и подложки
@@ -89,6 +100,8 @@
       const v = raw[k];
       if (k === 'bgImage') s.bgImage = typeof v === 'string' && v.startsWith('data:image/') ? v : null;
       else if (k === 'mesh') s.mesh = cleanMesh(v);
+      else if (k === 'photo') s.photo = cleanPhoto(v);
+      else if (k === 'fx') s.fx = cleanFx(v);
       else if (typeof v === typeof DEFAULT_SETTINGS[k] && (typeof v !== 'number' || Number.isFinite(v))) s[k] = v;
     }
     // старый CSS-фон → та же палитра на меше
@@ -97,23 +110,41 @@
     return s;
   }
 
-  function cleanMesh(raw) {
-    const m = structuredClone(DEFAULT_MESH);
+  // общее для меша и картинки: узор, ползунки, чистая область, цвета дуотона
+  function cleanLook(raw, def) {
+    const m = structuredClone(def);
     if (!raw || typeof raw !== 'object') return m;
-    const unit = (v, d) => Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d;
+    for (const k of ['warp', 'speed', 'grain', 'density']) m[k] = unit(raw[k], m[k]);
+    m.mode = Mesh.MODES[raw.mode] ? raw.mode : def.mode;
+    const c = raw.clear;
+    m.clear = c && typeof c === 'object' && [c.x, c.y, c.w, c.h].every(Number.isFinite)
+      ? { x: unit(c.x, 0), y: unit(c.y, 0), w: Math.max(0.03, unit(c.w, 0.2)), h: Math.max(0.03, unit(c.h, 0.2)) }
+      : raw.clear === null ? null : m.clear;
+    if (m.clear) { m.clear.w = Math.min(m.clear.w, 1 - m.clear.x); m.clear.h = Math.min(m.clear.h, 1 - m.clear.y); }
+    if (Array.isArray(raw.duo) && raw.duo.length === 2 && raw.duo.every(isHex)) m.duo = raw.duo.map(x => x.toLowerCase());
+    return m;
+  }
+
+  function cleanMesh(raw) {
+    const m = cleanLook(raw, DEFAULT_MESH);
+    if (!raw || typeof raw !== 'object') return m;
     const pts = Array.isArray(raw.points) ? raw.points
-      .filter(p => p && /^#[0-9a-f]{6}$/i.test(p.color))
+      .filter(p => p && isHex(p.color))
       .slice(0, Mesh.MAX)
       .map(p => ({ x: unit(p.x, 0.5), y: unit(p.y, 0.5), color: p.color.toLowerCase() })) : [];
     if (pts.length >= 2) m.points = pts;
-    m.warp = unit(raw.warp, m.warp);
-    m.speed = unit(raw.speed, m.speed);
-    m.grain = unit(raw.grain, m.grain);
-    m.density = unit(raw.density, m.density);
-    m.mode = Mesh.MODES[raw.mode] ? raw.mode : 'mesh';
     if (Mesh.PRESETS.some(p => p.id === raw.preset)) m.preset = raw.preset;
     else delete m.preset;
     return m;
+  }
+
+  function cleanPhoto(raw) { return cleanLook(raw, DEFAULT_PHOTO); }
+
+  function cleanFx(raw) {
+    const f = { ...Mesh.FX_DEFAULTS };
+    if (!raw || typeof raw !== 'object') return f;
+    for (const k in f) f[k] = typeof f[k] === 'boolean' ? !!raw[k] : unit(raw[k], f[k]);
+    return f;
   }
 
   // → { widgets, layouts } или null, если спасать нечего
@@ -171,22 +202,31 @@
     setTimeout(refreshInk, 60);
   }
 
-  // живой меш-фон: всегда, кроме случая, когда стоит своя картинка
+  // Живой фон на WebGL — и для меша, и для своей картинки (она становится текстурой, узоры работают поверх).
+  // Без WebGL: CSS-градиенты из точек меша или обычная картинка (.bg-image).
   let meshBg = null;
-  function applyMesh() {
-    const on = !settings.bgImage;
-    const bg = document.getElementById('bg');
-    bg.style.setProperty('--grain', on ? settings.mesh.grain * 0.4 : '');
-    // запасной вид (нет WebGL / первый кадр) — CSS-градиенты из тех же точек
-    bg.style.background = on ? Mesh.cssPreview(settings.mesh) : '';
-    if (!on) { meshBg?.destroy(); meshBg = null; document.body.classList.remove('mesh-on'); return; }
-    meshBg ??= Mesh.create(document.getElementById('bg-mesh'));
-    document.body.classList.toggle('mesh-on', !!meshBg);
-    meshBg?.set(meshParams(settings.mesh));
+  const look = () => settings.bgImage ? settings.photo : settings.mesh; // что сейчас редактируем
+  function bgParams() {
+    const p = settings.bgImage
+      ? { ...settings.photo, image: settings.bgImage, dim: settings.bgDim, fx: settings.fx }
+      : { ...settings.mesh, fx: settings.fx };
+    // «Живой фон» выключен — всё стоит на месте, включая частицы
+    return settings.motion ? p : { ...p, speed: 0, fx: { ...p.fx, still: true } };
   }
-  // «Живой фон» выключен — меш стоит на месте
-  const meshParams = (m) => settings.motion ? m : { ...m, speed: 0 };
+  function applyMesh() {
+    const bg = document.getElementById('bg');
+    bg.style.setProperty('--grain', look().grain * 0.4);
+    bg.style.background = settings.bgImage ? '' : Mesh.cssPreview(settings.mesh);
+    meshBg ??= Mesh.create(document.getElementById('bg-mesh'), { onReady: () => document.body.classList.add('mesh-on') });
+    meshBg?.set(bgParams());
+  }
   applyTheme();
+
+  // эффекты, которым нужен внешний сигнал: курсор и часы
+  window.addEventListener('pointermove', (e) => {
+    if (settings.fx.mouse) meshBg?.pointer(e.clientX / innerWidth, e.clientY / innerHeight);
+  }, { passive: true });
+  setInterval(() => { if (settings.fx.daycycle) meshBg?.set(bgParams()); }, 60000);
 
   // вкладка в фоне — фон не анимируем
   const syncHidden = () => document.body.classList.toggle('tab-hidden', document.hidden);
@@ -246,7 +286,14 @@
     if (settings.bgImage && imgLum) {
       const i = (Math.min(imgLum.h - 1, Math.floor(y * imgLum.h)) * imgLum.w + Math.min(imgLum.w - 1, Math.floor(x * imgLum.w))) * 4;
       const d = imgLum.data;
-      return (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255 * (1 - settings.bgDim);
+      const l = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255 * (1 - settings.bgDim);
+      const p = settings.photo, c = p.clear;
+      if (c && x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) return l; // чистая область — как есть
+      if (p.mode === 'frosted') return l * 0.9 + 0.08;
+      if (p.mode === 'halftone') return l * 0.55;
+      if (p.mode === 'flow') return 0.05 + l * 0.15;
+      if (p.mode === 'duotone') { const [a, b] = p.duo.map(hexLum); return a + (b - a) * l; }
+      return l;
     }
     if (settings.bgImage) return 0.3;
     return Mesh.lumAt(settings.mesh, x, y, innerWidth / innerHeight);
@@ -784,28 +831,40 @@
     return h('label', { class: 'field field-range' }, h('span', {}, label, out), inp);
   }
 
-  // ---------- редактор меш-фона ----------
+  // ---------- редактор фона: меш или своя картинка ----------
   let meshPreview = null;
   let meshSel = 0;
-  function meshEditor() {
-    const m = settings.mesh;
-    meshSel = Math.min(meshSel, m.points.length - 1);
-    const canvas = h('canvas', { class: 'mesh-canvas' });
-    const dots = h('div', { class: 'mesh-dots' });
-    // пропорции как у экрана — точки в превью стоят там же, где на фоне
-    const box = h('div', { class: 'mesh-preview', style: `aspect-ratio:${innerWidth} / ${innerHeight}` }, canvas, dots);
-    const unit = (v) => Math.min(1, Math.max(0, v));
+  const DEFAULT_CLEAR = () => ({ x: 0.3, y: 0.34, w: 0.4, h: 0.16 });
+  function bgEditor() {
+    const img = !!settings.bgImage;
+    const key = img ? 'photo' : 'mesh';
+    const m = look();
+    if (!img) meshSel = Math.min(meshSel, m.points.length - 1);
+    const r3 = (v) => +v.toFixed(3);
+    const unit01 = (v) => Math.min(1, Math.max(0, v));
 
-    // любая правка — это уже не заготовка
+    const canvas = h('canvas', { class: 'mesh-canvas' });
+    const clearBox = h('div', { class: 'clear-rect', title: 'Чистая область: тащи, чтобы двигать, за угол — менять размер' },
+      h('i', { class: 'cr-h nw' }), h('i', { class: 'cr-h se' }));
+    const dots = h('div', { class: 'mesh-dots' });
+    // пропорции как у экрана — точки и область в превью стоят там же, где на фоне
+    const box = h('div', { class: 'mesh-preview', style: `aspect-ratio:${innerWidth} / ${innerHeight}` }, canvas, clearBox, dots);
+
+    // любая правка меша — это уже не заготовка
     const commit = () => {
-      delete m.preset;
-      panelBody.querySelectorAll('.mesh-preset.active').forEach(b => b.classList.remove('active'));
-      setSetting('mesh', m);
-      meshPreview?.set(meshParams(m));
-      box.style.background = Mesh.cssPreview(m);
+      if (!img) {
+        delete m.preset;
+        panelBody.querySelectorAll('.mesh-preset.active').forEach(b => b.classList.remove('active'));
+        box.style.background = Mesh.cssPreview(m);
+      }
+      setSetting(key, m);
+      meshPreview?.set(bgParams());
     };
 
+    // точки меша
+    const tools = h('div', { class: 'row mesh-tools' });
     const paint = () => {
+      if (img) return;
       dots.replaceChildren(...m.points.map((p, i) => {
         const d = h('button', {
           type: 'button', class: 'mesh-dot' + (i === meshSel ? ' sel' : ''),
@@ -817,8 +876,8 @@
           if (meshSel !== i) { meshSel = i; dots.querySelectorAll('.mesh-dot').forEach((x, j) => x.classList.toggle('sel', j === i)); paintTools(); }
           const r = box.getBoundingClientRect();
           const move = (ev) => {
-            p.x = +unit((ev.clientX - r.left) / r.width).toFixed(3);
-            p.y = +unit((ev.clientY - r.top) / r.height).toFixed(3);
+            p.x = r3(unit01((ev.clientX - r.left) / r.width));
+            p.y = r3(unit01((ev.clientY - r.top) / r.height));
             d.style.left = p.x * 100 + '%';
             d.style.top = p.y * 100 + '%';
             commit();
@@ -831,8 +890,6 @@
       }));
       paintTools();
     };
-
-    const tools = h('div', { class: 'row mesh-tools' });
     const paintTools = () => {
       const p = m.points[meshSel];
       const colorBtn = h('button', {
@@ -853,29 +910,86 @@
         h('button', {
           type: 'button', class: 'pill small', disabled: m.points.length >= Mesh.MAX,
           onclick: () => {
-            m.points.push({ x: +(0.3 + Math.random() * 0.4).toFixed(3), y: +(0.3 + Math.random() * 0.4).toFixed(3), color: Mesh.random()[1].color });
+            m.points.push({ x: r3(0.3 + Math.random() * 0.4), y: r3(0.3 + Math.random() * 0.4), color: Mesh.random()[1].color });
             meshSel = m.points.length - 1; commit(); paint();
           },
         }, '+ Точка'),
       );
     };
 
-    const sl = (label, key, fmt) => {
-      const out = h('output', {}, fmt(m[key]));
-      const inp = h('input', { type: 'range', min: 0, max: 1, step: 0.01, value: m[key] });
-      inp.addEventListener('input', () => { m[key] = +inp.value; out.textContent = fmt(m[key]); commit(); });
+    // чистая область: двигать за тело, менять размер за углы
+    const paintClear = () => {
+      const c = m.clear;
+      clearBox.hidden = !c;
+      if (c) Object.assign(clearBox.style, { left: c.x * 100 + '%', top: c.y * 100 + '%', width: c.w * 100 + '%', height: c.h * 100 + '%' });
+    };
+    clearBox.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      clearBox.setPointerCapture(e.pointerId);
+      const r = box.getBoundingClientRect();
+      const how = e.target.classList.contains('nw') ? 'nw' : e.target.classList.contains('se') ? 'se' : 'move';
+      const s = { ...m.clear }, sx = e.clientX, sy = e.clientY;
+      const move = (ev) => {
+        const dx = (ev.clientX - sx) / r.width, dy = (ev.clientY - sy) / r.height;
+        const c = m.clear;
+        if (how === 'move') {
+          c.x = unit01(Math.min(s.x + dx, 1 - s.w));
+          c.y = unit01(Math.min(s.y + dy, 1 - s.h));
+        } else if (how === 'se') {
+          c.w = Math.max(0.03, Math.min(s.w + dx, 1 - s.x));
+          c.h = Math.max(0.03, Math.min(s.h + dy, 1 - s.y));
+        } else {
+          c.x = unit01(Math.min(s.x + dx, s.x + s.w - 0.03));
+          c.y = unit01(Math.min(s.y + dy, s.y + s.h - 0.03));
+          c.w = s.x + s.w - c.x;
+          c.h = s.y + s.h - c.y;
+        }
+        for (const k of ['x', 'y', 'w', 'h']) c[k] = r3(c[k]);
+        paintClear();
+        commit();
+      };
+      const up = () => { clearBox.removeEventListener('pointermove', move); clearBox.removeEventListener('pointerup', up); };
+      clearBox.addEventListener('pointermove', move);
+      clearBox.addEventListener('pointerup', up);
+    });
+    const clearBtn = h('button', {
+      type: 'button', class: 'pill small' + (m.clear ? ' on' : ''), title: 'Прямоугольник, где узора нет',
+      onclick: () => {
+        m.clear = m.clear ? null : DEFAULT_CLEAR();
+        clearBtn.classList.toggle('on', !!m.clear);
+        paintClear();
+        commit();
+      },
+    }, 'Чистая область');
+
+    // цвета дуотона: тени и света
+    const duoBtn = (i, label) => {
+      const b = h('button', {
+        type: 'button', class: 'pill small mesh-color-btn', style: `--c:${m.duo[i]}`,
+        onclick: () => colorPicker(b, m.duo[i], (c) => { m.duo = m.duo.map((x, j) => j === i ? c : x); b.style.setProperty('--c', c); commit(); }),
+      }, h('i'), label);
+      return b;
+    };
+
+    const sl = (label, k, fmt) => {
+      const out = h('output', {}, fmt(m[k]));
+      const inp = h('input', { type: 'range', min: 0, max: 1, step: 0.01, value: m[k] });
+      inp.addEventListener('input', () => { m[k] = +inp.value; out.textContent = fmt(m[k]); commit(); });
       return h('label', { class: 'field field-range' }, h('span', {}, label, out), inp);
     };
     const pct = (v) => Math.round(v * 100) + '%';
 
     const mode = dropdown(Object.entries(Mesh.MODES), m.mode, (v) => { m.mode = v; commit(); renderSettings(); });
 
-    box.style.background = Mesh.cssPreview(m);
+    if (!img) box.style.background = Mesh.cssPreview(m);
     paint();
-    return h('div', { class: 'mesh-editor' }, box, tools,
+    paintClear();
+    return h('div', { class: 'mesh-editor' }, box,
+      img ? null : tools,
       h('div', { class: 'field' }, h('span', {}, 'Узор'), mode.el),
-      m.mode !== 'mesh' ? sl('Плотность', 'density', pct) : null,
-      sl('Искажение', 'warp', pct),
+      h('div', { class: 'row' }, clearBtn, m.mode === 'duotone' ? duoBtn(0, 'Тени') : null, m.mode === 'duotone' ? duoBtn(1, 'Света') : null),
+      !['mesh', 'duotone'].includes(m.mode) ? sl(m.mode === 'frosted' ? 'Мелкость стекла' : 'Плотность', 'density', pct) : null,
+      sl(img ? 'Жидкость' : 'Искажение', 'warp', pct),
       sl('Скорость', 'speed', (v) => v ? pct(v) : 'стоит'),
       sl('Зерно', 'grain', pct));
   }
@@ -889,11 +1003,15 @@
         class: 'mesh-preset' + (!settings.bgImage && settings.mesh.preset === p.id ? ' active' : ''),
         style: src ? null : `background:${Mesh.cssPreview(p)}`,
         onclick: () => {
-          settings.mesh = fromPreset(p);
+          const had = settings.bgImage;
+          settings.mesh = { ...fromPreset(p), clear: settings.mesh.clear, duo: settings.mesh.duo };
           settings.bgImage = null;
           meshSel = 0;
           setSetting('mesh', settings.mesh);
+          sampleImage();
           renderSettings();
+          // своя картинка не пропадает молча
+          if (had) toast('Картинка убрана', 'Вернуть', () => { setSetting('bgImage', had); renderSettings(); });
         },
       }, src ? h('img', { src, alt: '' }) : null, h('span', {}, p.title));
     }));
@@ -915,10 +1033,10 @@
 
     const img = !!settings.bgImage;
     const bgRow = h('div', { class: 'row' },
-      img ? null : h('button', {
+      h('button', {
         class: 'pill small' + (meshOpen ? ' on' : ''), 'aria-expanded': String(meshOpen),
         onclick: () => { meshOpen = !meshOpen; renderSettings(); },
-      }, meshOpen ? 'Свернуть' : 'Настроить'),
+      }, meshOpen ? 'Свернуть' : img ? 'Эффект картинки' : 'Настроить'),
       img ? null : h('button', {
         class: 'pill small', title: 'Случайные цвета и точки, узор тот же',
         onclick: () => { settings.mesh.points = Mesh.random(); delete settings.mesh.preset; meshSel = 0; setSetting('mesh', settings.mesh); renderSettings(); },
@@ -938,9 +1056,17 @@
       section('Ты',
         h('label', { class: 'field' }, h('span', {}, 'Имя для приветствия'), nameInp)),
       section('Фон', meshPresets(), bgRow,
-        meshOpen && !img ? meshEditor() : null,
         img ? slider('Затемнение картинки', 'bgDim', 0, 0.8, 0.05, v => Math.round(v * 100) + '%') : null,
+        meshOpen ? bgEditor() : null,
         h('label', { class: 'field field-toggle' }, h('span', {}, 'Живой фон'), h('span', { class: 'switch' }, motion, h('i')))),
+      section('Эффекты',
+        fxSlider('Виньетка', 'vignette'),
+        fxSlider('Свечение', 'bloom'),
+        fxSlider('Частицы', 'particles'),
+        fxSlider('Аберрация', 'chroma'),
+        fxSlider('Сканлайны', 'scan'),
+        fxToggle('Линза за курсором', 'mouse'),
+        fxToggle('Оттенок по времени суток', 'daycycle')),
       section('Стекло',
         slider('Размытие', 'glassBlur', 0, 40, 1, v => v + 'px'),
         slider('Плотность', 'glassAlpha', 0, 0.3, 0.01, v => Math.round(v * 100) + '%'),
@@ -959,8 +1085,28 @@
     const mc = panelBody.querySelector('.mesh-canvas');
     if (mc) {
       meshPreview = Mesh.create(mc, { scale: 1 });
-      meshPreview?.set(meshParams(settings.mesh));
+      meshPreview?.set(bgParams());
     }
+  }
+
+  // эффекты поверх любого фона
+  function setFx(k, v) {
+    settings.fx = { ...settings.fx, [k]: v };
+    setSetting('fx', settings.fx);
+    meshPreview?.set(bgParams());
+  }
+  function fxSlider(label, k) {
+    const fmt = (v) => v ? Math.round(v * 100) + '%' : 'нет';
+    const out = h('output', {}, fmt(settings.fx[k]));
+    const inp = h('input', { type: 'range', min: 0, max: 1, step: 0.01, value: settings.fx[k], 'data-fx': k });
+    inp.addEventListener('input', () => { out.textContent = fmt(+inp.value); setFx(k, +inp.value); });
+    return h('label', { class: 'field field-range' }, h('span', {}, label, out), inp);
+  }
+  function fxToggle(label, k) {
+    const inp = h('input', { type: 'checkbox', 'data-fx': k });
+    inp.checked = !!settings.fx[k];
+    inp.addEventListener('change', () => setFx(k, inp.checked));
+    return h('label', { class: 'field field-toggle' }, h('span', {}, label), h('span', { class: 'switch' }, inp, h('i')));
   }
 
   function section(title, ...children) {
@@ -984,6 +1130,7 @@
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
       setSetting('bgImage', c.toDataURL('image/jpeg', 0.88));
       URL.revokeObjectURL(img.src);
+      meshOpen = true; // сразу показываем эффекты картинки
       renderSettings();
     };
     img.src = URL.createObjectURL(file);

@@ -433,6 +433,100 @@ const wx = await page.evaluate(() => {
 check(!wx.dark && wx.tinted && wx.tint === '#141418', 'оформление: светлый текст на тёмной подложке');
 await page.screenshot({ path: `${out}/28-widget-tinted.png` });
 
+// ---------- своя картинка с эффектами ----------
+// тестовое «фото»: серый фон, тёмный силуэт, оранжевая полоса — как постер с матовым стеклом
+const photoUrl = await page.evaluate(() => {
+  const c = document.createElement('canvas');
+  c.width = 1600; c.height = 900;
+  const g = c.getContext('2d');
+  g.fillStyle = '#c3c4c8'; g.fillRect(0, 0, 1600, 900);
+  const rg = g.createRadialGradient(800, 900, 50, 800, 800, 520);
+  rg.addColorStop(0, '#050505'); rg.addColorStop(0.8, '#0c0c0e'); rg.addColorStop(1, 'rgba(12,12,14,0)');
+  g.fillStyle = rg; g.beginPath(); g.ellipse(800, 760, 430, 620, 0, 0, Math.PI * 2); g.fill();
+  const og = g.createLinearGradient(560, 0, 1040, 0);
+  og.addColorStop(0, '#ff3a10'); og.addColorStop(0.5, '#ff8a3a'); og.addColorStop(1, '#c82008');
+  g.fillStyle = og; g.fillRect(560, 330, 480, 110);
+  return c.toDataURL('image/png');
+});
+await page.click('#btn-settings');
+await page.waitForTimeout(300);
+{
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('.panel button:has-text("Своя картинка")')]);
+  await chooser.setFiles({ name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from(photoUrl.split(',')[1], 'base64') });
+}
+await page.waitForTimeout(1200);
+const ph = await page.evaluate(() => ({ img: !!window.__plitka.settings().bgImage, photo: window.__plitka.settings().photo, on: document.body.classList.contains('mesh-on') }));
+check(ph.img && ph.on && ph.photo.mode === 'frosted', 'картинка: загружена, по умолчанию матовое стекло на WebGL');
+check(await page.locator('.mesh-editor .clear-rect:not([hidden])').count() === 1 && await page.locator('.mesh-editor .mesh-dot').count() === 0, 'картинка: редактор открыт, есть чистая область, нет точек меша');
+await page.screenshot({ path: `${out}/29-photo-editor.png` });
+
+// двигаем и растягиваем чистую область
+const cr = await page.locator('.clear-rect').boundingBox();
+await page.mouse.move(cr.x + cr.width / 2, cr.y + cr.height / 2);
+await page.mouse.down();
+await page.mouse.move(cr.x + cr.width / 2 - 30, cr.y + cr.height / 2 - 20, { steps: 6 });
+await page.mouse.up();
+const se = await page.locator('.cr-h.se').boundingBox();
+await page.mouse.move(se.x + 6, se.y + 6);
+await page.mouse.down();
+await page.mouse.move(se.x + 36, se.y + 16, { steps: 6 });
+await page.mouse.up();
+await page.waitForTimeout(300);
+const clr = await page.evaluate(() => window.__plitka.settings().photo.clear);
+check(clr.x < 0.3 && clr.y < 0.34 && clr.w > 0.4, `картинка: область сдвинута и растянута (${JSON.stringify(clr)})`);
+// возвращаем область на «очки», чтобы скрин был похож на пример
+await page.evaluate(async () => {
+  const s = window.__plitka.settings();
+  await chrome.storage.local.set({ settings: { ...s, photo: { ...s.photo, clear: { x: 0.34, y: 0.35, w: 0.32, h: 0.14 } } } });
+});
+await page.reload();
+await page.waitForTimeout(1500);
+await page.screenshot({ path: `${out}/30-photo-frosted.png` });
+
+// другие узоры на картинке
+for (const [mode, name] of [['duotone', 'Дуотон'], ['halftone', 'Полутон'], ['ribbed', 'Рифлёное стекло']]) {
+  await page.click('#btn-settings');
+  await page.waitForTimeout(300);
+  if (!(await page.locator('.mesh-editor').count())) await page.click('.panel button:has-text("Эффект картинки")');
+  await page.click('.mesh-editor .dd-btn');
+  await page.click(`body > .dd-list .dd-item:has-text("${name}")`);
+  await page.waitForTimeout(300);
+  if (mode === 'duotone') check(await page.locator('.mesh-editor button:has-text("Тени")').count() === 1, 'картинка: у дуотона есть цвета теней и светов');
+  await page.click('.panel [data-close]');
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: `${out}/31-photo-${mode}.png` });
+}
+check(await page.evaluate(() => window.__plitka.settings().photo.mode) === 'ribbed', 'картинка: узоры переключаются');
+
+// ---------- эффекты фона ----------
+await page.click('#btn-settings');
+await page.waitForTimeout(300);
+for (const [k, v] of [['bloom', '0.6'], ['particles', '0.7'], ['chroma', '0.5'], ['scan', '0.4'], ['vignette', '0.8']]) {
+  await page.locator(`input[data-fx="${k}"]`).fill(v);
+}
+await page.locator('label:has(input[data-fx="mouse"])').click();
+await page.locator('label:has(input[data-fx="daycycle"])').click();
+await page.waitForTimeout(300);
+const fx = await page.evaluate(() => window.__plitka.settings().fx);
+check(fx.bloom === 0.6 && fx.particles === 0.7 && fx.chroma === 0.5 && fx.scan === 0.4 && fx.vignette === 0.8 && fx.mouse && fx.daycycle, 'эффекты: все ползунки и переключатели сохраняются');
+await page.click('.panel [data-close]');
+await page.mouse.move(700, 400);
+await page.waitForTimeout(900);
+await page.screenshot({ path: `${out}/32-fx-all.png` });
+
+// заготовка поверх картинки: картинка уходит, но её можно вернуть
+await page.click('#btn-settings');
+await page.waitForTimeout(300);
+await page.click('.mesh-preset[data-preset="neon"]');
+await page.waitForTimeout(300);
+check(!(await page.evaluate(() => window.__plitka.settings().bgImage)), 'заготовка: убрала картинку');
+await page.click('.toast-btn:has-text("Вернуть")');
+await page.waitForTimeout(500);
+check(!!(await page.evaluate(() => window.__plitka.settings().bgImage)), 'заготовка: «Вернуть» возвращает картинку');
+// эффекты — обратно в спокойные, чтобы не мешать остальному
+await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
+await page.click('.panel [data-close]');
+
 const real = errors.filter(e => !/Failed to load resource/i.test(e));
 if (fails.length) { console.error('FAIL:', fails.join('; ')); process.exitCode = 1; }
 console.log('errors:', real.length ? real.join('\n') : 'none');
