@@ -306,6 +306,47 @@ await page.waitForTimeout(400);
 check(await page.locator('.w-search.has-text .search-go').count() === 1, 'поиск: кнопка Enter подсвечена, когда есть текст');
 await page.screenshot({ path: `${out}/19-search-enter.png` });
 
+// ---------- меш-фон ----------
+await page.fill('[data-search]', '');
+await page.click('#btn-settings');
+await page.click('.bg-swatch[data-bg="mesh"]');
+await page.waitForTimeout(800);
+check(await page.evaluate(() => document.body.classList.contains('mesh-on')), 'меш: WebGL-фон включился');
+check(await page.locator('.mesh-preview .mesh-dot').count() === 4, 'меш: 4 точки в редакторе');
+await page.screenshot({ path: `${out}/20-mesh-editor.png` });
+
+const dot = await page.locator('.mesh-dot').first().boundingBox();
+const prev = await page.locator('.mesh-preview').boundingBox();
+await page.mouse.move(dot.x + 10, dot.y + 10);
+await page.mouse.down();
+await page.mouse.move(prev.x + prev.width * 0.8, prev.y + prev.height * 0.7, { steps: 10 });
+await page.mouse.up();
+await page.waitForTimeout(400);
+const p0 = await page.evaluate(() => window.__plitka.settings().mesh.points[0]);
+check(Math.abs(p0.x - 0.8) < 0.05 && Math.abs(p0.y - 0.7) < 0.05, `меш: точка перетащена (${p0.x}, ${p0.y})`);
+
+const colorsBefore = await page.evaluate(() => window.__plitka.settings().mesh.points.map(p => p.color).join());
+await page.click('.mesh-tools button:has-text("Случайный")');
+await page.waitForTimeout(400);
+check(colorsBefore !== await page.evaluate(() => window.__plitka.settings().mesh.points.map(p => p.color).join()), 'меш: «Случайный» меняет цвета');
+await page.click('.mesh-tools button:has-text("+ Точка")');
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${out}/21-mesh-random.png` });
+const meshSaved = await page.evaluate(() => JSON.stringify(window.__plitka.settings().mesh));
+await page.click('.panel [data-close]');
+await page.waitForTimeout(700);
+await page.screenshot({ path: `${out}/22-mesh-bg.png` });
+
+await page.reload();
+await page.waitForTimeout(1200);
+check(meshSaved === await page.evaluate(() => JSON.stringify(window.__plitka.settings().mesh)), 'меш: пережил перезагрузку');
+check(await page.evaluate(() => document.body.classList.contains('mesh-on')), 'меш: после перезагрузки снова живой');
+await page.evaluate(() => chrome.storage.local.set({ settings: { bg: 'mesh', mesh: { points: [{ color: 'red' }, 5], warp: 'x', speed: 9 } } }));
+await page.reload();
+await page.waitForTimeout(1000);
+const cleaned = await page.evaluate(() => window.__plitka.settings().mesh);
+check(cleaned.points.length === 4 && cleaned.speed === 1, 'меш: кривые параметры чистятся');
+
 const real = errors.filter(e => !/Failed to load resource/i.test(e));
 if (fails.length) { console.error('FAIL:', fails.join('; ')); process.exitCode = 1; }
 console.log('errors:', real.length ? real.join('\n') : 'none');

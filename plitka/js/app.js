@@ -10,8 +10,20 @@
     lagoon: 'Лагуна',
     forest: 'Лес',
     mono: 'Графит',
+    mesh: 'Свой',
   };
   const ACCENTS = ['#9b8cff', '#5cc8ff', '#b4f05a', '#ff7a9c', '#ffc35c', '#f2f2f2'];
+
+  // меш-градиент (js/mesh.js): координаты точек в долях экрана
+  const DEFAULT_MESH = {
+    points: [
+      { x: 0.12, y: 0.12, color: '#5b3cff' },
+      { x: 0.88, y: 0.28, color: '#00b3c7' },
+      { x: 0.42, y: 0.92, color: '#c2359d' },
+      { x: 0.62, y: 0.5, color: '#0a0820' },
+    ],
+    warp: 0.55, speed: 0.35, grain: 0.3,
+  };
 
   const DEFAULT_SETTINGS = {
     name: '',
@@ -23,6 +35,7 @@
     glassAlpha: 0.08,
     radius: 22,
     motion: true,
+    mesh: DEFAULT_MESH,
   };
 
   const DEFAULT_LAYOUT = [
@@ -81,10 +94,26 @@
     for (const k in DEFAULT_SETTINGS) {
       const v = raw[k];
       if (k === 'bgImage') s.bgImage = typeof v === 'string' && v.startsWith('data:image/') ? v : null;
+      else if (k === 'mesh') s.mesh = cleanMesh(v);
       else if (typeof v === typeof DEFAULT_SETTINGS[k] && (typeof v !== 'number' || Number.isFinite(v))) s[k] = v;
     }
     if (!BACKGROUNDS[s.bg]) s.bg = DEFAULT_SETTINGS.bg;
     return s;
+  }
+
+  function cleanMesh(raw) {
+    const m = structuredClone(DEFAULT_MESH);
+    if (!raw || typeof raw !== 'object') return m;
+    const unit = (v, d) => Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d;
+    const pts = Array.isArray(raw.points) ? raw.points
+      .filter(p => p && /^#[0-9a-f]{6}$/i.test(p.color))
+      .slice(0, Mesh.MAX)
+      .map(p => ({ x: unit(p.x, 0.5), y: unit(p.y, 0.5), color: p.color.toLowerCase() })) : [];
+    if (pts.length >= 2) m.points = pts;
+    m.warp = unit(raw.warp, m.warp);
+    m.speed = unit(raw.speed, m.speed);
+    m.grain = unit(raw.grain, m.grain);
+    return m;
   }
 
   // → { widgets, layouts } или null, если спасать нечего
@@ -136,7 +165,24 @@
     document.body.classList.toggle('has-image', !!settings.bgImage);
     document.body.classList.toggle('no-motion', !settings.motion);
     document.querySelector('#bg .bg-image').style.backgroundImage = settings.bgImage ? `url("${settings.bgImage}")` : '';
+    applyMesh();
   }
+
+  // живой меш-фон: запускаем только когда он выбран и не перекрыт картинкой
+  let meshBg = null;
+  function applyMesh() {
+    const on = settings.bg === 'mesh' && !settings.bgImage;
+    const bg = document.getElementById('bg');
+    bg.style.setProperty('--grain', on ? settings.mesh.grain * 0.22 : '');
+    // запасной вид (нет WebGL / первый кадр) — CSS-градиенты из тех же точек
+    bg.style.background = on ? Mesh.cssPreview(settings.mesh) : '';
+    if (!on) { meshBg?.destroy(); meshBg = null; document.body.classList.remove('mesh-on'); return; }
+    meshBg ??= Mesh.create(document.getElementById('bg-mesh'));
+    document.body.classList.toggle('mesh-on', !!meshBg);
+    meshBg?.set(meshParams(settings.mesh));
+  }
+  // «Живой фон» выключен — меш стоит на месте
+  const meshParams = (m) => settings.motion ? m : { ...m, speed: 0 };
   applyTheme();
 
   // вкладка в фоне — фон не анимируем
@@ -539,7 +585,7 @@
   const fileInput = document.getElementById('file-input');
 
   function openSettings() { renderSettings(); panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false'); }
-  function closeSettings() { panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); }
+  function closeSettings() { meshPreview?.destroy(); meshPreview = null; panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); }
   document.getElementById('btn-settings').addEventListener('click', () => panel.classList.contains('open') ? closeSettings() : openSettings());
   panel.querySelector('[data-close]').addEventListener('click', closeSettings);
 
@@ -557,13 +603,110 @@
     return h('label', { class: 'field field-range' }, h('span', {}, label, out), inp);
   }
 
+  // ---------- редактор меш-фона ----------
+  let meshPreview = null;
+  let meshSel = 0;
+  function meshEditor() {
+    const m = settings.mesh;
+    meshSel = Math.min(meshSel, m.points.length - 1);
+    const canvas = h('canvas', { class: 'mesh-canvas' });
+    const dots = h('div', { class: 'mesh-dots' });
+    // пропорции как у экрана — точки в превью стоят там же, где на фоне
+    const box = h('div', { class: 'mesh-preview', style: `aspect-ratio:${innerWidth} / ${innerHeight}` }, canvas, dots);
+    const colorInp = h('input', { type: 'color', class: 'mesh-color', tabindex: '-1' });
+    const unit = (v) => Math.min(1, Math.max(0, v));
+
+    const commit = () => {
+      setSetting('mesh', m);
+      meshPreview?.set(meshParams(m));
+      box.style.background = Mesh.cssPreview(m);
+    };
+
+    const paint = () => {
+      dots.replaceChildren(...m.points.map((p, i) => {
+        const d = h('button', {
+          type: 'button', class: 'mesh-dot' + (i === meshSel ? ' sel' : ''),
+          title: 'Тащи, чтобы двигать', style: `left:${p.x * 100}%;top:${p.y * 100}%;--c:${p.color}`,
+        });
+        d.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          d.setPointerCapture(e.pointerId);
+          if (meshSel !== i) { meshSel = i; dots.querySelectorAll('.mesh-dot').forEach((x, j) => x.classList.toggle('sel', j === i)); paintTools(); }
+          const r = box.getBoundingClientRect();
+          const move = (ev) => {
+            p.x = +unit((ev.clientX - r.left) / r.width).toFixed(3);
+            p.y = +unit((ev.clientY - r.top) / r.height).toFixed(3);
+            d.style.left = p.x * 100 + '%';
+            d.style.top = p.y * 100 + '%';
+            commit();
+          };
+          const up = () => { d.removeEventListener('pointermove', move); d.removeEventListener('pointerup', up); };
+          d.addEventListener('pointermove', move);
+          d.addEventListener('pointerup', up);
+        });
+        return d;
+      }));
+      paintTools();
+    };
+
+    const tools = h('div', { class: 'row mesh-tools' });
+    const paintTools = () => {
+      const p = m.points[meshSel];
+      tools.replaceChildren(
+        h('button', {
+          type: 'button', class: 'pill small mesh-color-btn', title: 'Цвет выбранной точки', style: `--c:${p.color}`,
+          onclick: () => { colorInp.value = p.color; colorInp.click(); },
+        }, h('i'), 'Цвет'),
+        h('button', {
+          type: 'button', class: 'pill small', disabled: m.points.length <= 2,
+          onclick: () => { m.points.splice(meshSel, 1); meshSel = Math.max(0, meshSel - 1); commit(); paint(); },
+        }, 'Убрать'),
+        h('button', {
+          type: 'button', class: 'pill small', disabled: m.points.length >= Mesh.MAX,
+          onclick: () => {
+            m.points.push({ x: +(0.3 + Math.random() * 0.4).toFixed(3), y: +(0.3 + Math.random() * 0.4).toFixed(3), color: Mesh.random()[1].color });
+            meshSel = m.points.length - 1; commit(); paint();
+          },
+        }, '+ Точка'),
+        h('button', {
+          type: 'button', class: 'pill small', title: 'Случайные цвета и точки',
+          onclick: () => { m.points = Mesh.random(); meshSel = 0; commit(); paint(); },
+        }, 'Случайный'),
+      );
+    };
+    colorInp.addEventListener('input', () => {
+      m.points[meshSel].color = colorInp.value;
+      commit();
+      dots.children[meshSel]?.style.setProperty('--c', colorInp.value);
+      tools.querySelector('.mesh-color-btn')?.style.setProperty('--c', colorInp.value);
+    });
+
+    const sl = (label, key, fmt) => {
+      const out = h('output', {}, fmt(m[key]));
+      const inp = h('input', { type: 'range', min: 0, max: 1, step: 0.01, value: m[key] });
+      inp.addEventListener('input', () => { m[key] = +inp.value; out.textContent = fmt(m[key]); commit(); });
+      return h('label', { class: 'field field-range' }, h('span', {}, label, out), inp);
+    };
+    const pct = (v) => Math.round(v * 100) + '%';
+
+    box.style.background = Mesh.cssPreview(m);
+    paint();
+    return h('div', { class: 'mesh-editor' }, box, tools, colorInp,
+      sl('Искажение', 'warp', pct),
+      sl('Скорость', 'speed', (v) => v ? pct(v) : 'стоит'),
+      sl('Зерно', 'grain', pct));
+  }
+
   function renderSettings() {
+    meshPreview?.destroy();
+    meshPreview = null;
     const nameInp = h('input', { type: 'text', value: settings.name, placeholder: 'Как к тебе обращаться?' });
     nameInp.addEventListener('input', debounce(() => setSetting('name', nameInp.value.trim(), true), 300));
 
     const bgs = h('div', { class: 'swatches bg-swatches' }, Object.entries(BACKGROUNDS).map(([k, t]) =>
       h('button', {
         class: 'bg-swatch' + (settings.bg === k && !settings.bgImage ? ' active' : ''), 'data-bg': k, title: t,
+        style: k === 'mesh' ? `background:${Mesh.cssPreview(settings.mesh)}` : null,
         onclick: () => { settings.bgImage = null; setSetting('bg', k); renderSettings(); },
       }, h('span', {}, t))));
 
@@ -582,7 +725,9 @@
     panelBody.replaceChildren(
       section('Ты',
         h('label', { class: 'field' }, h('span', {}, 'Имя для приветствия'), nameInp)),
-      section('Фон', bgs, imgRow,
+      section('Фон', bgs,
+        settings.bg === 'mesh' && !settings.bgImage ? meshEditor() : null,
+        imgRow,
         settings.bgImage ? slider('Затемнение картинки', 'bgDim', 0, 0.8, 0.05, v => Math.round(v * 100) + '%') : null,
         h('label', { class: 'field field-toggle' }, h('span', {}, 'Живой фон'), h('span', { class: 'switch' }, motion, h('i')))),
       section('Стекло',
@@ -599,6 +744,12 @@
           h('button', { class: 'pill small', onclick: () => pickFile('application/json', importAll) }, 'Импорт'))),
       h('p', { class: 'panel-foot' }, 'Plitka 0.1 · E — редактор, / — поиск'),
     );
+    // превью создаём, когда канвас уже в DOM и у него есть размер
+    const mc = panelBody.querySelector('.mesh-canvas');
+    if (mc) {
+      meshPreview = Mesh.create(mc, { scale: 1 });
+      meshPreview?.set(meshParams(settings.mesh));
+    }
   }
 
   function section(title, ...children) {

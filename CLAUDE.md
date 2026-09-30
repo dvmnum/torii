@@ -22,12 +22,15 @@ plitka/
   css/style.css        весь дизайн (CSS-переменные в :root, секции по компонентам)
   js/store.js          Store.get/set/remove — chrome.storage.local, фолбэк localStorage (для открытия файла напрямую)
   js/widgets.js        хелпер h(), favicon(), ENGINES, реестр Widgets, loadWeather()
+  js/mesh.js           Mesh: меш-градиент на WebGL1 (create/random/cssPreview), без библиотек
   js/app.js            IIFE: настройки, тема, сетка, редактор, модалки, панель, тосты, хоткеи
 tests/e2e.mjs          Playwright-смоук (npm test)
 ```
 
 ## Модель данных (chrome.storage.local)
-- `settings` — `{ name, bg, bgImage(dataURL|null), bgDim, accent, glassBlur, glassAlpha, radius, motion }`
+- `settings` — `{ name, bg, bgImage(dataURL|null), bgDim, accent, glassBlur, glassAlpha, radius, motion, mesh }`
+  - `bg: 'mesh'` — свой меш-фон; `mesh = { points: [{ x, y, color:'#rrggbb' }] (2..6, x/y — доли экрана), warp, speed, grain }` (всё 0..1), чистится `cleanMesh()`.
+    Весит ~200 байт — годится для `storage.sync`. Без WebGL — CSS-градиенты из тех же точек (`Mesh.cssPreview`).
 - `widgets` — массив `{ id, type, data }`, общий для всех экранов; `data` = дефолты виджета + пользовательские поля
 - `layouts` — `{ md?, lg? }`, в каждом `{ [id]: { x, y, w, h } }`. Диапазоны по `innerWidth` (CSS px): `sm` <700, `md` 700–1399, `lg` ≥1400.
   - Нет своей раскладки у диапазона — показывается ближайшая (`SOURCES` в `app.js`), при первой правке (drag/resize/добавление) она форкается.
@@ -75,6 +78,7 @@ myWidget: {
 ## Грабли
 - Внутри `.clock-time` градиент через `background-clip: text` — у вложенных `span` задавай `color` явно, иначе они невидимы.
 - На `body` стоит `font-feature-settings: 'tnum' 0`, а оно перебивает `font-variant-numeric: tabular-nums`. Нужны моноширинные цифры — пиши `font-feature-settings: 'tnum' 1`. Для основного времени часов tnum не включать: единица становится слишком широкой.
+- Меш-фон рендерится в ~0.35 разрешения экрана и ≤30 fps (градиент гладкий, растяжение не видно); в скрытой вкладке rAF и так стоит. Цвета смешиваются в sRGB, не в линейном — в линейном всё выцветает. Под ним стеклянные блоки пересчитывают `backdrop-filter` каждый кадр — на слабом железе проверять.
 - Иконки сайтов: Google s2 → favicon.yandex.net → буква-монограмма. Внутренний `_favicon` Chrome отдаёт серый глобус для непосещённых сайтов — поэтому не используется.
 - `chrome.storage.local` без `unlimitedStorage` — 10 МБ; фон-картинка ужимается до 2560px JPEG.
 - Если нужен `chrome.storage.sync`: лимит ~100 КБ всего и 8 КБ на ключ — картинки туда нельзя.
