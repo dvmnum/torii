@@ -285,9 +285,30 @@ void main() {
       { x: 0.2, y: 0.95, color: '#0d0d16' }, { x: 0.12, y: 0.1, color: '#e6b4ea' },
       { x: 0.5, y: 0.38, color: '#5a5ae6' }, { x: 0.9, y: 0.12, color: '#141426' },
       { x: 0.78, y: 0.88, color: '#10101c' }, { x: 0.2, y: 0.6, color: '#16162a' }] },
+    { id: 'flame', title: 'Пламя', mode: 'mesh', warp: 0.9, speed: 0.25, grain: 0.1, density: 0.5, points: [
+      { x: 0.7, y: 0.85, color: '#050101' }, { x: 0.2, y: 0.95, color: '#0a0202' },
+      { x: 0.92, y: 0.08, color: '#3a0600' }, { x: 0.55, y: 0.25, color: '#b83a06' },
+      { x: 0.1, y: 0.2, color: '#ff8a12' }, { x: 0.32, y: 0.55, color: '#fff3d0' }] },
+    { id: 'mono', title: 'Монохром', mode: 'mesh', warp: 0.8, speed: 0.2, grain: 0.15, density: 0.5, points: [
+      { x: 0.15, y: 0.2, color: '#050608' }, { x: 0.85, y: 0.15, color: '#16181c' },
+      { x: 0.25, y: 0.9, color: '#e9ecf0' }, { x: 0.8, y: 0.55, color: '#c9ced6' },
+      { x: 0.9, y: 0.95, color: '#0c0d10' }] },
+    { id: 'silk', title: 'Шёлк', mode: 'halftone', warp: 1, speed: 0.2, grain: 0.05, density: 0.95, points: [
+      { x: 0.6, y: 0.6, color: '#0e0e0e' }, { x: 0.05, y: 0.05, color: '#d8d8d8' },
+      { x: 0.35, y: 0.3, color: '#6a6a6a' }, { x: 0.7, y: 0.45, color: '#8c8c8c' },
+      { x: 0.2, y: 0.8, color: '#3a3a3a' }, { x: 0.95, y: 0.9, color: '#141414' }] },
     { id: 'dusk', title: 'Закат', mode: 'mesh', warp: 0.5, speed: 0.35, grain: 0.3, density: 0.5, points: [
       { x: 0.5, y: 0.1, color: '#140812' }, { x: 0.15, y: 0.3, color: '#ff5a3c' },
       { x: 0.8, y: 0.45, color: '#b8327a' }, { x: 0.45, y: 0.9, color: '#ffb347' }] },
+    { id: 'lagoon', title: 'Лагуна', mode: 'mesh', warp: 0.55, speed: 0.35, grain: 0.3, density: 0.5, points: [
+      { x: 0.55, y: 0.55, color: '#03101a' }, { x: 0.12, y: 0.15, color: '#0f7bd8' },
+      { x: 0.88, y: 0.3, color: '#16c79a' }, { x: 0.4, y: 0.92, color: '#1d3fa8' }] },
+    { id: 'forest', title: 'Лес', mode: 'mesh', warp: 0.55, speed: 0.35, grain: 0.3, density: 0.5, points: [
+      { x: 0.6, y: 0.5, color: '#050d09' }, { x: 0.12, y: 0.15, color: '#1f7a4d' },
+      { x: 0.88, y: 0.3, color: '#7fb33a' }, { x: 0.4, y: 0.92, color: '#0f4f5c' }] },
+    { id: 'graphite', title: 'Графит', mode: 'mesh', warp: 0.5, speed: 0.3, grain: 0.35, density: 0.5, points: [
+      { x: 0.6, y: 0.5, color: '#0b0b0d' }, { x: 0.12, y: 0.15, color: '#3a3a44' },
+      { x: 0.88, y: 0.3, color: '#26262d' }, { x: 0.4, y: 0.92, color: '#4a4a52' }] },
   ];
 
   // случайная, но гармоничная палитра под тёмную эстетику:
@@ -314,11 +335,39 @@ void main() {
     return '#' + [f(0), f(8), f(4)].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
   }
 
+  // Примерная яркость фона в точке экрана (x, y в 0..1) — та же формула смешивания, что в шейдере,
+  // без искажения и дрейфа. Нужна для «авто»-цвета текста в блоках.
+  function lumAt(p, x, y, aspect = 16 / 9) {
+    const luma = ([r, g, b]) => 0.299 * r + 0.587 * g + 0.114 * b;
+    let acc = [0, 0, 0], ws = 0, dark = 1;
+    for (const pt of p.points) {
+      const c = hexToRgb(pt.color);
+      dark = Math.min(dark, luma(c));
+      const dx = (x - pt.x) * aspect, dy = y - pt.y;
+      const w = 1 / Math.pow(dx * dx + dy * dy + 0.003, 1.35);
+      acc = acc.map((v, i) => v + c[i] * w);
+      ws += w;
+    }
+    const c = acc.map(v => v / ws);
+    const l = luma(c);
+    if (p.mode === 'halftone') {
+      // как в шейдере: радиус точки от яркости, фон — тёмный; яркость = доля клетки под точкой
+      const bg = dark * 0.7;
+      const t = Math.min(1, Math.max(0, (l - bg - 0.03) / 0.42));
+      const r = 0.52 * t * t * (3 - 2 * t);
+      const cover = Math.min(1, Math.PI * r * r);
+      const vivid = luma(c.map(v => v / Math.max(...c, 0.001) * 0.97));
+      return bg * (1 - cover) + vivid * cover;
+    }
+    if (p.mode === 'flow') return dark + (l - dark) * 0.2; // ленты узкие, почти всё — тёмный фон
+    return l;
+  }
+
   // CSS-подобие меша — для первого кадра до WebGL и если WebGL нет
   function cssPreview(p) {
     return p.points.map(pt => `radial-gradient(circle at ${pt.x * 100}% ${pt.y * 100}%, ${pt.color}, transparent 65%)`).join(', ') +
       `, ${p.points[0].color}`;
   }
 
-  return { create, thumb, random, cssPreview, PRESETS, MODES, MAX };
+  return { create, thumb, random, cssPreview, lumAt, hsl, PRESETS, MODES, MAX };
 })();

@@ -83,7 +83,7 @@ await page.screenshot({ path: `${out}/05-reloaded.png` });
 // настройки
 await page.click('#btn-settings');
 await page.fill('.panel input[type=text]', 'Влад');
-await page.click('.bg-swatch[data-bg="dusk"]');
+await page.click('.mesh-preset[data-preset="dusk"]');
 await page.waitForTimeout(900);
 await page.screenshot({ path: `${out}/06-settings.png` });
 await page.click('.panel [data-close]');
@@ -309,7 +309,7 @@ await page.screenshot({ path: `${out}/19-search-enter.png` });
 // ---------- меш-фон ----------
 await page.fill('[data-search]', '');
 await page.click('#btn-settings');
-await page.click('.bg-swatch[data-bg="mesh"]');
+await page.click('.panel button:has-text("Настроить")');
 await page.waitForTimeout(800);
 check(await page.evaluate(() => document.body.classList.contains('mesh-on')), 'меш: WebGL-фон включился');
 check(await page.locator('.mesh-preview .mesh-dot').count() === 4, 'меш: 4 точки в редакторе');
@@ -326,7 +326,7 @@ const p0 = await page.evaluate(() => window.__plitka.settings().mesh.points[0]);
 check(Math.abs(p0.x - 0.8) < 0.05 && Math.abs(p0.y - 0.7) < 0.05, `меш: точка перетащена (${p0.x}, ${p0.y})`);
 
 const colorsBefore = await page.evaluate(() => window.__plitka.settings().mesh.points.map(p => p.color).join());
-await page.click('.mesh-tools button:has-text("Случайный")');
+await page.click('.panel button:has-text("Случайный")');
 await page.waitForTimeout(400);
 check(colorsBefore !== await page.evaluate(() => window.__plitka.settings().mesh.points.map(p => p.color).join()), 'меш: «Случайный» меняет цвета');
 await page.click('.mesh-tools button:has-text("+ Точка")');
@@ -350,8 +350,8 @@ check(cleaned.points.length === 4 && cleaned.speed === 1, 'меш: кривые 
 // пресеты: миниатюры, применение, скрин каждого на весь экран
 await page.click('#btn-settings');
 await page.waitForTimeout(400);
-const thumbsOk = await page.$$eval('.mesh-preset img', imgs => imgs.length === 8 && imgs.every(i => i.src.startsWith('data:image/jpeg') && i.naturalWidth > 0));
-check(thumbsOk, 'пресеты: 8 миниатюр отрисованы WebGL');
+const thumbsOk = await page.$$eval('.mesh-preset img', imgs => imgs.length === 14 && imgs.every(i => i.src.startsWith('data:image/jpeg') && i.naturalWidth > 0));
+check(thumbsOk, 'пресеты: 14 миниатюр отрисованы WebGL');
 await page.screenshot({ path: `${out}/23-presets-panel.png` });
 const ids = await page.$$eval('.mesh-preset', els => els.map(e => e.dataset.preset));
 for (const id of ids) {
@@ -363,10 +363,12 @@ for (const id of ids) {
   await page.screenshot({ path: `${out}/24-preset-${id}.png` });
 }
 const last = await page.evaluate(() => window.__plitka.settings().mesh);
-check(last.mode === 'mesh' && last.points[1].color === '#ff5a3c', 'пресеты: последний («Закат») применился');
+check(last.preset === 'graphite' && last.points[1].color === '#3a3a44', 'пресеты: последний («Графит») применился');
 
 // смена узора через выпадающий список
 await page.click('#btn-settings');
+await page.waitForTimeout(300);
+if (!(await page.locator('.mesh-editor').count())) await page.click('.panel button:has-text("Настроить")');
 await page.waitForTimeout(400);
 await page.click('.mesh-editor .dd-btn');
 await page.click('body > .dd-list .dd-item:has-text("Полутон")');
@@ -374,6 +376,62 @@ await page.waitForTimeout(400);
 check(await page.evaluate(() => window.__plitka.settings().mesh.mode) === 'halftone', 'узор: переключился на полутон');
 check(await page.locator('.mesh-editor .field-range:has-text("Плотность")').count() === 1, 'узор: появился ползунок плотности');
 await page.click('.panel [data-close]');
+
+// ---------- свой выбор цвета в редакторе фона ----------
+await page.click('#btn-settings');
+await page.waitForTimeout(300);
+if (!(await page.locator('.mesh-editor').count())) await page.click('.panel button:has-text("Настроить")');
+await page.click('.mesh-color-btn');
+await page.waitForTimeout(250);
+check(await page.locator('body > .cp.open').count() === 1, 'цвет: пикер открылся');
+const sv = await page.locator('.cp-sv').boundingBox();
+const selBefore = await page.evaluate(() => window.__plitka.settings().mesh.points.map(p => p.color).join());
+await page.mouse.click(sv.x + sv.width * 0.9, sv.y + sv.height * 0.1);
+await page.waitForTimeout(200);
+await page.screenshot({ path: `${out}/25-color-picker.png` });
+check(selBefore !== await page.evaluate(() => window.__plitka.settings().mesh.points.map(p => p.color).join()), 'цвет: клик в квадрате меняет цвет точки');
+await page.fill('.cp-hex', '#12ab34');
+await page.waitForTimeout(150);
+check(await page.evaluate(() => window.__plitka.settings().mesh.points.some(p => p.color === '#12ab34')), 'цвет: HEX-поле работает');
+await page.keyboard.press('Escape');
+check(await page.locator('.cp').count() === 0 && await page.locator('#settings.open').count() === 1, 'цвет: Esc закрывает пикер, а не панель');
+await page.click('.panel [data-close]');
+
+// ---------- старый CSS-фон → заготовка меша ----------
+await page.evaluate(() => chrome.storage.local.set({ settings: { bg: 'lagoon', name: 'Тест' } }));
+await page.reload();
+await page.waitForTimeout(1000);
+check(await page.evaluate(() => window.__plitka.settings().mesh.preset) === 'lagoon', 'миграция фона: lagoon → заготовка «Лагуна»');
+
+// ---------- цвет текста в блоках ----------
+const inkOf = (id) => page.evaluate((i) => document.querySelector(`.grid-stack-item[gs-id="${i}"] .w`).classList.contains('ink-dark'), id);
+check(!(await inkOf('w-weather')), 'текст: на тёмном фоне — светлый');
+await page.click('#btn-settings');
+await page.click('.mesh-preset[data-preset="petal"]');
+await page.click('.panel [data-close]');
+await page.waitForTimeout(600);
+check(await inkOf('w-weather'), 'текст: на светлом «Лепестке» погода стала тёмной (авто)');
+await page.screenshot({ path: `${out}/26-auto-ink-petal.png` });
+
+// вручную: светлый текст + своя подложка
+await openSettings('w-weather');
+check(await page.locator('.modal .modal-sub:has-text("Оформление")').count() === 1, 'оформление: секция в настройках виджета');
+await page.click('.modal .seg-btn:has-text("Светлый")');
+await page.click('.modal .color-btn');
+await page.waitForTimeout(200);
+await page.click('.cp-quick button[title="#141418"]');
+await page.screenshot({ path: `${out}/27-widget-style-modal.png` });
+await page.keyboard.press('Escape');
+check(await page.locator('#modal.open').count() === 1, 'оформление: Esc закрыл пикер, модалка на месте');
+await page.click('.modal button[type=submit]');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(400);
+const wx = await page.evaluate(() => {
+  const w = document.querySelector('.grid-stack-item[gs-id="w-weather"] .w');
+  return { dark: w.classList.contains('ink-dark'), tinted: w.classList.contains('tinted'), tint: w.style.getPropertyValue('--tint') };
+});
+check(!wx.dark && wx.tinted && wx.tint === '#141418', 'оформление: светлый текст на тёмной подложке');
+await page.screenshot({ path: `${out}/28-widget-tinted.png` });
 
 const real = errors.filter(e => !/Failed to load resource/i.test(e));
 if (fails.length) { console.error('FAIL:', fails.join('; ')); process.exitCode = 1; }

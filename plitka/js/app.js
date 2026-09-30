@@ -4,23 +4,17 @@
   const MARGIN = 6;
   const PAD = 14; // отступ сетки от краёв экрана
 
-  const BACKGROUNDS = {
-    aurora: 'Аврора',
-    dusk: 'Закат',
-    lagoon: 'Лагуна',
-    forest: 'Лес',
-    mono: 'Графит',
-    mesh: 'Свой',
-  };
   const ACCENTS = ['#9b8cff', '#5cc8ff', '#b4f05a', '#ff7a9c', '#ffc35c', '#f2f2f2'];
 
   // меш-градиент (js/mesh.js): координаты точек в долях экрана
-  const fromPreset = ({ id, title, ...p }) => structuredClone(p);
+  // mesh.preset — id заготовки, пока её не правили (для подсветки в панели)
+  const fromPreset = ({ id, title, ...p }) => ({ ...structuredClone(p), preset: id });
   const DEFAULT_MESH = fromPreset(Mesh.PRESETS[0]);
+  // до v0.2 фоны были CSS-пятнами: settings.bg → заготовка меша с той же палитрой
+  const LEGACY_BG = { aurora: 'aurora', dusk: 'dusk', lagoon: 'lagoon', forest: 'forest', mono: 'graphite' };
 
   const DEFAULT_SETTINGS = {
     name: '',
-    bg: 'aurora',
     bgImage: null,
     bgDim: 0.35,
     accent: ACCENTS[0],
@@ -30,6 +24,13 @@
     motion: true,
     mesh: DEFAULT_MESH,
   };
+
+  // оформление, общее для всех виджетов: цвет текста и подложки
+  const STYLE_DEFAULTS = { ink: 'auto', tint: null };
+  const STYLE_SETTINGS = [
+    { key: 'ink', label: 'Текст', type: 'select', options: [['auto', 'Авто'], ['light', 'Светлый'], ['dark', 'Тёмный']] },
+    { key: 'tint', label: 'Цвет подложки', type: 'color', empty: 'Стекло' },
+  ];
 
   const DEFAULT_LAYOUT = [
     { id: 'w-clock', type: 'clock', x: 6, y: 2, w: 12, h: 4 },
@@ -90,7 +91,9 @@
       else if (k === 'mesh') s.mesh = cleanMesh(v);
       else if (typeof v === typeof DEFAULT_SETTINGS[k] && (typeof v !== 'number' || Number.isFinite(v))) s[k] = v;
     }
-    if (!BACKGROUNDS[s.bg]) s.bg = DEFAULT_SETTINGS.bg;
+    // старый CSS-фон → та же палитра на меше
+    const legacy = Mesh.PRESETS.find(p => p.id === LEGACY_BG[raw.bg]);
+    if (legacy) s.mesh = fromPreset(legacy);
     return s;
   }
 
@@ -108,6 +111,8 @@
     m.grain = unit(raw.grain, m.grain);
     m.density = unit(raw.density, m.density);
     m.mode = Mesh.MODES[raw.mode] ? raw.mode : 'mesh';
+    if (Mesh.PRESETS.some(p => p.id === raw.preset)) m.preset = raw.preset;
+    else delete m.preset;
     return m;
   }
 
@@ -145,7 +150,9 @@
 
   function fillDefaults(item) {
     const def = Widgets[item.type];
-    item.data = { ...structuredClone(def.defaults), ...(item.data || {}) };
+    item.data = { ...STYLE_DEFAULTS, ...structuredClone(def.defaults), ...(item.data || {}) };
+    if (!['auto', 'light', 'dark'].includes(item.data.ink)) item.data.ink = 'auto';
+    if (!/^#[0-9a-f]{6}$/i.test(item.data.tint)) item.data.tint = null;
   }
 
   // ---------- тема ----------
@@ -156,17 +163,18 @@
     r.setProperty('--glass-alpha', settings.glassAlpha);
     r.setProperty('--radius', settings.radius + 'px');
     r.setProperty('--bg-dim', settings.bgDim);
-    document.body.dataset.bg = settings.bg;
     document.body.classList.toggle('has-image', !!settings.bgImage);
     document.body.classList.toggle('no-motion', !settings.motion);
     document.querySelector('#bg .bg-image').style.backgroundImage = settings.bgImage ? `url("${settings.bgImage}")` : '';
     applyMesh();
+    // фон поменялся — пересчитать «авто»-цвет текста у блоков (после инициализации сетки)
+    setTimeout(refreshInk, 60);
   }
 
-  // живой меш-фон: запускаем только когда он выбран и не перекрыт картинкой
+  // живой меш-фон: всегда, кроме случая, когда стоит своя картинка
   let meshBg = null;
   function applyMesh() {
-    const on = settings.bg === 'mesh' && !settings.bgImage;
+    const on = !settings.bgImage;
     const bg = document.getElementById('bg');
     bg.style.setProperty('--grain', on ? settings.mesh.grain * 0.4 : '');
     // запасной вид (нет WebGL / первый кадр) — CSS-градиенты из тех же точек
@@ -224,8 +232,63 @@
     rec.inst?.destroy?.();
     rec.body.replaceChildren();
     rec.shell.classList.toggle('glass', !!item.data.glass);
+    rec.shell.classList.toggle('tinted', !!item.data.tint);
+    rec.shell.style.setProperty('--tint', item.data.tint || '');
     rec.shell.dataset.type = item.type;
     rec.inst = Widgets[item.type].render(rec.body, item.data, ctxFor(item)) || null;
+    applyInk(item);
+  }
+
+  // ---------- цвет текста в блоках ----------
+  // «Авто»: смотрим яркость фона под блоком (и цвет подложки, если она своя) и выбираем светлый/тёмный текст.
+  let imgLum = null; // { w, h, data } — уменьшенная копия своей картинки-фона
+  function bgLum(x, y) {
+    if (settings.bgImage && imgLum) {
+      const i = (Math.min(imgLum.h - 1, Math.floor(y * imgLum.h)) * imgLum.w + Math.min(imgLum.w - 1, Math.floor(x * imgLum.w))) * 4;
+      const d = imgLum.data;
+      return (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255 * (1 - settings.bgDim);
+    }
+    if (settings.bgImage) return 0.3;
+    return Mesh.lumAt(settings.mesh, x, y, innerWidth / innerHeight);
+  }
+  function lumUnder(el) {
+    const r = el.getBoundingClientRect();
+    let sum = 0;
+    for (const fx of [0.2, 0.5, 0.8]) for (const fy of [0.2, 0.5, 0.8]) {
+      sum += bgLum((r.left + r.width * fx) / innerWidth, (r.top + r.height * fy) / innerHeight);
+    }
+    return sum / 9;
+  }
+  const hexLum = (hex) => { const n = parseInt(hex.slice(1), 16); return (0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255; };
+
+  function applyInk(item) {
+    const rec = live.get(item.id);
+    if (!rec) return;
+    let dark = item.data.ink === 'dark';
+    if (item.data.ink === 'auto') {
+      let l = lumUnder(rec.el);
+      if (item.data.glass && item.data.tint) l = 0.35 * l + 0.65 * hexLum(item.data.tint);
+      else if (item.data.glass) l = l + (1 - l) * settings.glassAlpha; // белое стекло чуть высветляет
+      dark = l > 0.58;
+    }
+    rec.shell.classList.toggle('ink-dark', dark);
+  }
+  function refreshInk() { for (const it of layout) applyInk(it); }
+
+  // уменьшенная копия картинки-фона для «авто»-текста
+  function sampleImage() {
+    imgLum = null;
+    if (!settings.bgImage) return;
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = 48; c.height = 27;
+      const g = c.getContext('2d');
+      g.drawImage(img, 0, 0, c.width, c.height);
+      imgLum = { w: c.width, h: c.height, data: g.getImageData(0, 0, c.width, c.height).data };
+      refreshInk();
+    };
+    img.src = settings.bgImage;
   }
 
   // pos — где стоять; без неё gridstack сам ищет свободное место
@@ -284,6 +347,7 @@
       // блока в этой раскладке не было — запоминаем, куда его поставил gridstack
       if (!shown[it.id]) { shown[it.id] = geom(it); saveLayout(); }
     }
+    refreshInk(); // позиции известны только сейчас
   }
 
   function unmountAll() {
@@ -301,6 +365,7 @@
 
   document.body.classList.toggle('narrow', bucket === 'sm');
   mountAll();
+  sampleImage();
 
   grid.on('change', (_e, nodes) => {
     for (const n of nodes || []) {
@@ -308,6 +373,7 @@
       if (it) syncGeom(it);
     }
     if (!mounting) commitPositions();
+    refreshInk();
   });
 
   function applyBucket() {
@@ -322,6 +388,7 @@
 
   window.addEventListener('resize', debounce(() => {
     grid.cellHeight(cellH());
+    refreshInk();
     drawGuides();
   }, 80));
   // раскладку меняем, когда окно перестали тянуть, — чтобы блоки не прыгали на границе
@@ -401,7 +468,8 @@
     const def = Widgets[item.type];
     openModal({
       title: def.title,
-      fields: def.settings.map(s => ({ ...s, value: structuredClone(item.data[s.key]) })),
+      fields: [...def.settings, { type: 'heading', label: 'Оформление' }, ...STYLE_SETTINGS]
+        .map(s => ({ ...s, value: structuredClone(item.data[s.key]) })),
       submit: 'Сохранить',
       onSubmit: (v) => {
         Object.assign(item.data, v);
@@ -422,6 +490,32 @@
     for (const f of fields) {
       const id = 'f-' + f.key;
       let control;
+      if (f.type === 'heading') {
+        modalForm.append(h('h4', { class: 'modal-sub' }, f.label));
+        continue;
+      }
+      if (f.type === 'color') {
+        // null = «нет своего цвета» (f.empty — подпись для этого случая)
+        let cur = f.value || null;
+        const dot = h('i');
+        const text = h('span');
+        const paint = () => {
+          dot.style.background = cur || '';
+          dot.classList.toggle('none', !cur);
+          text.textContent = cur || f.empty || 'Нет';
+          reset.hidden = !cur;
+        };
+        const btn = h('button', {
+          type: 'button', class: 'color-btn',
+          onclick: () => colorPicker(btn, cur || '#8a7cff', (c) => { cur = c; paint(); }),
+        }, dot, text);
+        const reset = h('button', { type: 'button', class: 'pill small', onclick: () => { cur = null; paint(); } }, 'Сбросить');
+        paint();
+        control = h('div', { class: 'field field-row' }, h('span', {}, f.label), h('div', { class: 'row' }, reset, btn));
+        getters[f.key] = () => cur;
+        modalForm.append(control);
+        continue;
+      }
       if (f.type === 'toggle') {
         const inp = h('input', { type: 'checkbox', id });
         inp.checked = !!f.value;
@@ -473,7 +567,7 @@
     modal.classList.add('open');
     setTimeout(() => modalForm.querySelector('input[type=text], select')?.focus(), 30);
   }
-  function closeModal() { closeDropdown?.(); modal.classList.remove('open'); }
+  function closeModal() { closeDropdown?.(); closePicker?.(); modal.classList.remove('open'); }
 
   // ---------- свои контролы вместо системных ----------
   // каждый → { el, get() }
@@ -557,6 +651,93 @@
     return { el: h('div', { class: 'dd' }, btn), get: () => cur };
   }
 
+  // ---------- выбор цвета ----------
+  // Поповер у anchor: квадрат насыщенность/яркость, полоса оттенка, HEX, быстрые образцы.
+  // onInput(hex) зовётся на каждое изменение — можно править вживую.
+  let closePicker = null;
+  const QUICK_COLORS = ['#ffffff', '#f4f3f8', '#9b8cff', '#5cc8ff', '#b4f05a', '#ffc35c', '#ff7a9c', '#ff4655', '#141418', '#000000'];
+
+  function hexToHsv(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+    const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+    let hh = 0;
+    if (d) hh = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return { h: (hh * 60 + 360) % 360, s: mx ? d / mx : 0, v: mx };
+  }
+  function hsvToHex({ h: hh, s, v }) {
+    const f = (n) => { const k = (n + hh / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+    return '#' + [f(5), f(3), f(1)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+  }
+
+  function colorPicker(anchor, value, onInput) {
+    closePicker?.();
+    let hsv = hexToHsv(/^#[0-9a-f]{6}$/i.test(value) ? value : '#8a7cff');
+    const svKnob = h('i', { class: 'cp-knob' });
+    const sv = h('div', { class: 'cp-sv' }, svKnob);
+    const hueKnob = h('i', { class: 'cp-knob' });
+    const hue = h('div', { class: 'cp-hue' }, hueKnob);
+    const swatch = h('span', { class: 'cp-swatch' });
+    const hex = h('input', { type: 'text', class: 'cp-hex', maxlength: 7, spellcheck: 'false' });
+    const bgColors = [...new Set(settings.bgImage ? [] : settings.mesh.points.map(p => p.color))];
+    const quick = h('div', { class: 'cp-quick' }, [...bgColors, ...QUICK_COLORS.filter(c => !bgColors.includes(c))].slice(0, 18).map(c =>
+      h('button', { type: 'button', title: c, style: `--c:${c}`, onclick: () => { hsv = hexToHsv(c); paint(true); } })));
+    const pop = h('div', { class: 'cp' }, sv, hue, h('div', { class: 'cp-row' }, swatch, hex), quick);
+
+    const paint = (emit) => {
+      const c = hsvToHex(hsv);
+      sv.style.setProperty('--hue', `hsl(${hsv.h} 100% 50%)`);
+      svKnob.style.left = hsv.s * 100 + '%';
+      svKnob.style.top = (1 - hsv.v) * 100 + '%';
+      svKnob.style.background = c;
+      hueKnob.style.left = hsv.h / 360 * 100 + '%';
+      hueKnob.style.background = `hsl(${hsv.h} 100% 50%)`;
+      swatch.style.background = c;
+      if (document.activeElement !== hex) hex.value = c;
+      if (emit) onInput(c);
+    };
+
+    const drag = (el, fn) => el.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      const r = el.getBoundingClientRect();
+      const at = (ev) => { fn(Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height))); paint(true); };
+      at(e);
+      const up = () => { el.removeEventListener('pointermove', at); el.removeEventListener('pointerup', up); };
+      el.addEventListener('pointermove', at);
+      el.addEventListener('pointerup', up);
+    });
+    drag(sv, (x, y) => { hsv.s = x; hsv.v = 1 - y; });
+    drag(hue, (x) => { hsv.h = x * 359.9; });
+    hex.addEventListener('input', () => {
+      let v = hex.value.trim();
+      if (!v.startsWith('#')) v = '#' + v;
+      if (/^#[0-9a-f]{6}$/i.test(v)) { hsv = hexToHsv(v.toLowerCase()); paint(true); }
+    });
+
+    // Esc закрывает только пикер; клик мимо — тоже
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); close(); } };
+    const onOutside = (e) => { if (!pop.contains(e.target) && !anchor.contains(e.target)) close(); };
+    function close() {
+      pop.remove();
+      window.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('mousedown', onOutside, true);
+      if (closePicker === close) closePicker = null;
+    }
+    window.addEventListener('keydown', onKey, true);
+    document.addEventListener('mousedown', onOutside, true);
+    closePicker = close;
+
+    document.body.append(pop);
+    const a = anchor.getBoundingClientRect();
+    const W = 232, H = pop.offsetHeight;
+    const left = Math.min(innerWidth - W - 8, Math.max(8, a.left + a.width / 2 - W / 2));
+    const top = a.bottom + 8 + H < innerHeight ? a.bottom + 8 : Math.max(8, a.top - 8 - H);
+    pop.style.cssText = `left:${left}px;top:${top}px`;
+    requestAnimationFrame(() => pop.classList.add('open'));
+    paint(false);
+  }
+
   function alignPicker(value) {
     let cur = normAlign(value);
     const cells = [];
@@ -584,12 +765,13 @@
   const fileInput = document.getElementById('file-input');
 
   function openSettings() { renderSettings(); panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false'); }
-  function closeSettings() { meshPreview?.destroy(); meshPreview = null; panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); }
+  function closeSettings() { closePicker?.(); meshPreview?.destroy(); meshPreview = null; panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); }
   document.getElementById('btn-settings').addEventListener('click', () => panel.classList.contains('open') ? closeSettings() : openSettings());
   panel.querySelector('[data-close]').addEventListener('click', closeSettings);
 
   function setSetting(k, v, rerenderWidgets = false) {
     settings[k] = v;
+    if (k === 'bgImage') sampleImage();
     applyTheme();
     saveSettings();
     if (rerenderWidgets) layout.forEach(renderWidget);
@@ -612,10 +794,12 @@
     const dots = h('div', { class: 'mesh-dots' });
     // пропорции как у экрана — точки в превью стоят там же, где на фоне
     const box = h('div', { class: 'mesh-preview', style: `aspect-ratio:${innerWidth} / ${innerHeight}` }, canvas, dots);
-    const colorInp = h('input', { type: 'color', class: 'mesh-color', tabindex: '-1' });
     const unit = (v) => Math.min(1, Math.max(0, v));
 
+    // любая правка — это уже не заготовка
     const commit = () => {
+      delete m.preset;
+      panelBody.querySelectorAll('.mesh-preset.active').forEach(b => b.classList.remove('active'));
       setSetting('mesh', m);
       meshPreview?.set(meshParams(m));
       box.style.background = Mesh.cssPreview(m);
@@ -651,11 +835,17 @@
     const tools = h('div', { class: 'row mesh-tools' });
     const paintTools = () => {
       const p = m.points[meshSel];
+      const colorBtn = h('button', {
+        type: 'button', class: 'pill small mesh-color-btn', title: 'Цвет выбранной точки', style: `--c:${p.color}`,
+        onclick: () => colorPicker(colorBtn, p.color, (c) => {
+          p.color = c;
+          commit();
+          dots.children[meshSel]?.style.setProperty('--c', c);
+          colorBtn.style.setProperty('--c', c);
+        }),
+      }, h('i'), 'Цвет');
       tools.replaceChildren(
-        h('button', {
-          type: 'button', class: 'pill small mesh-color-btn', title: 'Цвет выбранной точки', style: `--c:${p.color}`,
-          onclick: () => { colorInp.value = p.color; colorInp.click(); },
-        }, h('i'), 'Цвет'),
+        colorBtn,
         h('button', {
           type: 'button', class: 'pill small', disabled: m.points.length <= 2,
           onclick: () => { m.points.splice(meshSel, 1); meshSel = Math.max(0, meshSel - 1); commit(); paint(); },
@@ -667,18 +857,8 @@
             meshSel = m.points.length - 1; commit(); paint();
           },
         }, '+ Точка'),
-        h('button', {
-          type: 'button', class: 'pill small', title: 'Случайные цвета и точки',
-          onclick: () => { m.points = Mesh.random(); meshSel = 0; commit(); paint(); },
-        }, 'Случайный'),
       );
     };
-    colorInp.addEventListener('input', () => {
-      m.points[meshSel].color = colorInp.value;
-      commit();
-      dots.children[meshSel]?.style.setProperty('--c', colorInp.value);
-      tools.querySelector('.mesh-color-btn')?.style.setProperty('--c', colorInp.value);
-    });
 
     const sl = (label, key, fmt) => {
       const out = h('output', {}, fmt(m[key]));
@@ -688,27 +868,37 @@
     };
     const pct = (v) => Math.round(v * 100) + '%';
 
-    // заготовки: применяются целиком, дальше их можно докрутить
-    const presets = h('div', { class: 'mesh-presets' }, Mesh.PRESETS.map(p => {
-      const src = presetThumb(p);
-      return h('button', {
-        type: 'button', class: 'mesh-preset', 'data-preset': p.id, title: p.title,
-        style: src ? null : `background:${Mesh.cssPreview(p)}`,
-        onclick: () => { settings.mesh = fromPreset(p); meshSel = 0; setSetting('mesh', settings.mesh); renderSettings(); },
-      }, src ? h('img', { src, alt: '' }) : null, h('span', {}, p.title));
-    }));
-
     const mode = dropdown(Object.entries(Mesh.MODES), m.mode, (v) => { m.mode = v; commit(); renderSettings(); });
 
     box.style.background = Mesh.cssPreview(m);
     paint();
-    return h('div', { class: 'mesh-editor' }, presets, box, tools, colorInp,
+    return h('div', { class: 'mesh-editor' }, box, tools,
       h('div', { class: 'field' }, h('span', {}, 'Узор'), mode.el),
       m.mode !== 'mesh' ? sl('Плотность', 'density', pct) : null,
       sl('Искажение', 'warp', pct),
       sl('Скорость', 'speed', (v) => v ? pct(v) : 'стоит'),
       sl('Зерно', 'grain', pct));
   }
+
+  // заготовки: применяются целиком (и убирают свою картинку), дальше их можно докрутить в редакторе
+  function meshPresets() {
+    return h('div', { class: 'mesh-presets' }, Mesh.PRESETS.map(p => {
+      const src = presetThumb(p);
+      return h('button', {
+        type: 'button', 'data-preset': p.id, title: p.title,
+        class: 'mesh-preset' + (!settings.bgImage && settings.mesh.preset === p.id ? ' active' : ''),
+        style: src ? null : `background:${Mesh.cssPreview(p)}`,
+        onclick: () => {
+          settings.mesh = fromPreset(p);
+          settings.bgImage = null;
+          meshSel = 0;
+          setSetting('mesh', settings.mesh);
+          renderSettings();
+        },
+      }, src ? h('img', { src, alt: '' }) : null, h('span', {}, p.title));
+    }));
+  }
+  let meshOpen = false; // редактор свёрнут по умолчанию — панель и так длинная
 
   // миниатюры пресетов рисуются WebGL один раз и кэшируются
   const thumbs = new Map();
@@ -723,16 +913,18 @@
     const nameInp = h('input', { type: 'text', value: settings.name, placeholder: 'Как к тебе обращаться?' });
     nameInp.addEventListener('input', debounce(() => setSetting('name', nameInp.value.trim(), true), 300));
 
-    const bgs = h('div', { class: 'swatches bg-swatches' }, Object.entries(BACKGROUNDS).map(([k, t]) =>
-      h('button', {
-        class: 'bg-swatch' + (settings.bg === k && !settings.bgImage ? ' active' : ''), 'data-bg': k, title: t,
-        style: k === 'mesh' ? `background:${Mesh.cssPreview(settings.mesh)}` : null,
-        onclick: () => { settings.bgImage = null; setSetting('bg', k); renderSettings(); },
-      }, h('span', {}, t))));
-
-    const imgRow = h('div', { class: 'row' },
-      h('button', { class: 'pill small', onclick: () => pickFile('image/*', loadBgImage) }, settings.bgImage ? 'Сменить картинку' : 'Своя картинка'),
-      settings.bgImage ? h('button', { class: 'pill small', onclick: () => { setSetting('bgImage', null); renderSettings(); } }, 'Убрать') : null,
+    const img = !!settings.bgImage;
+    const bgRow = h('div', { class: 'row' },
+      img ? null : h('button', {
+        class: 'pill small' + (meshOpen ? ' on' : ''), 'aria-expanded': String(meshOpen),
+        onclick: () => { meshOpen = !meshOpen; renderSettings(); },
+      }, meshOpen ? 'Свернуть' : 'Настроить'),
+      img ? null : h('button', {
+        class: 'pill small', title: 'Случайные цвета и точки, узор тот же',
+        onclick: () => { settings.mesh.points = Mesh.random(); delete settings.mesh.preset; meshSel = 0; setSetting('mesh', settings.mesh); renderSettings(); },
+      }, 'Случайный'),
+      h('button', { class: 'pill small', onclick: () => pickFile('image/*', loadBgImage) }, img ? 'Сменить картинку' : 'Своя картинка'),
+      img ? h('button', { class: 'pill small', onclick: () => { setSetting('bgImage', null); renderSettings(); } }, 'Убрать картинку') : null,
     );
 
     const accents = h('div', { class: 'swatches' }, ACCENTS.map(c =>
@@ -745,10 +937,9 @@
     panelBody.replaceChildren(
       section('Ты',
         h('label', { class: 'field' }, h('span', {}, 'Имя для приветствия'), nameInp)),
-      section('Фон', bgs,
-        settings.bg === 'mesh' && !settings.bgImage ? meshEditor() : null,
-        imgRow,
-        settings.bgImage ? slider('Затемнение картинки', 'bgDim', 0, 0.8, 0.05, v => Math.round(v * 100) + '%') : null,
+      section('Фон', meshPresets(), bgRow,
+        meshOpen && !img ? meshEditor() : null,
+        img ? slider('Затемнение картинки', 'bgDim', 0, 0.8, 0.05, v => Math.round(v * 100) + '%') : null,
         h('label', { class: 'field field-toggle' }, h('span', {}, 'Живой фон'), h('span', { class: 'switch' }, motion, h('i')))),
       section('Стекло',
         slider('Размытие', 'glassBlur', 0, 40, 1, v => v + 'px'),

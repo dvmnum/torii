@@ -28,12 +28,14 @@ tests/e2e.mjs          Playwright-смоук (npm test)
 ```
 
 ## Модель данных (chrome.storage.local)
-- `settings` — `{ name, bg, bgImage(dataURL|null), bgDim, accent, glassBlur, glassAlpha, radius, motion, mesh }`
-  - `bg: 'mesh'` — свой меш-фон; `mesh = { mode, points: [{ x, y, color:'#rrggbb' }] (2..6, x/y — доли экрана), warp, speed, grain, density }` (числа 0..1), чистится `cleanMesh()`.
+- `settings` — `{ name, bgImage(dataURL|null), bgDim, accent, glassBlur, glassAlpha, radius, motion, mesh }`. Фон — всегда меш, если нет своей картинки. Старый `bg` (CSS-пятна до v0.2) при загрузке превращается в заготовку (`LEGACY_BG`).
+  - `mesh = { preset?, mode, points: [{ x, y, color:'#rrggbb' }] (2..6, x/y — доли экрана), warp, speed, grain, density }` (числа 0..1), чистится `cleanMesh()`.
     `mode` — узор поверх меша: `mesh` (пятна) | `ribbed` (рифлёное стекло) | `halftone` | `flow` (неоновые ленты) | `ripple` (рельеф); всё в одном шейдере (`uMode`).
-    Заготовки — `Mesh.PRESETS` (точка 0 обычно самая тёмная — она же фон у полутона и неона), миниатюры рисует `Mesh.thumb()` на общем невидимом канвасе.
+    Заготовки — `Mesh.PRESETS` (точка 0 обычно самая тёмная — она же фон у полутона и неона), миниатюры рисует `Mesh.thumb()` на общем невидимом канвасе. `mesh.preset` — id заготовки, пока её не правили (подсветка в панели); любая правка его удаляет.
     Весит ~200 байт — годится для `storage.sync`. Без WebGL — CSS-градиенты из тех же точек (`Mesh.cssPreview`).
-- `widgets` — массив `{ id, type, data }`, общий для всех экранов; `data` = дефолты виджета + пользовательские поля
+- `widgets` — массив `{ id, type, data }`, общий для всех экранов; `data` = `STYLE_DEFAULTS` + дефолты виджета + пользовательские поля.
+  - Оформление у всех виджетов (`STYLE_SETTINGS`, добавляется в модалку автоматически): `ink: 'auto'|'light'|'dark'` — цвет текста, `tint: '#rrggbb'|null` — цвет подложки.
+    `auto` — `applyInk()` оценивает яркость фона под блоком (`Mesh.lumAt` или уменьшенная копия картинки) и ставит `.ink-dark`. Цвета контента в CSS виджетов — только через `--fg`/`--ink*`, не хардкодить белый.
 - `layouts` — `{ md?, lg? }`, в каждом `{ [id]: { x, y, w, h } }`. Диапазоны по `innerWidth` (CSS px): `sm` <700, `md` 700–1399, `lg` ≥1400.
   - Нет своей раскладки у диапазона — показывается ближайшая (`SOURCES` в `app.js`), при первой правке (drag/resize/добавление) она форкается.
   - `sm` — стопка в одну колонку (`body.narrow`, CSS-override позиций gridstack), своей раскладки нет, редактор выключен.
@@ -66,6 +68,7 @@ myWidget: {
 - Размеры контента внутри виджета — через container query единицы (`cqw`, `cqh`) и `@container`, чтобы блок масштабировался при ресайзе.
 - В режиме редактирования `.w-body` получает `pointer-events: none` (чтобы блок таскался), тулбар `.w-tools` исключён из drag через `draggable.cancel`.
 - Новые типы полей настроек добавляются в `openModal()` в `app.js`.
+- Свой выбор цвета — `colorPicker(anchor, hex, onInput)` (поповер в `body`, Esc закрывает только его); поле модалки `type: 'color'`.
 - Системных `<select>` нет: `select` с ≤3 вариантами рисуется сегментами (`segmented()`), больше — своим списком (`dropdown()`, список рендерится в `body`, иначе `.modal` с `overflow`/`backdrop-filter` его обрежет). `align` — схема 3×3, значения `top|middle|bottom-left|center|right` (`normAlign()` понимает старые `left/center/right`).
 
 ## Режим редактирования
