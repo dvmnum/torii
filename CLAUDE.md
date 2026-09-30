@@ -28,8 +28,15 @@ tests/e2e.mjs          Playwright-смоук (npm test)
 
 ## Модель данных (chrome.storage.local)
 - `settings` — `{ name, bg, bgImage(dataURL|null), bgDim, accent, glassBlur, glassAlpha, radius, motion }`
-- `layout` — массив `{ id, type, x, y, w, h, data }`; `data` = дефолты виджета + пользовательские поля
-- `wx:<город>` — кэш погоды на 30 минут
+- `widgets` — массив `{ id, type, data }`, общий для всех экранов; `data` = дефолты виджета + пользовательские поля
+- `layouts` — `{ md?, lg? }`, в каждом `{ [id]: { x, y, w, h } }`. Диапазоны по `innerWidth` (CSS px): `sm` <700, `md` 700–1399, `lg` ≥1400.
+  - Нет своей раскладки у диапазона — показывается ближайшая (`SOURCES` в `app.js`), при первой правке (drag/resize/добавление) она форкается.
+  - `sm` — стопка в одну колонку (`body.narrow`, CSS-override позиций gridstack), своей раскладки нет, редактор выключен.
+  - Удаление виджета — общее для всех диапазонов; блок без позиции в диапазоне gridstack ставит сам и позиция запоминается.
+- `layout` — старый ключ v0.1 (один общий массив с x/y), при загрузке мигрирует в `widgets` + `layouts.lg` и удаляется.
+- `wx:<город>` — кэш погоды на 30 минут; без сети виджет показывает кэш до суток с пометкой «нет сети»
+- В памяти `layout` (в `app.js`) — те же объекты из `widgets` с наложенными x/y/w/h текущего диапазона.
+- Всё из хранилища и импорта проходит через `cleanState()` / `cleanSettings()` — неизвестные типы и мусор выкидываются, а не роняют страницу.
 
 Сетка: `COLS=24`, `ROWS=12`, `cellHeight = (innerHeight - 2*PAD) / ROWS` (пересчёт на resize), `float: true`, `maxRow: ROWS`.
 Координаты в layout — в ячейках сетки, не в пикселях.
@@ -41,7 +48,7 @@ myWidget: {
   title: 'Название',                 // в меню «+ Виджет» и в тулбаре блока
   size: { w, h }, min: { w, h },     // размер по умолчанию и минимальный (в ячейках)
   defaults: { glass: true, ... },    // дефолтный data
-  settings: [ { key, label, type: 'toggle'|'select'|'text'|'links', options? } ],
+  settings: [ { key, label, type: 'toggle'|'select'|'text'|'links'|'align', options? } ],
   render(body, data, ctx) {          // body — .w-body (container-type: size)
     // ctx.save()      — сохранить layout (после мутации data)
     // ctx.rerender()  — перерисовать этот виджет
@@ -54,6 +61,7 @@ myWidget: {
 - Размеры контента внутри виджета — через container query единицы (`cqw`, `cqh`) и `@container`, чтобы блок масштабировался при ресайзе.
 - В режиме редактирования `.w-body` получает `pointer-events: none` (чтобы блок таскался), тулбар `.w-tools` исключён из drag через `draggable.cancel`.
 - Новые типы полей настроек добавляются в `openModal()` в `app.js`.
+- Системных `<select>` нет: `select` с ≤3 вариантами рисуется сегментами (`segmented()`), больше — своим списком (`dropdown()`, список рендерится в `body`, иначе `.modal` с `overflow`/`backdrop-filter` его обрежет). `align` — схема 3×3, значения `top|middle|bottom-left|center|right` (`normAlign()` понимает старые `left/center/right`).
 
 ## Режим редактирования
 `body.editing` + `grid.setStatic(false)`. Хоткей `E` (и `У` в русской раскладке), `Esc` — выход. Точки сетки — `#guides` (CSS-фон с `--cw/--ch`).
@@ -66,6 +74,7 @@ myWidget: {
 
 ## Грабли
 - Внутри `.clock-time` градиент через `background-clip: text` — у вложенных `span` задавай `color` явно, иначе они невидимы.
+- На `body` стоит `font-feature-settings: 'tnum' 0`, а оно перебивает `font-variant-numeric: tabular-nums`. Нужны моноширинные цифры — пиши `font-feature-settings: 'tnum' 1`. Для основного времени часов tnum не включать: единица становится слишком широкой.
 - Иконки сайтов: Google s2 → favicon.yandex.net → буква-монограмма. Внутренний `_favicon` Chrome отдаёт серый глобус для непосещённых сайтов — поэтому не используется.
 - `chrome.storage.local` без `unlimitedStorage` — 10 МБ; фон-картинка ужимается до 2560px JPEG.
 - Если нужен `chrome.storage.sync`: лимит ~100 КБ всего и 8 КБ на ключ — картинки туда нельзя.

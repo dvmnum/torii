@@ -96,31 +96,38 @@ const Widgets = {
   clock: {
     title: 'Часы',
     size: { w: 10, h: 4 }, min: { w: 3, h: 2 },
-    defaults: { glass: false, format: '24', seconds: false, greeting: true, date: true, align: 'center' },
+    defaults: { glass: false, style: 'digital', format: '24', seconds: false, greeting: true, date: true, align: 'middle-center' },
     settings: [
+      { key: 'style', label: 'Вид', type: 'select', options: [['digital', 'Цифровые'], ['analog', 'Стрелочные']] },
       { key: 'format', label: 'Формат', type: 'select', options: [['24', '24 часа'], ['12', '12 часов']] },
       { key: 'seconds', label: 'Секунды', type: 'toggle' },
       { key: 'greeting', label: 'Приветствие', type: 'toggle' },
       { key: 'date', label: 'Дата', type: 'toggle' },
-      { key: 'align', label: 'Выравнивание', type: 'select', options: [['left', 'Слева'], ['center', 'По центру'], ['right', 'Справа']] },
+      { key: 'align', label: 'Выравнивание', type: 'align' },
       GLASS_SETTING,
     ],
     render(body, data, ctx) {
-      const time = h('div', { class: 'clock-time' });
+      data.align = normAlign(data.align);
+      const [v, hz] = data.align.split('-');
+      const analog = data.style === 'analog';
+      const time = analog ? analogFace(data.seconds) : h('div', { class: 'clock-time' });
       const sub = h('div', { class: 'clock-sub' });
-      body.append(h('div', { class: `w-clock align-${data.align}` }, time, sub));
+      body.append(h('div', { class: `w-clock v-${v} h-${hz}` + (analog ? ' is-analog' : '') }, time, sub));
 
       const greet = (hr) => hr < 5 ? 'Доброй ночи' : hr < 12 ? 'Доброе утро' : hr < 18 ? 'Добрый день' : 'Добрый вечер';
       const tick = () => {
         const d = new Date();
-        let hr = d.getHours();
-        const mm = String(d.getMinutes()).padStart(2, '0');
-        let suffix = '';
-        if (data.format === '12') { suffix = hr >= 12 ? 'PM' : 'AM'; hr = hr % 12 || 12; }
-        const hh = data.format === '12' ? String(hr) : String(hr).padStart(2, '0');
-        time.innerHTML = `${hh}<span class="colon">:</span>${mm}` +
-          (data.seconds ? `<span class="sec">${String(d.getSeconds()).padStart(2, '0')}</span>` : '') +
-          (suffix ? `<span class="ampm">${suffix}</span>` : '');
+        if (analog) time.set(d);
+        else {
+          let hr = d.getHours();
+          const mm = String(d.getMinutes()).padStart(2, '0');
+          let suffix = '';
+          if (data.format === '12') { suffix = hr >= 12 ? 'PM' : 'AM'; hr = hr % 12 || 12; }
+          const hh = data.format === '12' ? String(hr) : String(hr).padStart(2, '0');
+          time.innerHTML = `${hh}<span class="colon">:</span>${mm}` +
+            (data.seconds ? `<span class="sec">${String(d.getSeconds()).padStart(2, '0')}</span>` : '') +
+            (suffix ? `<span class="ampm">${suffix}</span>` : '');
+        }
         const parts = [];
         if (data.greeting) {
           const name = ctx.settings().name;
@@ -150,8 +157,11 @@ const Widgets = {
       const eng = () => ENGINES[data.engine] || ENGINES.yandex;
       const engineBtn = h('button', { type: 'button', class: 'engine', title: 'Сменить поисковик' });
       const input = h('input', { type: 'text', class: 'search-input', autocomplete: 'off', spellcheck: 'false', 'data-search': '' });
-      const kbd = h('kbd', {}, '/');
-      const form = h('form', { class: 'w-search' }, engineBtn, input, kbd);
+      const go = h('button', { type: 'submit', class: 'search-go', title: 'Искать (Enter)', tabindex: '-1' },
+        h('span', {}, 'Enter'),
+        h('span', { html: '<svg viewBox="0 0 24 24"><path d="M19 5v7a3 3 0 0 1-3 3H5"/><path d="M9 11l-4 4 4 4"/></svg>' }));
+      const form = h('form', { class: 'w-search' }, engineBtn, input, go);
+      input.addEventListener('input', () => form.classList.toggle('has-text', !!input.value.trim()));
 
       const paint = () => {
         const ico = favicon(eng().home, eng().name, 64);
@@ -265,49 +275,117 @@ const Widgets = {
       const box = h('div', { class: 'w-weather is-loading' }, h('div', { class: 'w-muted' }, 'Смотрю в окно…'));
       body.append(box);
       let alive = true;
-      loadWeather(data.city).then((w) => {
-        if (!alive) return;
+      let retryT = null;
+      let attempt = 0;
+
+      const paint = (w, stale) => {
         const [desc, ico] = weatherInfo(w.code);
-        box.classList.remove('is-loading');
+        box.classList.remove('is-loading', 'is-error');
+        box.classList.toggle('is-stale', stale);
         box.replaceChildren(
           h('div', { class: 'wx-ico', html: ICONS[ico] }),
           h('div', { class: 'wx-main' },
             h('div', { class: 'wx-temp' }, `${Math.round(w.temp)}°`),
             h('div', { class: 'wx-meta' },
               h('div', { class: 'wx-desc' }, desc),
-              h('div', { class: 'w-muted' }, `${w.place} · ${Math.round(w.max)}° / ${Math.round(w.min)}°`),
+              h('div', { class: 'w-muted' }, stale ? `${w.place} · нет сети` : `${w.place} · ${Math.round(w.max)}° / ${Math.round(w.min)}°`),
             ),
           ),
         );
-      }).catch((e) => {
-        if (!alive) return;
-        console.warn('[weather]', e);
+      };
+      const fail = (text) => {
         box.classList.remove('is-loading');
-        box.replaceChildren(h('div', { class: 'w-muted' }, `Не нашёл погоду для «${data.city}»`));
-      });
-      return { destroy: () => { alive = false; } };
+        box.classList.add('is-error');
+        box.replaceChildren(h('div', { class: 'wx-ico', html: ICONS.cloud }), h('div', { class: 'w-muted' }, text));
+      };
+      // 15с, 30с, 1м, 2м … но не реже раза в 10 минут
+      const retryLater = () => {
+        clearTimeout(retryT);
+        retryT = setTimeout(load, Math.min(15000 * 2 ** attempt++, 600000));
+      };
+      function load() {
+        clearTimeout(retryT);
+        loadWeather(data.city).then(({ w, stale }) => {
+          if (!alive) return;
+          paint(w, stale);
+          if (stale) retryLater(); else attempt = 0;
+        }).catch((e) => {
+          if (!alive) return;
+          if (e.code === 'notfound') return fail(`Не знаю город «${data.city}»`);
+          console.info('[weather] нет сети, повторю позже:', e.message);
+          fail('Нет связи с погодой');
+          retryLater();
+        });
+      }
+      const onOnline = () => { attempt = 0; load(); };
+      window.addEventListener('online', onOnline);
+      load();
+      return { destroy: () => { alive = false; clearTimeout(retryT); window.removeEventListener('online', onOnline); } };
     },
   },
 };
 
+// → { w, stale }. Без сети отдаёт старый кэш (не старше суток) со stale: true.
+// Ошибка с code 'notfound' — город не найден, повторять бессмысленно; остальные — сеть.
 async function loadWeather(city) {
   const key = 'wx:' + city.toLowerCase();
   const cached = await Store.get(key, null);
-  if (cached && Date.now() - cached.at < 30 * 60 * 1000) return cached.w;
+  if (cached && Date.now() - cached.at < 30 * 60 * 1000) return { w: cached.w, stale: false };
 
-  const geo = await fetch(`https://geocoding-api.open-meteo.com/v1/search?count=1&language=ru&name=${encodeURIComponent(city)}`).then(r => r.json());
-  const p = geo.results && geo.results[0];
-  if (!p) throw new Error('city not found');
-  const f = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1`).then(r => r.json());
-  const w = {
-    place: p.name,
-    temp: f.current.temperature_2m,
-    code: f.current.weather_code,
-    max: f.daily.temperature_2m_max[0],
-    min: f.daily.temperature_2m_min[0],
+  const get = (u) => fetch(u, { signal: AbortSignal.timeout(8000) }).then((r) => {
+    if (!r.ok) throw new Error('http ' + r.status);
+    return r.json();
+  });
+  try {
+    const geo = await get(`https://geocoding-api.open-meteo.com/v1/search?count=1&language=ru&name=${encodeURIComponent(city)}`);
+    const p = geo.results && geo.results[0];
+    if (!p) throw Object.assign(new Error('city not found'), { code: 'notfound' });
+    const f = await get(`https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1`);
+    const w = {
+      place: p.name,
+      temp: f.current.temperature_2m,
+      code: f.current.weather_code,
+      max: f.daily.temperature_2m_max[0],
+      min: f.daily.temperature_2m_min[0],
+    };
+    Store.set(key, { at: Date.now(), w });
+    return { w, stale: false };
+  } catch (e) {
+    if (e.code !== 'notfound' && cached && Date.now() - cached.at < 24 * 3600 * 1000) return { w: cached.w, stale: true };
+    throw e;
+  }
+}
+
+// выравнивание по схеме 3×3: 'top|middle|bottom' + '-' + 'left|center|right'; старые 'left'/'center'/'right' → средний ряд
+function normAlign(a) {
+  if (/^(top|middle|bottom)-(left|center|right)$/.test(a)) return a;
+  return 'middle-' + (['left', 'right'].includes(a) ? a : 'center');
+}
+
+// циферблат: SVG + set(date)
+function analogFace(withSeconds) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 100 100');
+  svg.setAttribute('class', 'clock-face');
+  let marks = '';
+  for (let i = 0; i < 60; i++) {
+    const big = i % 5 === 0;
+    marks += `<line class="${big ? 'mk-h' : 'mk-m'}" x1="50" y1="${big ? 5.5 : 5}" x2="50" y2="${big ? 11 : 7.2}" transform="rotate(${i * 6} 50 50)"/>`;
+  }
+  svg.innerHTML = `<circle class="face" cx="50" cy="50" r="48"/>${marks}` +
+    '<line class="hand hand-h" x1="50" y1="54" x2="50" y2="27"/>' +
+    '<line class="hand hand-m" x1="50" y1="56" x2="50" y2="14"/>' +
+    (withSeconds ? '<line class="hand hand-s" x1="50" y1="60" x2="50" y2="9"/>' : '') +
+    '<circle class="pin" cx="50" cy="50" r="2.2"/>';
+  const [hh, mm, ss] = ['.hand-h', '.hand-m', '.hand-s'].map(s => svg.querySelector(s));
+  svg.set = (d) => {
+    const s = d.getSeconds(), m = d.getMinutes() + s / 60, hr = (d.getHours() % 12) + m / 60;
+    hh.setAttribute('transform', `rotate(${hr * 30} 50 50)`);
+    mm.setAttribute('transform', `rotate(${m * 6} 50 50)`);
+    ss?.setAttribute('transform', `rotate(${s * 6} 50 50)`);
   };
-  Store.set(key, { at: Date.now(), w });
-  return w;
+  return svg;
 }
 
 function escapeHtml(s) {

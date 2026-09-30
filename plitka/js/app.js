@@ -33,10 +33,91 @@
     { id: 'w-notes', type: 'notes', x: 19, y: 0, w: 5, h: 6 },
   ];
 
-  let settings = { ...DEFAULT_SETTINGS, ...(await Store.get('settings', {})) };
-  let layout = await Store.get('layout', null);
-  if (!Array.isArray(layout) || !layout.length) layout = structuredClone(DEFAULT_LAYOUT);
+  // Раскладки по ширине окна. sm — блоки стопкой, своей раскладки нет; md и lg хранятся отдельно.
+  // Пока у диапазона нет своей раскладки, он показывает ближайшую (SOURCES) и форкает её при первой правке.
+  const bucketOf = (w) => w < 700 ? 'sm' : w < 1400 ? 'md' : 'lg';
+  const SOURCES = { sm: ['md', 'lg'], md: ['md', 'lg'], lg: ['lg', 'md'] };
+  const geom = (n) => ({ x: n.x, y: n.y, w: n.w, h: n.h });
+  const stripGeom = (list) => list.map(({ id, type, data }) => ({ id, type, data }));
+
+  let settings = cleanSettings(await Store.get('settings', {}));
+  // layout — общие для всех экранов виджеты { id, type, data } + x/y/w/h текущего диапазона;
+  // layouts — { md?, lg? }: позиции { [id]: { x, y, w, h } }
+  let { widgets: layout, layouts } = await loadState();
   layout.forEach(fillDefaults);
+  let bucket = bucketOf(window.innerWidth);
+
+  async function loadState() {
+    let st = cleanState(await Store.get('widgets', null), await Store.get('layouts', null));
+    if (!st) {
+      // миграция с v0.1: одна раскладка на все экраны → становится lg
+      const legacy = fromLegacy(await Store.get('layout', null));
+      st = cleanState(legacy.widgets, legacy.layouts);
+      if (st) {
+        await Store.set('widgets', stripGeom(st.widgets));
+        await Store.set('layouts', st.layouts);
+        await Store.remove('layout');
+      }
+    }
+    return st || defaultState();
+  }
+
+  function defaultState() {
+    return {
+      widgets: DEFAULT_LAYOUT.map(({ id, type }) => ({ id, type, data: {} })),
+      layouts: { lg: Object.fromEntries(DEFAULT_LAYOUT.map(i => [i.id, geom(i)])) },
+    };
+  }
+
+  function fromLegacy(arr) {
+    if (!Array.isArray(arr)) return {};
+    return { widgets: arr, layouts: { lg: Object.fromEntries(arr.filter(i => i && typeof i.id === 'string').map(i => [i.id, i])) } };
+  }
+
+  // Всё, что пришло из хранилища или файла, — недоверенное: чистим, а не падаем.
+  function cleanSettings(raw) {
+    const s = { ...DEFAULT_SETTINGS };
+    if (!raw || typeof raw !== 'object') return s;
+    for (const k in DEFAULT_SETTINGS) {
+      const v = raw[k];
+      if (k === 'bgImage') s.bgImage = typeof v === 'string' && v.startsWith('data:image/') ? v : null;
+      else if (typeof v === typeof DEFAULT_SETTINGS[k] && (typeof v !== 'number' || Number.isFinite(v))) s[k] = v;
+    }
+    if (!BACKGROUNDS[s.bg]) s.bg = DEFAULT_SETTINGS.bg;
+    return s;
+  }
+
+  // → { widgets, layouts } или null, если спасать нечего
+  function cleanState(rawWidgets, rawLayouts) {
+    if (!Array.isArray(rawWidgets)) return null;
+    const ids = new Set();
+    const widgets = [];
+    for (const it of rawWidgets) {
+      if (!it || !Widgets[it.type]) continue;
+      let id = typeof it.id === 'string' && it.id ? it.id : 'w-' + Math.random().toString(36).slice(2, 9);
+      while (ids.has(id)) id += '-' + Math.random().toString(36).slice(2, 5);
+      ids.add(id);
+      widgets.push({ id, type: it.type, data: it.data && typeof it.data === 'object' && !Array.isArray(it.data) ? it.data : {} });
+    }
+    if (!widgets.length) return null;
+
+    const int = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || 0)));
+    const layouts = {};
+    for (const b of ['md', 'lg']) {
+      const m = rawLayouts && rawLayouts[b];
+      if (!m || typeof m !== 'object') continue;
+      layouts[b] = {};
+      for (const { id, type } of widgets) {
+        const p = m[id];
+        if (!p || typeof p !== 'object') continue; // нет позиции — gridstack найдёт место сам
+        const min = Widgets[type].min;
+        const w = int(p.w, min.w, COLS);
+        const hh = int(p.h, min.h, ROWS);
+        layouts[b][id] = { x: int(p.x, 0, COLS - w), y: int(p.y, 0, ROWS - hh), w, h: hh };
+      }
+    }
+    return { widgets, layouts };
+  }
 
   function fillDefaults(item) {
     const def = Widgets[item.type];
@@ -58,6 +139,11 @@
   }
   applyTheme();
 
+  // вкладка в фоне — фон не анимируем
+  const syncHidden = () => document.body.classList.toggle('tab-hidden', document.hidden);
+  document.addEventListener('visibilitychange', syncHidden);
+  syncHidden();
+
   // ---------- сетка ----------
   const cellH = () => Math.floor((window.innerHeight - PAD * 2) / ROWS);
 
@@ -76,7 +162,10 @@
 
   const live = new Map(); // id -> { el, body, inst }
 
-  const saveLayout = debounce(() => Store.set('layout', layout), 250);
+  const saveLayout = debounce(() => {
+    Store.set('widgets', stripGeom(layout));
+    Store.set('layouts', layouts);
+  }, 250);
   const saveSettings = debounce(() => Store.set('settings', settings), 250);
 
   function ctxFor(item) {
@@ -98,8 +187,12 @@
     rec.inst = Widgets[item.type].render(rec.body, item.data, ctxFor(item)) || null;
   }
 
-  function mountWidget(item, autoPosition = false) {
+  // pos — где стоять; без неё gridstack сам ищет свободное место
+  function mountWidget(item, pos) {
     const def = Widgets[item.type];
+    const autoPosition = !pos;
+    if (pos) Object.assign(item, pos);
+    else if (!item.w) Object.assign(item, def.size);
     const body = h('div', { class: 'w-body' });
     const tools = h('div', { class: 'w-tools' },
       h('span', { class: 'w-name' }, def.title),
@@ -120,22 +213,78 @@
     return el;
   }
 
-  grid.batchUpdate();
-  layout.forEach((it) => mountWidget(it));
-  grid.batchUpdate(false);
+  // позиции, которые сейчас на экране: своя раскладка диапазона или ближайшая
+  function shownPositions() {
+    const src = SOURCES[bucket].find(b => layouts[b]);
+    return src ? layouts[src] : (layouts[bucket === 'sm' ? 'md' : bucket] = {});
+  }
+  let shown = null;
+
+  // геометрия из gridstack → в item, плюс порядок и высота для стопки на узком экране
+  function syncGeom(item) {
+    const rec = live.get(item.id);
+    const n = rec?.el.gridstackNode;
+    if (!n) return;
+    Object.assign(item, geom(n));
+    rec.el.style.setProperty('--order', item.y * COLS + item.x);
+    rec.el.style.setProperty('--h', item.h);
+  }
+
+  let mounting = false;
+  function mountAll() {
+    shown = shownPositions();
+    mounting = true;
+    grid.batchUpdate();
+    for (const it of layout) mountWidget(it, shown[it.id]);
+    grid.batchUpdate(false);
+    mounting = false;
+    for (const it of layout) {
+      syncGeom(it);
+      // блока в этой раскладке не было — запоминаем, куда его поставил gridstack
+      if (!shown[it.id]) { shown[it.id] = geom(it); saveLayout(); }
+    }
+  }
+
+  function unmountAll() {
+    for (const rec of live.values()) rec.inst?.destroy?.();
+    live.clear();
+    grid.removeAll();
+  }
+
+  // пользователь что-то поменял — у текущего диапазона теперь своя раскладка
+  function commitPositions() {
+    if (bucket === 'sm') return;
+    shown = layouts[bucket] = Object.fromEntries(layout.map(i => [i.id, geom(i)]));
+    saveLayout();
+  }
+
+  document.body.classList.toggle('narrow', bucket === 'sm');
+  mountAll();
 
   grid.on('change', (_e, nodes) => {
     for (const n of nodes || []) {
       const it = layout.find(i => i.id === n.id);
-      if (it) Object.assign(it, { x: n.x, y: n.y, w: n.w, h: n.h });
+      if (it) syncGeom(it);
     }
-    saveLayout();
+    if (!mounting) commitPositions();
   });
+
+  function applyBucket() {
+    const b = bucketOf(window.innerWidth);
+    if (b === bucket) return;
+    bucket = b;
+    document.body.classList.toggle('narrow', b === 'sm');
+    if (b === 'sm' && editing) setEditing(false);
+    // перерисовываем, только если на экран должна встать другая раскладка
+    if (shownPositions() !== shown) { unmountAll(); mountAll(); }
+  }
 
   window.addEventListener('resize', debounce(() => {
     grid.cellHeight(cellH());
     drawGuides();
   }, 80));
+  // раскладку меняем, когда окно перестали тянуть, — чтобы блоки не прыгали на границе
+  window.addEventListener('resize', debounce(applyBucket, 250));
 
   // ---------- режим редактирования ----------
   let editing = false;
@@ -150,6 +299,7 @@
   }
 
   function setEditing(on) {
+    if (on && bucket === 'sm') { toast('Окно слишком узкое — растяни его, чтобы двигать блоки'); return; }
     editing = on;
     document.body.classList.toggle('editing', on);
     grid.setStatic(!on);
@@ -178,14 +328,14 @@
       if (!grid.willItFit({ w: item.w, h: item.h })) { toast('Места нет — освободи немного'); return; }
     }
     layout.push(item);
-    const el = mountWidget(item, true);
-    const n = el.gridstackNode;
-    Object.assign(item, { x: n.x, y: n.y, w: n.w, h: n.h });
-    saveLayout();
+    const el = mountWidget(item);
+    syncGeom(item);
+    commitPositions(); // в других диапазонах блок появится там, где найдётся место
     el.classList.add('just-added');
     setTimeout(() => el.classList.remove('just-added'), 900);
   }
 
+  // удаление общее для всех экранов
   function removeWidget(item) {
     const rec = live.get(item.id);
     if (!rec) return;
@@ -193,10 +343,15 @@
     grid.removeWidget(rec.el);
     live.delete(item.id);
     layout = layout.filter(i => i.id !== item.id);
+    const was = {};
+    for (const [b, m] of Object.entries(layouts)) if (m[item.id]) { was[b] = m[item.id]; delete m[item.id]; }
     saveLayout();
     toast(`«${Widgets[item.type].title}» удалён`, 'Вернуть', () => {
+      for (const b in was) if (layouts[b]) layouts[b][item.id] = was[b];
       layout.push(item);
-      mountWidget(item);
+      mountWidget(item, shown[item.id]);
+      syncGeom(item);
+      if (!shown[item.id]) shown[item.id] = geom(item);
       saveLayout();
     });
   }
@@ -232,10 +387,14 @@
         control = h('label', { class: 'field field-toggle', for: id }, h('span', {}, f.label), h('span', { class: 'switch' }, inp, h('i')));
         getters[f.key] = () => inp.checked;
       } else if (f.type === 'select') {
-        const sel = h('select', { id }, f.options.map(([v, t]) => h('option', { value: v }, t)));
-        sel.value = f.value ?? f.options[0][0];
-        control = h('label', { class: 'field', for: id }, h('span', {}, f.label), sel);
-        getters[f.key] = () => sel.value;
+        // до трёх вариантов — сегменты (всё видно сразу), больше — выпадающий список
+        const c = f.options.length <= 3 ? segmented(f.options, f.value) : dropdown(f.options, f.value);
+        control = h('div', { class: 'field' }, h('span', {}, f.label), c.el);
+        getters[f.key] = c.get;
+      } else if (f.type === 'align') {
+        const c = alignPicker(f.value);
+        control = h('div', { class: 'field field-row' }, h('span', {}, f.label), c.el);
+        getters[f.key] = c.get;
       } else if (f.type === 'links') {
         const list = structuredClone(f.value || []);
         const box = h('div', { class: 'links-editor' });
@@ -273,7 +432,105 @@
     modal.classList.add('open');
     setTimeout(() => modalForm.querySelector('input[type=text], select')?.focus(), 30);
   }
-  function closeModal() { modal.classList.remove('open'); }
+  function closeModal() { closeDropdown?.(); modal.classList.remove('open'); }
+
+  // ---------- свои контролы вместо системных ----------
+  // каждый → { el, get() }
+
+  function segmented(options, value) {
+    let cur = options.some(([v]) => v === value) ? value : options[0][0];
+    const btns = options.map(([v, t]) => h('button', { type: 'button', class: 'seg-btn', role: 'radio', onclick: () => { cur = v; paint(); } }, t));
+    const paint = () => btns.forEach((b, i) => {
+      const on = options[i][0] === cur;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-checked', on);
+    });
+    paint();
+    return { el: h('div', { class: 'seg', role: 'radiogroup' }, btns), get: () => cur };
+  }
+
+  let closeDropdown = null; // открыт максимум один список
+  function dropdown(options, value) {
+    let cur = options.some(([v]) => v === value) ? value : options[0][0];
+    const label = h('span', { class: 'dd-label' });
+    const btn = h('button', { type: 'button', class: 'dd-btn', 'aria-haspopup': 'listbox' }, label,
+      h('span', { class: 'dd-chev', html: '<svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>' }));
+    const paint = () => { label.textContent = options.find(([v]) => v === cur)[1]; };
+    paint();
+
+    let hi = 0;
+    // список живёт в body: .modal с overflow и backdrop-filter обрезала бы его
+    const list = h('div', { class: 'dd-list', role: 'listbox' });
+    const items = options.map(([v, t], i) => h('button', {
+      type: 'button', class: 'dd-item', role: 'option', tabindex: '-1',
+      onmousemove: () => highlight(i),
+      onclick: () => pick(i),
+    }, t));
+    list.append(...items);
+    const highlight = (i) => { hi = (i + items.length) % items.length; items.forEach((it, j) => it.classList.toggle('hi', j === hi)); };
+    const pick = (i) => { cur = options[i][0]; paint(); close(); btn.focus(); };
+
+    const onOutside = (e) => { if (!list.contains(e.target) && !btn.contains(e.target)) close(); };
+    function open() {
+      closeDropdown?.();
+      const r = btn.getBoundingClientRect();
+      const below = window.innerHeight - r.bottom > options.length * 40 + 16;
+      list.style.cssText = `left:${r.left}px;width:${r.width}px;` + (below ? `top:${r.bottom + 6}px` : `bottom:${window.innerHeight - r.top + 6}px`);
+      items.forEach((it, i) => it.classList.toggle('sel', options[i][0] === cur));
+      highlight(options.findIndex(([v]) => v === cur));
+      document.body.append(list);
+      requestAnimationFrame(() => list.classList.add('open'));
+      btn.classList.add('open');
+      btn.setAttribute('aria-expanded', 'true');
+      document.addEventListener('mousedown', onOutside, true);
+      closeDropdown = close;
+    }
+    function close() {
+      list.classList.remove('open');
+      list.remove();
+      btn.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('mousedown', onOutside, true);
+      if (closeDropdown === close) closeDropdown = null;
+    }
+    const isOpen = () => list.isConnected;
+
+    btn.addEventListener('click', () => isOpen() ? close() : open());
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!isOpen()) return open();
+        highlight(hi + (e.key === 'ArrowDown' ? 1 : -1));
+      } else if ((e.key === 'Enter' || e.key === ' ') && isOpen()) {
+        e.preventDefault();
+        pick(hi);
+      } else if (e.key === 'Escape' && isOpen()) {
+        e.stopPropagation(); // закрыть список, а не модалку
+        close();
+      }
+    });
+    return { el: h('div', { class: 'dd' }, btn), get: () => cur };
+  }
+
+  function alignPicker(value) {
+    let cur = normAlign(value);
+    const cells = [];
+    for (const v of ['top', 'middle', 'bottom']) for (const hz of ['left', 'center', 'right']) {
+      const key = `${v}-${hz}`;
+      cells.push(h('button', {
+        type: 'button', class: 'al-cell', 'data-v': key, role: 'radio',
+        title: { top: 'Сверху', middle: 'По центру', bottom: 'Снизу' }[v] + ' · ' + { left: 'слева', center: 'по центру', right: 'справа' }[hz],
+        onclick: () => { cur = key; paint(); },
+      }, h('i')));
+    }
+    const paint = () => cells.forEach(c => {
+      const on = c.dataset.v === cur;
+      c.classList.toggle('active', on);
+      c.setAttribute('aria-checked', on);
+    });
+    paint();
+    return { el: h('div', { class: 'align-picker', role: 'radiogroup' }, cells), get: () => cur };
+  }
   modal.addEventListener('mousedown', (e) => { if (e.target === modal) closeModal(); });
 
   // ---------- настройки ----------
@@ -371,20 +628,17 @@
   }
 
   function resetLayout() {
-    for (const rec of live.values()) rec.inst?.destroy?.();
-    live.clear();
-    grid.removeAll();
-    layout = structuredClone(DEFAULT_LAYOUT);
+    unmountAll();
+    ({ widgets: layout, layouts } = defaultState());
     layout.forEach(fillDefaults);
-    grid.batchUpdate();
-    layout.forEach((it) => mountWidget(it));
-    grid.batchUpdate(false);
+    mountAll();
     saveLayout();
-    toast('Раскладка сброшена');
+    toast('Раскладка сброшена на всех экранах');
   }
 
   function exportAll() {
-    const blob = new Blob([JSON.stringify({ app: 'plitka', v: 1, settings, layout }, null, 2)], { type: 'application/json' });
+    const data = { app: 'plitka', v: 2, settings, widgets: stripGeom(layout), layouts };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = h('a', { href: URL.createObjectURL(blob), download: 'plitka-backup.json' });
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -392,12 +646,19 @@
 
   async function importAll(file) {
     try {
+      if (file.size > 30 * 1024 * 1024) throw new Error('too big');
       const d = JSON.parse(await file.text());
-      if (d.app !== 'plitka') throw new Error('not a plitka file');
-      await Store.set('settings', d.settings);
-      await Store.set('layout', d.layout);
+      if (!d || d.app !== 'plitka') throw new Error('not a plitka file');
+      const src = d.widgets ? d : fromLegacy(d.layout); // v1: один общий layout
+      const st = cleanState(src.widgets, src.layouts);
+      if (!st) throw new Error('no widgets');
+      await Store.set('settings', cleanSettings(d.settings));
+      await Store.set('widgets', stripGeom(st.widgets));
+      await Store.set('layouts', st.layouts);
+      await Store.remove('layout');
       location.reload();
     } catch (e) {
+      console.info('[import]', e.message);
       toast('Это не мой бэкап, не могу прочитать');
     }
   }
@@ -421,7 +682,7 @@
       if (typing) e.target.blur();
       return;
     }
-    if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (typing || e.ctrlKey || e.metaKey || e.altKey || modal.classList.contains('open')) return;
     if (e.key === 'e' || e.key === 'E' || e.key === 'у' || e.key === 'У') { e.preventDefault(); setEditing(!editing); }
     if (e.key === '/') {
       const s = document.querySelector('[data-search]');
@@ -435,5 +696,5 @@
   }
 
   requestAnimationFrame(() => document.body.classList.remove('is-loading'));
-  window.__plitka = { grid, get layout() { return layout; }, settings: () => settings, setEditing };
+  window.__plitka = { grid, get layout() { return layout; }, get layouts() { return layouts; }, get bucket() { return bucket; }, settings: () => settings, setEditing };
 })();
