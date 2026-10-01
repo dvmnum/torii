@@ -14,7 +14,7 @@ const page = await ctx.newPage();
 page.on('console', m => console.log(`[${m.type()}] ${m.text()}`));
 page.on('pageerror', e => console.log('[pageerror]', e.stack || e.message));
 await page.goto('chrome://extensions');
-const id = await page.evaluate(() => new Promise(r => chrome.management.getAll(l => r(l.find(x => x.name.startsWith('Plitka'))?.id))));
+const id = await page.evaluate(() => new Promise(r => chrome.management.getAll(l => r(l.find(x => x.name.startsWith('Torii'))?.id))));
 await page.goto(`chrome-extension://${id}/newtab.html`);
 await page.waitForTimeout(2000);
 console.log('widgets:', await page.locator('.grid-stack-item').count());

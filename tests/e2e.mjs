@@ -27,7 +27,7 @@ page.on('pageerror', e => errors.push('[pageerror] ' + e.message));
 
 // id расширения
 await page.goto('chrome://extensions');
-const id = await page.evaluate(() => new Promise(r => chrome.management.getAll(l => r(l.find(x => x.name.startsWith('Plitka'))?.id))));
+const id = await page.evaluate(() => new Promise(r => chrome.management.getAll(l => r(l.find(x => x.name.startsWith('Torii'))?.id))));
 console.log('ext id', id);
 const url = `chrome-extension://${id}/newtab.html`;
 // вкладки панели настроек: фон, эффекты, блоки, вкладка, ещё
@@ -1138,7 +1138,7 @@ const tip = await page.evaluate(() => { const r = document.querySelector('.tip.o
 check(tip && tip.l >= 0 && tip.r <= 1600 && tip.t >= 0 && tip.b <= 900, `подсказка ⓘ целиком на экране (${JSON.stringify(tip)})`);
 await page.screenshot({ path: `${out}/63-info-tip.png` });
 await ptab('more');
-check(await page.locator('.action-card:has-text("Изменить раскладку")').count() === 1 && await page.locator('.hotkeys kbd').count() >= 6 && await page.locator('.panel-footer:has-text("Plitka")').count() === 1, 'ещё: карточка раскладки, клавиши, подвал с названием');
+check(await page.locator('.action-card:has-text("Изменить раскладку")').count() === 1 && await page.locator('.hotkeys kbd').count() >= 6 && await page.locator('.panel-footer:has-text("Torii")').count() === 1, 'ещё: карточка раскладки, клавиши, подвал с названием');
 await page.screenshot({ path: `${out}/58-more.png` });
 await page.click('.panel [data-close]');
 await page.evaluate((u) => chrome.storage.local.set({ settings: { bgImage: u } }), photoUrl);

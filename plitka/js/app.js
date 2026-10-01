@@ -7,7 +7,7 @@
   const ACCENTS = ['#9b8cff', '#5cc8ff', '#b4f05a', '#ff7a9c', '#ffc35c', '#f2f2f2'];
 
   // иконка вкладки: часы и помодоро — «живые», перерисовываются
-  const TAB_ICONS = [['logo', 'Plitka'], ['emoji', 'Эмодзи'], ['letter', 'Буква'], ['clock', 'Часы'], ['pomodoro', 'Помодоро'], ['image', 'Своя']];
+  const TAB_ICONS = [['logo', 'Torii'], ['emoji', 'Эмодзи'], ['letter', 'Буква'], ['clock', 'Часы'], ['pomodoro', 'Помодоро'], ['image', 'Своя']];
   // шрифт и тень текста в блоках: глобально и с переопределением у блока («Как везде»)
   const FONT_STACK = {
     manrope: "'Manrope', system-ui, sans-serif",
@@ -61,7 +61,7 @@
     mesh: DEFAULT_MESH,
     photo: DEFAULT_PHOTO,
     fx: Mesh.FX_DEFAULTS,
-    tab: { title: 'Новая вкладка', icon: 'logo', emoji: '🌙', letter: 'P', image: null },
+    tab: { title: 'Новая вкладка', icon: 'logo', emoji: '🌙', letter: 'T', image: null },
     text: { font: 'manrope', shadow: 'none' },
     slides: { on: false, items: [], every: 'tab', order: 'seq', idx: -1, at: 0 },
     lang: 'auto', // язык интерфейса: auto (как в браузере) | ru | en
@@ -1484,7 +1484,7 @@
   // подвал панели — название и версия, без маркетинга
   panel.append(h('footer', { class: 'panel-footer' },
     h('img', { src: 'icons/icon32.png', alt: '' }),
-    h('span', {}, h('b', {}, 'Plitka'), ' ', chrome.runtime?.getManifest?.().version || '')));
+    h('span', {}, h('b', {}, 'Torii'), ' ', chrome.runtime?.getManifest?.().version || '')));
 
   function renderSettings() {
     meshPreview?.destroy();
@@ -1923,9 +1923,9 @@
   }
 
   function exportAll() {
-    const data = { app: 'plitka', v: 2, settings, widgets: stripGeom(layout), layouts };
+    const data = { app: 'torii', v: 2, settings, widgets: stripGeom(layout), layouts };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const a = h('a', { href: URL.createObjectURL(blob), download: 'plitka-backup.json' });
+    const a = h('a', { href: URL.createObjectURL(blob), download: 'torii-backup.json' });
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
@@ -1934,7 +1934,7 @@
     try {
       if (file.size > 30 * 1024 * 1024) throw new Error('too big');
       const d = JSON.parse(await file.text());
-      if (!d || d.app !== 'plitka') throw new Error('not a plitka file');
+      if (!d || !['torii', 'plitka'].includes(d.app)) throw new Error('not a torii file'); // plitka — старое название, бэкапы те же
       const src = d.widgets ? d : fromLegacy(d.layout); // v1: один общий layout
       const st = cleanState(src.widgets, src.layouts);
       if (!st) throw new Error('no widgets');

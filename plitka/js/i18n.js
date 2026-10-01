@@ -19,7 +19,7 @@ const I18N = (() => {
     'Раскладка': 'Layout', 'Изменить раскладку': 'Edit layout', 'Двигать, растягивать, добавлять блоки': 'Move, resize and add blocks',
     'Сбросить раскладку': 'Reset layout', 'Точно? Нажми ещё раз': 'Sure? Click again', 'Раскладка сброшена на всех экранах': 'Layout reset on all screens',
     'Резервная копия': 'Backup', 'Настройки, блоки и раскладки — одним файлом. Пригодится при переезде на другой компьютер.': 'Settings, blocks and layouts in one file — handy when moving to another computer.',
-    'Сохранить файл': 'Save file', 'Загрузить': 'Load', 'Это не мой бэкап, не могу прочитать': "That's not a Plitka backup, can't read it",
+    'Сохранить файл': 'Save file', 'Загрузить': 'Load', 'Это не мой бэкап, не могу прочитать': "That's not a Torii backup, can't read it",
     'Клавиши': 'Shortcuts', 'Перейти к поиску': 'Focus search', 'Закрыть панель, выйти из редактора': 'Close panel, leave editor',
     'Поиск в новой вкладке': 'Search in a new tab', 'Поиск в инкогнито': 'Search in incognito',
     'Всё хранится у тебя': 'Everything stays on your device', 'Язык': 'Language', 'Как в браузере': 'Same as browser',
