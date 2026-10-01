@@ -7,6 +7,7 @@
   "scripts": {
     "test": "node tests/e2e.mjs",
     "debug": "node tests/debug.mjs",
+    "i18n": "node tests/i18n-scan.mjs",
     "zip": "node -e \"console.log('TODO: упаковка plitka/ в zip для стора')\""
   },
   "devDependencies": {

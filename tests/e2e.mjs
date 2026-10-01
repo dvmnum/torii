@@ -426,7 +426,7 @@ await page.screenshot({ path: `${out}/26-auto-ink-petal.png` });
 
 // вручную: светлый текст + своя подложка
 await openSettings('w-weather');
-check(await page.locator('.inspector .modal-sub:has-text("Оформление")').count() === 1, 'оформление: секция в настройках виджета');
+check(await page.locator('.inspector .modal-sub:has-text("Подложка")').count() === 1, 'оформление: секция в настройках виджета');
 await page.click('.inspector .seg-btn:has-text("Светлый")');
 await page.click('.inspector .color-btn');
 await page.waitForTimeout(200);
@@ -775,7 +775,7 @@ await page.waitForTimeout(300);
 check(await css(clockBody + ' .clock-sub', 'textShadow') !== 'none', 'текст: глобальная мягкая тень');
 check(/Georgia/.test(await css(clockBody, 'fontFamily')), 'текст: глобальный шрифт с засечками');
 await openSettings('w-clock');
-await page.click('.inspector .field:has-text("Тень текста") .dd-btn');
+await page.click('.inspector .field:has-text("Тень") .dd-btn');
 await page.click('body > .dd-list .dd-item:has-text("Нет")');
 await page.waitForTimeout(200);
 check(await css(clockBody + ' .clock-sub', 'textShadow') === 'none', 'текст: у блока своя тень («Нет») перебивает глобальную');
@@ -1060,10 +1060,10 @@ await page.evaluate((STRIPES) => chrome.storage.local.set({
 await page.reload();
 await page.waitForTimeout(1200);
 await openSettings('w-clock');
-await page.locator('.inspector .field-range:has-text("Скругление углов") input').fill('40');
+await page.locator('.inspector .field-range:has-text("Скругление") input').fill('40');
 await page.waitForTimeout(200);
 check(await page.$eval('.grid-stack-item[gs-id="w-clock"] .w', el => getComputedStyle(el).borderTopLeftRadius) === '40px', 'блок: своё скругление углов');
-await page.click('.inspector .field-range:has-text("Скругление углов") .mini-reset');
+await page.click('.inspector .field-range:has-text("Скругление") .mini-reset');
 await page.waitForTimeout(150);
 check(await page.$eval('.grid-stack-item[gs-id="w-clock"] .w', el => getComputedStyle(el).borderTopLeftRadius) === '22px', 'блок: «как везде» возвращает общее скругление');
 await page.keyboard.press('Escape');
@@ -1097,7 +1097,7 @@ await ptab('tab');
 await page.fill('input[data-greet="0"]', 'Йо, {имя}');
 await page.waitForTimeout(500);
 check((await page.textContent('.greet')) === 'Йо, Вова', `приветствие: своё с именем («${await page.textContent('.greet')}»)`);
-await page.click('.greets .text-btn');
+await page.click('.greets .add-line');
 await page.fill('input[data-greet="1"]', 'Ночь не для сна');
 // второе — только на текущее время суток: должно победить «любое время»
 const part = await page.evaluate(() => { const hr = new Date().getHours(); return hr < 5 ? 'Ночь' : hr < 12 ? 'Утро' : hr < 18 ? 'День' : hr < 23 ? 'Вечер' : 'Ночь'; });
@@ -1114,8 +1114,58 @@ await page.evaluate((u) => chrome.storage.local.set({ settings: { bgImage: u } }
 await page.reload();
 await page.waitForTimeout(1000);
 await page.click('#btn-settings');
-check(await page.locator('.bg-current').count() === 1 && await page.locator('.panel .mesh-editor').count() === 1, 'фон: превью своей картинки и редактор эффекта сразу, без кнопки');
+check(await page.locator('.panel .mesh-preview .bgc-actions').count() === 1 && await page.locator('.panel .mesh-editor').count() === 1 && await page.locator('.bg-current').count() === 0, 'фон: одно превью с эффектом, на нём «Заменить/Убрать», редактор сразу');
+await page.waitForTimeout(600);
 await page.screenshot({ path: `${out}/59-bg-photo.png` });
+await page.click('.panel [data-close]');
+await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
+
+// ---------- поиск внизу: «недавние» открываются вверх; панель закрывается кликом мимо ----------
+await page.evaluate(() => chrome.storage.local.set({
+  settings: {},
+  widgets: [{ id: 'w-search', type: 'search', data: { history: ['раз', 'два', 'три'] } }, { id: 'w-links', type: 'links', data: { gap: 'wide' } }],
+  layouts: { lg: { 'w-search': { x: 6, y: 11, w: 12, h: 1 }, 'w-links': { x: 6, y: 1, w: 12, h: 2 } } },
+}));
+await page.reload();
+await page.waitForTimeout(1000);
+await page.click('[data-search]');
+await page.waitForTimeout(200);
+const rb = await page.evaluate(() => {
+  const r = document.querySelector('.search-recent').getBoundingClientRect(), f = document.querySelector('.w-search').getBoundingClientRect();
+  return { above: r.bottom <= f.top + 1, inside: r.top >= 0 && r.bottom <= innerHeight };
+});
+check(rb.above && rb.inside, 'поиск внизу: «недавние» открылись вверх и видны целиком');
+await page.screenshot({ path: `${out}/60-search-bottom.png` });
+await page.keyboard.press('Escape');
+await page.evaluate(() => document.activeElement.blur());
+const gaps = await page.$$eval('.w-links .link', els => els.slice(0, 2).map(e => e.getBoundingClientRect()));
+check(gaps[1].left - gaps[0].right > 15, `ссылки: «Свободно» — заметный зазор (${Math.round(gaps[1].left - gaps[0].right)} px)`);
+await page.click('#btn-settings');
+await page.waitForTimeout(400);
+await page.mouse.click(300, 450);
+await page.waitForTimeout(300);
+check(!(await page.evaluate(() => document.getElementById('settings').classList.contains('open'))), 'панель: закрывается кликом мимо');
+
+// ---------- английский интерфейс ----------
+await page.evaluate(() => chrome.storage.local.set({
+  settings: { lang: 'en', name: 'Vova' },
+  widgets: [{ id: 'w-clock', type: 'clock', data: {} }, { id: 'w-search', type: 'search', data: {} }, { id: 'w-weather', type: 'weather', data: {} }],
+  layouts: { lg: { 'w-clock': { x: 7, y: 2, w: 10, h: 4 }, 'w-search': { x: 6, y: 7, w: 12, h: 1 }, 'w-weather': { x: 0, y: 0, w: 6, h: 2 } } },
+}));
+await page.reload();
+await page.waitForTimeout(1500);
+const en = await page.evaluate(() => ({ greet: document.querySelector('.greet').textContent, ph: document.querySelector('[data-search]').placeholder, lang: document.documentElement.lang, title: document.title }));
+check(en.lang === 'en' && /^Good (morning|afternoon|evening|night), Vova$/.test(en.greet) && /^Search [A-Za-z]/.test(en.ph) && en.title === 'New Tab', `english: приветствие, поиск, заголовок («${en.greet}», «${en.ph}», «${en.title}»)`);
+await page.click('#btn-settings');
+await page.waitForTimeout(400);
+const cyr = await page.evaluate(() => {
+  const w = document.createTreeWalker(document.getElementById('settings'), NodeFilter.SHOW_TEXT);
+  const left = [];
+  for (let n; (n = w.nextNode());) if (/[А-Яа-яЁё]/.test(n.nodeValue) && !n.parentElement.closest('[translate="no"]') && n.nodeValue.trim() !== 'Русский') left.push(n.nodeValue.trim());
+  return left;
+});
+check(cyr.length === 0, `english: в панели нет русского текста${cyr.length ? ' — ' + cyr.slice(0, 5).join(' | ') : ''}`);
+await page.screenshot({ path: `${out}/61-english.png` });
 await page.click('.panel [data-close]');
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 

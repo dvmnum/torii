@@ -126,5 +126,8 @@ const Liquid = (() => {
   // блоки подвинули (drag, смена раскладки, ресайз окна) — переложить карты на новое место
   function refresh() { for (const [el, e] of live) build(el, e); }
 
-  return { attach, detach, gc, refresh };
+  // SVG-фильтры в backdrop-filter умеет только Chromium (Chrome, Edge, Яндекс, Opera); в остальных вариант не показываем
+  const supported = !!navigator.userAgentData?.brands?.some(b => /Chromium/.test(b.brand));
+
+  return { attach, detach, gc, refresh, supported };
 })();

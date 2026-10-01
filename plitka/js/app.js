@@ -53,20 +53,21 @@
     tab: { title: 'Новая вкладка', icon: 'logo', emoji: '🌙', letter: 'P', image: null },
     text: { font: 'manrope', shadow: 'none' },
     slides: { on: false, items: [], every: 'tab', order: 'seq', idx: -1, at: 0 },
+    lang: 'auto', // язык интерфейса: auto (как в браузере) | ru | en
     greetings: [], // свои приветствия: [{ text, when: any|morning|day|evening|night }], до 5
   };
 
   // оформление, общее для всех виджетов: цвет текста и подложки
   const STYLE_DEFAULTS = { ink: 'auto', tint: null, font: 'inherit', shadow: 'inherit', radius: null, blur: null, alpha: null, glassKind: 'inherit' };
   const STYLE_SETTINGS = [
-    { key: 'ink', label: 'Цвет текста', type: 'select', options: [['auto', 'Авто'], ['light', 'Светлый'], ['dark', 'Тёмный']] },
+    { key: 'ink', label: 'Цвет', type: 'select', options: [['auto', 'Авто'], ['light', 'Светлый'], ['dark', 'Тёмный']] },
     { key: 'font', label: 'Шрифт', type: 'select', options: [['inherit', 'Как везде'], ...FONTS] },
-    { key: 'shadow', label: 'Тень текста', type: 'select', options: [['inherit', 'Как везде'], ...SHADOWS] },
-    { key: 'tint', label: 'Цвет подложки', type: 'color', empty: 'Стекло' },
-    { key: 'glassKind', label: 'Подложка', type: 'select', options: [['inherit', 'Как везде'], ['glass', 'Стекло'], ['liquid', 'Жидкое стекло']] },
-    { key: 'radius', label: 'Скругление углов', type: 'range', min: 0, max: 48, step: 1, inheritFrom: 'radius', fmt: (v) => v + 'px' },
-    { key: 'blur', label: 'Размытие стекла', type: 'range', min: 0, max: 40, step: 1, inheritFrom: 'glassBlur', fmt: (v) => v + 'px' },
-    { key: 'alpha', label: 'Плотность стекла', type: 'range', min: 0, max: 0.4, step: 0.01, inheritFrom: 'glassAlpha', fmt: (v) => Math.round(v * 100) + '%' },
+    { key: 'shadow', label: 'Тень', type: 'select', options: [['inherit', 'Как везде'], ...SHADOWS] },
+    { key: 'tint', label: 'Цвет', type: 'color', empty: 'Прозрачная' },
+    { key: 'glassKind', label: 'Вид стекла', type: 'select', dropdown: true, options: [['inherit', 'Как везде'], ['glass', 'Стекло'], ...(Liquid.supported ? [['liquid', 'Жидкое стекло']] : [])] },
+    { key: 'radius', label: 'Скругление', type: 'range', min: 0, max: 48, step: 1, inheritFrom: 'radius', fmt: (v) => v + 'px' },
+    { key: 'blur', label: 'Размытие', type: 'range', min: 0, max: 40, step: 1, inheritFrom: 'glassBlur', fmt: (v) => v + 'px' },
+    { key: 'alpha', label: 'Плотность', type: 'range', min: 0, max: 0.4, step: 0.01, inheritFrom: 'glassAlpha', fmt: (v) => Math.round(v * 100) + '%' },
   ];
 
   const DEFAULT_LAYOUT = [
@@ -85,6 +86,7 @@
   const stripGeom = (list) => list.map(({ id, type, data }) => ({ id, type, data }));
 
   let settings = cleanSettings(await Store.get('settings', {}));
+  I18N.setLang(settings.lang); // до отрисовки: дальше переводчик ловит всё, что появляется в DOM
   // layout — общие для всех экранов виджеты { id, type, data } + x/y/w/h текущего диапазона;
   // layouts — { md?, lg? }: позиции { [id]: { x, y, w, h } }
   let { widgets: layout, layouts } = await loadState();
@@ -131,6 +133,7 @@
       else if (k === 'tab') s.tab = cleanTab(v);
       else if (k === 'text') s.text = cleanText(v);
       else if (k === 'slides') s.slides = cleanSlides(v);
+      else if (k === 'lang') s.lang = ['auto', 'ru', 'en'].includes(v) ? v : 'auto';
       else if (k === 'greetings') s.greetings = Array.isArray(v) ? v.filter(g => g && typeof g.text === 'string').slice(0, 5).map(g => ({ text: g.text.slice(0, 80), when: DAY_PARTS.some(([p]) => p === g.when) ? g.when : 'any' })) : [];
       else if (typeof v === typeof DEFAULT_SETTINGS[k] && (typeof v !== 'number' || Number.isFinite(v))) s[k] = v;
     }
@@ -285,10 +288,11 @@
   // В заголовке можно {время}, {дата}, {день}. Помодоро временно занимает его через Tab.set (widgets-more.js).
   function tabTitle() {
     const d = new Date();
-    const t = (settings.tab.title || '')
-      .replace(/\{время\}/gi, d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }))
-      .replace(/\{дата\}/gi, d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }))
-      .replace(/\{день\}/gi, d.toLocaleDateString('ru-RU', { weekday: 'long' }));
+    // название по умолчанию — на языке интерфейса; подстановки понимаются и по-английски ({time}, {date}, {day})
+    const t = (settings.tab.title === 'Новая вкладка' ? I18N.t('Новая вкладка') : settings.tab.title || '')
+      .replace(/\{(время|time)\}/gi, d.toLocaleTimeString(I18N.locale(), { hour: '2-digit', minute: '2-digit' }))
+      .replace(/\{(дата|date)\}/gi, d.toLocaleDateString(I18N.locale(), { day: 'numeric', month: 'long' }))
+      .replace(/\{(день|day)\}/gi, d.toLocaleDateString(I18N.locale(), { weekday: 'long' }));
     return t.trim() || '​'; // пустой заголовок Chrome заменит адресом — ставим невидимый символ
   }
 
@@ -451,7 +455,7 @@
   function applyLiquid(item) {
     const rec = live.get(item.id);
     if (!rec) return;
-    const on = rec.shell.classList.contains('liquid') && !!item.data.glass;
+    const on = Liquid.supported && rec.shell.classList.contains('liquid') && !!item.data.glass;
     const target = item.type === 'search' ? rec.body.querySelector('.w-search') : rec.shell;
     for (const el of [rec.shell, rec.body.querySelector('.w-search')]) if (el && el !== target) Liquid.detach(el);
     if (on) requestAnimationFrame(() => Liquid.attach(target)); else Liquid.detach(target);
@@ -718,7 +722,15 @@
     const def = Widgets[item.type];
     const rec = live.get(item.id);
     if (!rec) return;
-    const fields = [...def.settings, { type: 'heading', label: 'Оформление' }, ...STYLE_SETTINGS]
+    // три смысловых блока: что показывает виджет, как выглядит текст, какая под ним подложка
+    const own = def.settings.filter(s => s.key !== 'glass');
+    const glass = def.settings.find(s => s.key === 'glass');
+    const style = (keys) => STYLE_SETTINGS.filter(s => keys.includes(s.key));
+    const fields = [
+      ...(own.length ? [{ type: 'heading', label: 'Содержимое' }, ...own] : []),
+      { type: 'heading', label: 'Текст' }, ...style(['ink', 'font', 'shadow']),
+      { type: 'heading', label: 'Подложка' }, ...(glass ? [{ ...glass, label: 'Показывать подложку' }] : []), ...style(['glassKind', 'tint', 'radius', 'blur', 'alpha']),
+    ]
       .map(s => ({ ...s, value: structuredClone(item.data[s.key]), inherit: s.inheritFrom ? settings[s.inheritFrom] : undefined }));
 
     let getters = {};
@@ -847,7 +859,7 @@
         getters[f.key] = () => inp.checked;
       } else if (f.type === 'select') {
         // до трёх вариантов — сегменты (всё видно сразу), больше — выпадающий список
-        const c = f.options.length <= 3 ? segmented(f.options, f.value, () => notify()) : dropdown(f.options, f.value, () => notify());
+        const c = f.options.length <= 3 && !f.dropdown ? segmented(f.options, f.value, () => notify()) : dropdown(f.options, f.value, () => notify());
         control = h('div', { class: 'field' }, h('span', {}, f.label), c.el);
         getters[f.key] = c.get;
       } else if (f.type === 'align') {
@@ -1148,6 +1160,12 @@
   window.addEventListener('pointerup', () => { if (panel.classList.contains('peek') && !closePicker) panelPeek(null); });
 
   function openSettings() { renderSettings(); panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false'); }
+  // клик мимо панели закрывает её (но не клики по её поповерам: списки, выбор цвета, тосты, док)
+  document.addEventListener('mousedown', (e) => {
+    if (!panel.classList.contains('open') || panel.contains(e.target)) return;
+    if (e.target.closest('.cp, .dd-list, .toast, #dock, .bm-pop, .modal-backdrop, input[type=file]')) return;
+    closeSettings();
+  }, true);
   function closeSettings() { closePicker?.(); meshPreview?.destroy(); meshPreview = null; panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); }
   document.getElementById('btn-settings').addEventListener('click', () => panel.classList.contains('open') ? closeSettings() : openSettings());
   panel.querySelector('[data-close]').addEventListener('click', closeSettings);
@@ -1160,11 +1178,11 @@
     if (rerenderWidgets) layout.forEach(renderWidget);
   }
 
-  function slider(label, key, min, max, step, fmt = (v) => v) {
+  function slider(label, key, min, max, step, fmt = (v) => v, tip = null) {
     const out = h('output', {}, fmt(settings[key]));
     const inp = h('input', { type: 'range', min, max, step, value: settings[key] });
     inp.addEventListener('input', () => { out.textContent = fmt(+inp.value); setSetting(key, +inp.value); });
-    return h('label', { class: 'field field-range' }, h('span', {}, label, out), inp);
+    return h('label', { class: 'field field-range' }, h('span', {}, tip ? labelInfo(label, tip) : label, out), inp);
   }
 
   // ---------- редактор фона: меш или своя картинка ----------
@@ -1289,7 +1307,7 @@
       clearBox.addEventListener('pointerup', up);
     });
     const clearBtn = h('button', {
-      type: 'button', class: 'pill small' + (m.clear ? ' on' : ''), title: 'Прямоугольник, где узора нет',
+      type: 'button', class: 'prev-btn' + (m.clear ? ' on' : ''), title: 'Прямоугольник, где узора нет — тащи на превью', html: '<svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2" stroke-dasharray="3 2.4"/></svg>',
       onclick: () => {
         m.clear = m.clear ? null : DEFAULT_CLEAR();
         clearBtn.classList.toggle('on', !!m.clear);
@@ -1297,6 +1315,7 @@
         commit();
       },
     }, 'Чистая область');
+    box.append(clearBtn); // кнопка — прямо на превью, в углу: рядом с тем, что она включает
 
     // цвета дуотона: тени и света
     const duoBtn = (i, label) => {
@@ -1327,7 +1346,7 @@
       h('div', { class: 'field' }, h('span', {}, 'Узор'), mode.el),
       h('div', { class: 'field' }, h('span', {}, 'Анимация'), anim.el),
       m.anim !== 'none' ? sl('Сила анимации', 'animAmt', pct) : null,
-      h('div', { class: 'row' }, clearBtn, m.mode === 'duotone' ? duoBtn(0, 'Тени') : null, m.mode === 'duotone' ? duoBtn(1, 'Света') : null),
+      m.mode === 'duotone' ? h('div', { class: 'row' }, duoBtn(0, 'Тени'), duoBtn(1, 'Света')) : null,
       !['mesh', 'duotone'].includes(m.mode) ? sl(m.mode === 'frosted' ? 'Мелкость стекла' : 'Плотность', 'density', pct) : null,
       sl(img ? 'Жидкость' : 'Искажение', 'warp', pct),
       sl('Скорость', 'speed', (v) => v ? pct(v) : 'стоит'),
@@ -1424,9 +1443,8 @@
         fxSlider('Частицы', 'particles'),
         fxSlider('Аберрация', 'chroma'),
         fxSlider('Сканлайны', 'scan'),
-        fxToggle('Параллакс за курсором', 'mouse'),
-        fxToggle('Оттенок по времени суток', 'daycycle'),
-        h('p', { class: 'field-hint' }, 'Работают и с мешем, и со своей картинкой. Узоры и анимации — во вкладке «Фон» → «Настроить».'))],
+        fxToggle('Перспектива (фон движется от курсора)', 'mouse'),
+        fxToggle('Оттенок по времени суток', 'daycycle'))],
       blocks: () => {
         const accents = h('div', { class: 'swatches' }, ACCENTS.map(c =>
           h('button', { class: 'accent-swatch' + (settings.accent === c ? ' active' : ''), style: `--c:${c}`, title: c, onclick: () => { setSetting('accent', c); renderSettings(); } })));
@@ -1434,14 +1452,12 @@
           section('Текст в блоках',
             h('div', { class: 'field' }, h('span', {}, 'Шрифт'), dropdown(FONTS, settings.text.font, (v) => setSetting('text', { ...settings.text, font: v })).el),
             h('div', { class: 'field' }, h('span', {}, 'Тень'), segmented(SHADOWS, settings.text.shadow, (v) => setSetting('text', { ...settings.text, shadow: v })).el),
-            h('p', { class: 'field-hint' }, 'У каждого блока можно поставить своё — в его настройках, «Оформление».')),
+            ),
           section('Стекло',
-            h('div', { class: 'field' }, h('span', {}, 'Подложка блоков'), segmented([['glass', 'Стекло'], ['liquid', 'Жидкое стекло']], settings.glassKind, (v) => setSetting('glassKind', v, true)).el),
-            settings.glassKind === 'liquid' ? h('p', { class: 'field-hint' }, 'Преломление по краям, как в iOS. Работает в Chrome, Edge и Яндекс Браузере. У каждого блока можно выбрать своё — в его «Оформлении».') : null,
+            Liquid.supported ? h('div', { class: 'field' }, h('span', {}, 'Подложка блоков'), segmented([['glass', 'Стекло'], ['liquid', 'Жидкое стекло']], settings.glassKind, (v) => setSetting('glassKind', v, true)).el) : null,
             slider('Размытие', 'glassBlur', 0, 40, 1, v => v + 'px'),
             slider('Плотность', 'glassAlpha', 0, 0.3, 0.01, v => Math.round(v * 100) + '%'),
-            slider('Читаемость', 'glassTone', 0, 1, 0.05, v => Math.round(v * 100) + '%'),
-            h('p', { class: 'field-hint' }, 'Стекло выравнивает яркость фона под собой. На пёстром фоне (и белое, и чёрное сразу) включается само.'),
+            slider('Читаемость', 'glassTone', 0, 1, 0.05, v => Math.round(v * 100) + '%', 'Стекло выравнивает яркость фона под собой. На пёстром фоне (и белое, и чёрное сразу) включается само.'),
             slider('Скругление', 'radius', 0, 36, 1, v => v + 'px')),
           section('Акцент', accents),
         ];
@@ -1481,6 +1497,8 @@
             h('div', { class: 'btn-pair' },
               h('button', { type: 'button', class: 'pill small', onclick: exportAll }, h('span', { class: 'btn-ico', html: ICO.down }), 'Сохранить файл'),
               h('button', { type: 'button', class: 'pill small', onclick: () => pickFile('application/json', importAll) }, h('span', { class: 'btn-ico', html: ICO.up }), 'Загрузить'))),
+          section('Язык',
+            segmented([['auto', 'Как в браузере'], ['ru', 'Русский'], ['en', 'English']], settings.lang, (v) => { settings.lang = v; Store.set('settings', settings).then(() => location.reload()); }).el),
           section('Клавиши',
             h('dl', { class: 'hotkeys' },
               ...[[kbd('E'), 'Изменить раскладку'], [kbd('/'), 'Перейти к поиску'], [kbd('Esc'), 'Закрыть панель, выйти из редактора'],
@@ -1508,20 +1526,23 @@
     motion.addEventListener('change', () => setSetting('motion', motion.checked));
     const removeImg = () => { setSetting('bgImage', null); sampleImage(); renderSettings(); };
 
-    // своя картинка: превью сверху, под ним — «как есть / с эффектом»; эффект настраивается сразу, без раскрывашек
+    // своя картинка: «как есть / с эффектом», под ним одно превью — сама картинка или живое превью эффекта
+    // (с рамкой чистой области и настройками узора); «Заменить / Убрать» — прямо на превью
+    const actions = () => h('div', { class: 'bgc-actions' },
+      h('button', { type: 'button', class: 'pill small', onclick: () => pickFile('image/*', loadBgImage) }, 'Заменить'),
+      h('button', { type: 'button', class: 'pill small', onclick: removeImg }, 'Убрать'));
+    const editor = img && !plain ? bgEditor() : null;
+    editor?.querySelector('.mesh-preview').append(actions());
     const photo = img ? [
-      h('div', { class: 'bg-current', style: `background-image:url("${settings.bgImage}")` },
-        h('div', { class: 'bgc-actions' },
-          h('button', { type: 'button', class: 'pill small', onclick: () => pickFile('image/*', loadBgImage) }, 'Заменить'),
-          h('button', { type: 'button', class: 'pill small', onclick: removeImg }, 'Убрать'))),
       h('div', { class: 'field' }, h('span', {}, 'Показывать'),
         segmented([['plain', 'Как есть'], ['fx', 'С эффектом']], plain ? 'plain' : 'fx', (v) => {
           setSetting('photo', { ...settings.photo, plain: v === 'plain' });
           sampleImage();
           renderSettings();
         }).el),
+      plain ? h('div', { class: 'bg-current', style: `background-image:url("${settings.bgImage}")` }, actions()) : null,
       slider('Затемнение', 'bgDim', 0, 0.8, 0.05, v => Math.round(v * 100) + '%'),
-      plain ? null : bgEditor(),
+      editor,
     ] : [];
 
     // меш: заготовки, «Настроить» раскрывает редактор точек
@@ -1539,8 +1560,7 @@
     return [
       img ? section('Своя картинка', ...photo) : null,
       section(img ? 'Или заготовка' : 'Фон', meshPresets(), meshRow, !img && meshOpen ? bgEditor() : null),
-      section('Движение', h('label', { class: 'field field-toggle' }, h('span', {}, 'Живой фон'), h('span', { class: 'switch' }, motion, h('i'))),
-        h('p', { class: 'field-hint' }, 'Выключи — фон и эффекты замрут (меньше нагрузка на ноутбуке).')),
+      section('Движение', h('label', { class: 'field field-toggle' }, labelInfo('Живой фон', 'Выключи — фон и эффекты замрут (меньше нагрузка на ноутбуке).'), h('span', { class: 'switch' }, motion, h('i')))),
       section('Слайд-шоу', ...slideshowSettings()),
     ];
   }
@@ -1552,8 +1572,10 @@
     const on = h('input', { type: 'checkbox', 'data-slides': 'on' });
     on.checked = s.on;
     on.addEventListener('change', () => { setS({ on: on.checked }); if (on.checked && s.items.length) nextSlide(); });
-    const toggle = h('label', { class: 'field field-toggle' }, h('span', {}, 'Автосмена фона'), h('span', { class: 'switch' }, on, h('i')));
-    const what = h('p', { class: 'field-hint' }, 'Фон сам переключается на следующий из списка ниже — при открытии новой вкладки или по таймеру. Добавь сюда заготовки и свои картинки.');
+    const toggle = h('label', { class: 'field field-toggle' },
+      labelInfo('Автосмена фона', 'Фон сам переключается на следующий из списка ниже — при открытии новой вкладки или по таймеру. Добавь сюда заготовки и свои картинки.'),
+      h('span', { class: 'switch' }, on, h('i')));
+    const what = null;
 
     const addCurrent = async () => {
       const id = 's' + Math.random().toString(36).slice(2, 9);
@@ -1626,12 +1648,12 @@
             list.length > 1 || g.text ? h('button', { type: 'button', class: 'tool danger', title: 'Убрать', html: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
               onclick: () => { list.splice(i, 1); if (!list.length) list.push({ text: '', when: 'any' }); save(); paint(); } }) : h('span'));
         }),
-        list.length < 5 ? h('button', { type: 'button', class: 'text-btn', onclick: () => { list.push({ text: '', when: 'any' }); paint(); box.querySelector('.greet-row:last-of-type input')?.focus(); } }, '+ Ещё приветствие') : null,
+        list.length < 5 ? h('button', { type: 'button', class: 'pill small add-line', onclick: () => { list.push({ text: '', when: 'any' }); paint(); box.querySelector('.greet-row:last-of-type input')?.focus(); } }, '+ Ещё приветствие') : null,
       );
     };
     paint();
-    return h('div', { class: 'field' }, h('span', {}, 'Свои приветствия'), box,
-      h('p', { class: 'field-hint' }, '{имя} подставит имя. Если вариантов несколько — показывается случайный; с временем суток — только в это время, иначе стандартное «Доброе утро».'));
+    return h('div', { class: 'field' },
+      labelInfo('Свои приветствия', '{имя} подставит имя. Если вариантов несколько — показывается случайный; с временем суток — только в это время, иначе стандартное «Доброе утро».'), box);
   }
 
   // секция «Вкладка»: название с подстановками и иконка — плитки с живым превью
@@ -1713,6 +1735,13 @@
   function section(title, ...children) {
     return h('section', { class: 'panel-sec' }, h('h4', {}, title), ...children);
   }
+
+  // подсказка значком ⓘ: текст показывается при наведении, а не висит абзацем под настройкой
+  function info(text) {
+    return h('span', { class: 'info', tabindex: '0', 'data-tip': text, 'aria-label': text, html: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>' });
+  }
+  // подпись поля со значком подсказки
+  const labelInfo = (label, tip) => h('span', { class: 'lbl' }, label, info(tip));
 
   function pickFile(accept, cb, multiple = false) {
     fileInput.accept = accept;

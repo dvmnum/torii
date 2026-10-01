@@ -298,33 +298,37 @@ body.no-motion .clock-time .colon { animation: none; }
 .search-calc[hidden] { display: none; }
 
 /* Enter и призрак — тихие круглые иконки без рамок; Enter подсвечивается, когда есть что искать */
-/* Иконки справа — тихие; при наведении на строку раскрываются подписи («Инкогнито», «Enter»), у поисковика — шеврон */
+/* Иконки справа — тихие круглые кнопки; Enter подсвечивается, когда есть что искать */
 .search-go, .search-ghost {
-  flex: none; height: calc(100% - 10px); max-height: 34px; min-width: calc(min(var(--sh), 100cqh - 4px) - 10px); padding: 0 8px; border: 0; border-radius: 999px;
-  display: inline-flex; align-items: center; justify-content: center; gap: 0; font-size: clamp(14px, calc(var(--sh) * .38), 18px);
-  background: none; color: var(--ink-3); transition: color .2s, background .2s, transform .15s var(--ease), gap .25s var(--ease);
+  flex: none; height: calc(100% - 10px); max-height: 34px; aspect-ratio: 1; padding: 0; border: 0; border-radius: 50%;
+  display: grid; place-items: center; font-size: clamp(14px, calc(var(--sh) * .38), 18px);
+  background: none; color: var(--ink-3); transition: color .2s, background .2s, transform .15s var(--ease);
 }
-.btn-label {
-  font: 600 12px/1 'Manrope', sans-serif; white-space: nowrap; overflow: hidden;
-  max-width: 0; opacity: 0; transition: max-width .3s var(--ease), opacity .2s;
-}
-.w-search:hover .btn-label, .w-search:focus-within .btn-label { max-width: 90px; opacity: 1; }
-.w-search:hover .search-go, .w-search:hover .search-ghost,
-.w-search:focus-within .search-go, .w-search:focus-within .search-ghost { gap: 6px; }
 .search-go:hover, .search-ghost:hover { color: var(--ink); background: rgba(var(--fg), .08); }
-.search-go:active { transform: scale(.95); }
+.search-go:active { transform: scale(.92); }
 .w-search.has-text .search-go { color: #0c0c0d; background: var(--accent); }
 .search-ghost.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, transparent); }
 .w-search.ghost { border-color: color-mix(in srgb, var(--accent) 45%, transparent) !important; } /* режим инкогнито включён — видно по рамке */
 .w-search.has-text .search-ghost.on ~ .search-go,
 .w-search[data-mode="incognito"].has-text .search-go { background: rgba(var(--fg), .85); color: #0c0c0d; }
 .search-ghost[hidden], .engine[hidden] { display: none; }
-/* иконка поисковика + шеврон, который выезжает при наведении на строку */
-.engine { aspect-ratio: auto; width: auto; padding: 0; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 0; }
-.eng-ico { display: grid; place-items: center; width: calc(min(var(--sh), 100cqh - 4px) - 8px); }
-.eng-chev { display: grid; font-size: .7em; max-width: 0; opacity: 0; overflow: hidden; transition: max-width .3s var(--ease), opacity .2s, margin .3s var(--ease); }
-.w-search:hover .eng-chev, .w-search:focus-within .eng-chev { max-width: 16px; opacity: .7; margin: 0 7px 0 -4px; }
-@container (max-width: 380px) { .btn-label { display: none; } }
+/* иконка поисковика: без фона и крупнее; при наведении на строку вокруг неё один раз пробегает обводка */
+.engine { background: none !important; position: relative; aspect-ratio: 1; width: auto; border-radius: 50%; font-size: clamp(16px, calc(var(--sh) * .5), 26px); }
+.eng-ico { display: grid; place-items: center; }
+@property --sweep { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.engine::after {
+  content: ''; position: absolute; inset: 1px; border-radius: 50%; pointer-events: none; opacity: 0;
+  background: conic-gradient(from -90deg, color-mix(in srgb, var(--accent) 90%, white) var(--sweep), transparent var(--sweep));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.6px), #000 calc(100% - 1px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 1.6px), #000 calc(100% - 1px));
+}
+.w-search:hover .engine::after { animation: engSweep 1.1s var(--ease) both; }
+@keyframes engSweep {
+  0% { --sweep: 0deg; opacity: .9; }
+  70% { --sweep: 360deg; opacity: .9; }
+  100% { --sweep: 360deg; opacity: 0; }
+}
+.engine:hover { color: var(--ink); }
 @container (max-width: 260px) { .search-ghost { display: none; } }
 @container (max-width: 220px) { .search-calc { display: none; } }
 
@@ -375,8 +379,11 @@ body.no-motion .clock-time .colon { animation: none; }
   font-size: 12.5px; font-weight: 600; min-width: 0;
   transition: background .2s, color .2s, transform .25s var(--ease);
 }
-.link:hover { background: rgba(var(--fg), .07); color: var(--ink); transform: translateY(-2px); }
-.link:active { transform: translateY(0) scale(.97); }
+/* наведение: без плашки — иконка чуть поднимается и подсвечивается, подпись ярче */
+.link:hover { color: var(--ink); }
+.link .link-ico { transition: transform .25s var(--ease), box-shadow .25s, filter .25s; }
+.link:hover .link-ico { transform: translateY(-3px) scale(1.06); box-shadow: 0 10px 22px -10px rgba(0,0,0,.6); }
+.link:active .link-ico { transform: scale(.94); }
 .link-ico {
   width: clamp(34px, 26cqh, 48px); height: clamp(34px, 26cqh, 48px); border-radius: 30%;
   display: grid; place-items: center;
@@ -725,8 +732,11 @@ body.editing .editbar { transform: translate(-50%, 0); opacity: 1; }
 .icon-btn { width: 32px; height: 32px; border-radius: 50%; border: 0; background: rgba(255,255,255,.06); color: var(--ink-2); }
 .icon-btn:hover { background: rgba(255,255,255,.12); color: var(--ink); }
 .panel-body { flex: 1; overflow-y: auto; padding: 4px 24px 20px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.12) transparent; }
-.panel-sec { padding: 16px 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
-.panel-sec h4 { margin: 0; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); font-weight: 700; }
+/* секции панели: заметные отступы и заголовок с чертой — блоки читаются отдельно, а не кашей */
+.panel-sec { padding: 22px 0 24px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 14px; }
+.panel-sec:first-child { padding-top: 14px; }
+.panel-sec:last-child { border-bottom: 0; }
+.panel-sec h4 { margin: 0 0 2px; font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-2); font-weight: 800; }
 .panel-foot { color: var(--ink-3); font-size: 12px; margin: 16px 0 0; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
 
@@ -1023,11 +1033,11 @@ svg.brand-svg { fill: currentColor; stroke: none; width: .82em; height: .82em; }
   backdrop-filter: blur(calc(var(--glass-blur) * .25)) var(--tone-f) saturate(150%) brightness(1.04);
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) * .25)) var(--tone-f) saturate(150%) brightness(1.04);
   background: linear-gradient(160deg, rgba(255,255,255, calc(var(--glass-alpha) * .6)), rgba(255,255,255, calc(var(--glass-alpha) * .25)));
-  border-color: rgba(255,255,255,.14);
+  border-color: rgba(255,255,255,.06); /* кромку рисуют тихие внутренние блики, рамка почти не видна */
   box-shadow:
-    inset 1.5px 1.5px 0 -0.5px rgba(255,255,255,.55),
-    inset -1px -1px 0 -0.5px rgba(255,255,255,.28),
-    inset 0 0 18px -6px rgba(255,255,255,.22),
+    inset 1px 1px 0 -0.5px rgba(255,255,255,.22),
+    inset -1px -1px 0 -0.5px rgba(255,255,255,.1),
+    inset 0 0 16px -8px rgba(255,255,255,.12),
     0 18px 40px -18px rgba(0,0,0,.45);
 }
 .w.glass.liquid.tinted:not([data-type="search"]) {
@@ -1082,5 +1092,47 @@ kbd {
 .greet-when .dd-btn { padding: 8px 8px 8px 10px; font-size: 12.5px; white-space: nowrap; }
 /* текущая картинка-фон */
 .bg-current { position: relative; aspect-ratio: 16 / 9; border-radius: 12px; background: center / cover no-repeat; border: 1px solid var(--line-2); overflow: hidden; }
-.bgc-actions { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; }
+.bgc-actions { position: absolute; right: 8px; bottom: 8px; z-index: 2; display: flex; gap: 6px; }
 .bgc-actions .pill { background: rgba(20,20,22,.75); }
+
+/* ================= ССЫЛКИ: РАССТОЯНИЕ МЕЖДУ ИКОНКАМИ ================= */
+/* «Авто» — плитки растягиваются на всю ширину блока; иначе — фиксированный шаг, ряд по центру */
+.w-links { --tile: clamp(64px, 14cqw, 96px); }
+.w-links.style-icons { --tile: clamp(44px, 20cqh, 64px); }
+.w-links:not(.gap-auto):not(.style-list) { grid-template-columns: repeat(auto-fill, var(--tile)); justify-content: center; }
+.w-links.gap-tight { column-gap: 0; }
+.w-links.gap-normal { column-gap: clamp(8px, 2cqw, 16px); }
+.w-links.gap-wide { column-gap: clamp(20px, 5cqw, 44px); }
+.w-links.style-list .link:hover { background: rgba(var(--fg), .07); }
+
+/* кнопка «Чистая область» — на самом превью, в правом верхнем углу */
+.prev-btn {
+  position: absolute; top: 8px; right: 8px; z-index: 2; display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px 5px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18);
+  background: rgba(20,20,22,.72); color: #fff; font: 600 11.5px/1 'Manrope', sans-serif; backdrop-filter: blur(6px);
+}
+.prev-btn svg { font-size: 14px; }
+.prev-btn:hover { background: rgba(40,40,44,.85); }
+.prev-btn.on { background: var(--accent); color: #0c0c0d; border-color: transparent; }
+
+/* приветствия: поле и выбор времени одной высоты; кнопка «Ещё» — заметная */
+.greet-row input, .greet-when .dd-btn { height: 38px; box-sizing: border-box; padding-top: 0; padding-bottom: 0; }
+.greets .add-line { align-self: flex-start; margin-top: 2px; }
+/* подсказка-значок ⓘ: текст всплывает при наведении */
+.lbl { display: inline-flex; align-items: center; gap: 6px; }
+.info { position: relative; display: inline-grid; place-items: center; font-size: 14px; color: var(--ink-3); cursor: help; outline: 0; }
+.info:hover, .info:focus { color: var(--ink); }
+.info::after {
+  content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%) translateY(4px);
+  width: max-content; max-width: 240px; padding: 8px 10px; border-radius: 10px; z-index: 5; pointer-events: none;
+  background: rgba(30,30,32,.98); border: 1px solid var(--line-2); box-shadow: 0 12px 30px -8px rgba(0,0,0,.6);
+  font: 500 12px/1.4 'Manrope', sans-serif; color: var(--ink-2); white-space: normal; text-align: left;
+  opacity: 0; transition: opacity .15s, transform .15s;
+}
+.info:hover::after, .info:focus::after { opacity: 1; transform: translateX(-50%); }
+/* в правой панели подсказка не должна вылезать за край — открываем влево */
+.panel .info::after, .inspector .info::after { left: auto; right: -10px; transform: translateY(4px); }
+.panel .info:hover::after, .panel .info:focus::after, .inspector .info:hover::after { transform: none; }
+/* группы в настройках блока: «Содержимое», «Текст», «Подложка» — с отступом и чертой */
+.inspector .modal-sub { margin: 10px 0 -2px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-2); font-weight: 800; }
+.inspector .insp-body > .modal-sub:first-child { margin-top: 0; padding-top: 4px; border-top: 0; }

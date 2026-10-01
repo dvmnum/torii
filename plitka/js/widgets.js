@@ -158,6 +158,8 @@ function brandColor(url) {
 
 const ICON_STYLES = [['glass', 'Стекло'], ['big', 'Крупные'], ['tint', 'Цвет бренда'], ['mono', 'Монохром'], ['letter', 'Буквы']];
 const ICONS_SETTING = { key: 'icons', label: 'Иконки', type: 'select', options: ICON_STYLES };
+// расстояние между плитками: авто — растягиваются на всю ширину блока, иначе фиксированный шаг по центру
+const GAP_SETTING = { key: 'gap', label: 'Расстояние между иконками', type: 'select', options: [['auto', 'Авто'], ['tight', 'Плотно'], ['normal', 'Обычно'], ['wide', 'Свободно']] };
 
 // одна ссылка-плитка; icons — стиль иконки (задаётся классом на обёртке .w-links.icons-*)
 function linkEl(l, { newTab = false, icons = 'glass' } = {}) {
@@ -167,7 +169,7 @@ function linkEl(l, { newTab = false, icons = 'glass' } = {}) {
     : favicon(l.url, l.title, icons === 'big' ? 128 : 64);
   return h('a', { class: 'link', href: l.url, title, target: newTab ? '_blank' : null, rel: 'noopener', style: `--brand:${brandColor(l.url)}` },
     h('span', { class: 'link-ico' }, ico),
-    h('span', { class: 'link-title' }, title));
+    h('span', { class: 'link-title', translate: 'no' }, title));
 }
 
 const Widgets = {
@@ -207,10 +209,10 @@ const Widgets = {
         }
         const parts = [];
         if (data.greeting) {
-          parts.push(`<span class="greet">${escapeHtml(pickGreeting(ctx.settings(), d))}</span>`);
+          parts.push(`<span class="greet" translate="no">${escapeHtml(pickGreeting(ctx.settings(), d))}</span>`);
         }
         if (data.date) {
-          parts.push(`<span>${d.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</span>`);
+          parts.push(`<span>${d.toLocaleDateString(I18N.locale(), { weekday: 'long', day: 'numeric', month: 'long' })}</span>`);
         }
         sub.innerHTML = parts.join('<i class="dot"></i>');
         sub.hidden = !parts.length;
@@ -243,17 +245,17 @@ const Widgets = {
       const go = h('button', {
         type: 'submit', class: 'search-go', tabindex: '-1',
         title: 'Enter — искать здесь\nCtrl+Enter — в новой вкладке\nShift+Enter — в окне инкогнито',
-        html: '<svg viewBox="0 0 24 24"><path d="M19 5v7a3 3 0 0 1-3 3H5"/><path d="M9 11l-4 4 4 4"/></svg><span class="btn-label">Enter</span>',
+        html: '<svg viewBox="0 0 24 24"><path d="M19 5v7a3 3 0 0 1-3 3H5"/><path d="M9 11l-4 4 4 4"/></svg>',
       });
       // призрак — поиск в инкогнито
       const ghostBtn = h('button', {
         type: 'button', class: 'search-ghost', tabindex: '-1', title: 'Искать в окне инкогнито (или Shift+Enter)',
-        html: '<svg viewBox="0 0 24 24"><path d="M5 20V11a7 7 0 0 1 14 0v9l-2.3-1.6L14.3 20 12 18.4 9.7 20l-2.4-1.6z"/><circle cx="9.5" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="11" r="1.1" fill="currentColor" stroke="none"/></svg><span class="btn-label">Инкогнито</span>',
+        html: '<svg viewBox="0 0 24 24"><path d="M5 20V11a7 7 0 0 1 14 0v9l-2.3-1.6L14.3 20 12 18.4 9.7 20l-2.4-1.6z"/><circle cx="9.5" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="11" r="1.1" fill="currentColor" stroke="none"/></svg>',
       });
       if (data.showEngine === false) engineBtn.hidden = true;
       if (data.showGhost === false) ghostBtn.hidden = true;
-      // при наведении на строку у иконки поисковика появляется шеврон — видно, что это выбор
-      engineBtn.innerHTML = '<span class="eng-ico"></span><span class="eng-chev"><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg></span>';
+      // при наведении на строку вокруг иконки поисковика один раз пробегает обводка — видно, что это кнопка выбора
+      engineBtn.innerHTML = '<span class="eng-ico"></span>';
       const engIco = engineBtn.firstChild;
       const form = h('form', { class: `w-search h-${data.height}` }, engineBtn, input, result, ghostBtn, go);
       if (!data.recent && data.history?.length) { data.history = []; ctx.save(); }
@@ -331,7 +333,7 @@ const Widgets = {
         form.classList.toggle('has-text', !!q);
         const v = calc(q);
         result.hidden = v == null;
-        if (v != null) result.textContent = '= ' + (+v.toFixed(10)).toLocaleString('ru-RU', { maximumFractionDigits: 10 });
+        if (v != null) result.textContent = '= ' + (+v.toFixed(10)).toLocaleString(I18N.locale(), { maximumFractionDigits: 10 });
         // префикс подсвечивает иконку поисковика, в котором будет поиск
         const { e } = parse(q);
         engIco.innerHTML = engineIcon(e);
@@ -360,6 +362,7 @@ const Widgets = {
               onmousedown: (e) => { e.preventDefault(); data.history = data.history.filter(x => x !== q); ctx.save(); openRecent(); },
             }))));
         document.body.append(recentBox);
+        flipUp(recentBox, form);
       }
       input.addEventListener('focus', () => { if (!input.value.trim()) openRecent(); });
       input.addEventListener('blur', () => setTimeout(closeRecent, 120));
@@ -375,6 +378,7 @@ const Widgets = {
           }, h('span', { class: 'em-ico', html: engineIcon(e) }), h('span', { class: 'em-name' }, e.name), h('kbd', {}, '!' + e.bang))),
           h('div', { class: 'em-hint' }, 'Префикс — разовый поиск: «!yt котики»'));
         document.body.append(menu);
+        flipUp(menu, engineBtn);
         const off = (e) => { if (!menu.contains(e.target) && !engineBtn.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', off, true); } };
         document.addEventListener('mousedown', off, true);
       });
@@ -401,12 +405,13 @@ const Widgets = {
     settings: [
       { key: 'style', label: 'Вид', type: 'select', options: [['tiles', 'Плитки'], ['list', 'Список'], ['icons', 'Только иконки']] },
       ICONS_SETTING,
+      GAP_SETTING,
       { key: 'newTab', label: 'Открывать в новой вкладке', type: 'toggle' },
       GLASS_SETTING,
       { key: 'links', label: 'Ссылки', type: 'links' },
     ],
     render(body, data, ctx) {
-      const wrap = h('div', { class: `w-links style-${data.style} icons-${data.icons || 'glass'}` });
+      const wrap = h('div', { class: `w-links style-${data.style} icons-${data.icons || 'glass'} gap-${data.gap || 'auto'}` });
       for (const l of data.links) wrap.append(linkEl(l, { newTab: data.newTab, icons: data.icons }));
       // «+» в углу при наведении — не занимает места в сетке плиток (иначе ломал центровку в низком блоке)
       const add = h('button', {
@@ -470,7 +475,7 @@ const Widgets = {
 
       // неделя: колонка на день — день недели, иконка, макс/мин
       const paintWeek = (w, stale) => {
-        const wd = (iso, i) => i === 0 ? 'Сегодня' : new Date(iso + 'T12:00').toLocaleDateString('ru-RU', { weekday: 'short' });
+        const wd = (iso, i) => i === 0 ? 'Сегодня' : new Date(iso + 'T12:00').toLocaleDateString(I18N.locale(), { weekday: 'short' });
         box.classList.remove('is-loading', 'is-error');
         box.classList.toggle('is-stale', stale);
         box.classList.add('is-week');
@@ -619,8 +624,17 @@ function pickGreeting(s, d = new Date()) {
     // {имя} — подставить имя; без имени — убрать вместе с запятой перед ним
     text = name ? text.replace(/\{имя\}/gi, name) : text.replace(/,?\s*\{имя\}/gi, '');
   } else {
-    text = DEFAULT_GREET[part] + (name ? ', ' + name : '');
+    text = I18N.t(DEFAULT_GREET[part]) + (name ? ', ' + name : '');
   }
   greetPick = { key, text: text.trim() };
   return greetPick.text;
+}
+
+// поповер под кнопкой не влезает вниз (блок внизу экрана) — открываем над ней
+function flipUp(pop, anchor, gap = 6) {
+  const a = anchor.getBoundingClientRect();
+  if (a.bottom + gap + pop.offsetHeight > innerHeight - 8 && a.top - gap - pop.offsetHeight > 8) {
+    pop.style.top = (a.top - gap - pop.offsetHeight) + 'px';
+    pop.classList.add('up');
+  }
 }

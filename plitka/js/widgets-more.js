@@ -57,11 +57,11 @@ function openBookmarkFolder(anchor, node, newTab) {
   closeBmPop?.();
   const item = (n) => n.url
     ? h('a', { class: 'bm-item', href: n.url, target: newTab ? '_blank' : null, rel: 'noopener', title: n.url },
-      h('span', { class: 'bm-ico' }, favicon(n.url, n.title, 32)), h('span', { class: 'bm-title' }, n.title || hostOf(n.url)))
+      h('span', { class: 'bm-ico' }, favicon(n.url, n.title, 32)), h('span', { class: 'bm-title', translate: 'no' }, n.title || hostOf(n.url)))
     : (() => {
       const sub = h('div', { class: 'bm-sub', hidden: true }, (n.children || []).map(item));
       const btn = h('button', { type: 'button', class: 'bm-item bm-folder', onclick: () => { sub.hidden = !sub.hidden; btn.classList.toggle('open', !sub.hidden); } },
-        h('span', { class: 'bm-ico', html: FOLDER_SVG }), h('span', { class: 'bm-title' }, n.title || 'Папка'));
+        h('span', { class: 'bm-ico', html: FOLDER_SVG }), h('span', { class: 'bm-title', translate: 'no' }, n.title || 'Папка'));
       return h('div', {}, btn, sub);
     })();
   const pop = h('div', { class: 'bm-pop' }, (node.children || []).length ? node.children.map(item) : h('div', { class: 'w-muted bm-empty' }, 'Папка пустая'));
@@ -89,7 +89,7 @@ function openBookmarkFolder(anchor, node, newTab) {
 }
 
 function linkTiles(list, data) {
-  return h('div', { class: `w-links style-${data.style} icons-${data.icons || 'glass'}` }, list.map(l => linkEl(l, data)));
+  return h('div', { class: `w-links style-${data.style} icons-${data.icons || 'glass'} gap-${data.gap || 'auto'}` }, list.map(l => linkEl(l, data)));
 }
 
 Object.assign(Widgets, {
@@ -120,7 +120,7 @@ Object.assign(Widgets, {
         // несделанные сверху, сделанные — вниз и зачёркнуты
         const items = [...data.items.filter(i => !i.done), ...data.items.filter(i => i.done)];
         list.replaceChildren(...items.map(it => {
-          const text = h('span', { class: 'todo-text', title: 'Двойной клик — изменить' }, it.text);
+          const text = h('span', { class: 'todo-text', title: 'Двойной клик — изменить', translate: 'no' }, it.text);
           text.addEventListener('dblclick', () => edit(it, text));
           const li = h('li', { class: 'todo-item' + (it.done ? ' done' : ''), draggable: it.done ? null : 'true' },
             h('button', { type: 'button', class: 'todo-check', 'aria-label': it.done ? 'Вернуть' : 'Готово', onclick: () => { it.done = !it.done; save(); } }),
@@ -251,6 +251,7 @@ Object.assign(Widgets, {
       { key: 'count', label: 'Сколько', type: 'select', options: [['4', '4'], ['6', '6'], ['8', '8'], ['10', '10'], ['12', '12']] },
       { key: 'style', label: 'Вид', type: 'select', options: [['tiles', 'Плитки'], ['list', 'Список'], ['icons', 'Только иконки']] },
       ICONS_SETTING,
+      GAP_SETTING,
       { key: 'newTab', label: 'Открывать в новой вкладке', type: 'toggle' },
       GLASS_SETTING,
     ],
@@ -281,12 +282,13 @@ Object.assign(Widgets, {
     settings: [
       { key: 'style', label: 'Вид', type: 'select', options: [['tiles', 'Плитки'], ['list', 'Список'], ['icons', 'Только иконки']] },
       ICONS_SETTING,
+      GAP_SETTING,
       { key: 'newTab', label: 'Открывать в новой вкладке', type: 'toggle' },
       GLASS_SETTING,
     ],
     render(body, data, ctx) {
       let alive = true, t = 0;
-      const wrap = h('div', { class: `w-links style-${data.style} icons-${data.icons}` });
+      const wrap = h('div', { class: `w-links style-${data.style} icons-${data.icons} gap-${data.gap || 'auto'}` });
       const folderEl = (n) => {
         const b = h('button', { type: 'button', class: 'link link-folder', title: n.title, onclick: () => openBookmarkFolder(b, n, data.newTab) },
           h('span', { class: 'link-ico', html: FOLDER_SVG }), h('span', { class: 'link-title' }, n.title || 'Папка'));
@@ -343,7 +345,7 @@ Object.assign(Widgets, {
         list.replaceChildren(...tabs.map(t => h('li', {},
           h('button', { type: 'button', class: 'recent-item', title: t.url, onclick: () => chrome.sessions.restore(t.sessionId) },
             h('span', { class: 'recent-ico' }, favicon(t.url, t.title, 32)),
-            h('span', { class: 'recent-title' }, t.title || hostOf(t.url))))));
+            h('span', { class: 'recent-title', translate: 'no' }, t.title || hostOf(t.url))))));
         if (!tabs.length) list.replaceChildren(h('li', { class: 'w-muted' }, 'Пока ничего не закрывали'));
       });
       Perm.has('sessions').then((ok) => {
@@ -372,14 +374,14 @@ Object.assign(Widgets, {
       let alive = true;
       const box = h('div', { class: 'w-rates' }, h('div', { class: 'w-muted' }, 'Узнаю курс…'));
       body.append(box);
-      const fmt = (v) => v.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const fmt = (v) => v.toLocaleString(I18N.locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       loadRates().then(({ r, stale }) => {
         if (!alive) return;
         const codes = data.codes.toUpperCase().split(/[\s,;]+/).filter(Boolean);
         const rows = codes.map(c => r.Valute[c] && { c, ...r.Valute[c] }).filter(Boolean);
         box.replaceChildren(
           h('div', { class: 'w-head' }, h('div', { class: 'w-label' }, 'Курс ЦБ'),
-            h('span', { class: 'w-muted' }, stale ? 'нет сети' : new Date(r.Date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }))),
+            h('span', { class: 'w-muted' }, stale ? 'нет сети' : new Date(r.Date).toLocaleDateString(I18N.locale(), { day: 'numeric', month: 'short' }))),
           ...rows.map(v => {
             const val = v.Value / v.Nominal, d = (v.Value - v.Previous) / v.Nominal;
             return h('div', { class: 'rate' },
@@ -450,13 +452,13 @@ Object.assign(Widgets, {
       };
       function paint() {
         grid.replaceChildren(
-          h('span'), ...days.map((d, i) => h('span', { class: 'hb-dn' + (i === 6 ? ' today' : '') }, d.toLocaleDateString('ru-RU', { weekday: 'short' }).slice(0, 2))), h('span'),
+          h('span'), ...days.map((d, i) => h('span', { class: 'hb-dn' + (i === 6 ? ' today' : '') }, d.toLocaleDateString(I18N.locale(), { weekday: 'short' }).slice(0, 2))), h('span'),
           ...data.habits.flatMap(hb => [
-            h('span', { class: 'hb-name', title: hb.name }, hb.name,
+            h('span', { class: 'hb-name', title: hb.name, translate: 'no' }, hb.name,
               h('button', { type: 'button', class: 'todo-del', title: 'Удалить', html: SVG.x, onclick: () => { data.habits = data.habits.filter(x => x !== hb); save(); } })),
             ...days.map(d => {
               const k = dayKey(d);
-              return h('button', { type: 'button', class: 'hb-dot' + (hb.days[k] ? ' on' : ''), title: d.toLocaleDateString('ru-RU'), onclick: () => { if (hb.days[k]) delete hb.days[k]; else hb.days[k] = true; save(); } });
+              return h('button', { type: 'button', class: 'hb-dot' + (hb.days[k] ? ' on' : ''), title: d.toLocaleDateString(I18N.locale()), onclick: () => { if (hb.days[k]) delete hb.days[k]; else hb.days[k] = true; save(); } });
             }),
             h('span', { class: 'hb-streak', title: 'Дней подряд' }, streak(hb) ? `${streak(hb)}🔥` : ''),
           ]));
@@ -481,7 +483,7 @@ Object.assign(Widgets, {
       // цитата дня; «ещё» листает дальше, на следующий день сдвиг сбрасывается
       if (data.shiftDay !== dayIndex()) { data.shift = 0; data.shiftDay = dayIndex(); }
       const [text, who, from] = QUOTES[(dayIndex() + data.shift) % QUOTES.length];
-      body.append(h('figure', { class: 'w-quote' },
+      body.append(h('figure', { class: 'w-quote', translate: 'no' },
         h('blockquote', {}, `«${text}»`),
         h('figcaption', {}, [who, from].filter(Boolean).join(', ')),
         h('button', { type: 'button', class: 'w-more', title: 'Другая цитата', html: SVG.more, onclick: () => { data.shift++; ctx.save(); ctx.rerender(); } })));
@@ -498,8 +500,8 @@ Object.assign(Widgets, {
       const [word, meaning] = WORDS[(dayIndex() + data.shift) % WORDS.length];
       body.append(h('div', { class: 'w-word' },
         h('div', { class: 'w-label' }, 'Слово дня'),
-        h('div', { class: 'word-w' }, word),
-        h('div', { class: 'word-m' }, meaning),
+        h('div', { class: 'word-w', translate: 'no' }, word),
+        h('div', { class: 'word-m', translate: 'no' }, meaning),
         h('button', { type: 'button', class: 'w-more', title: 'Другое слово', html: SVG.more, onclick: () => { data.shift++; ctx.save(); ctx.rerender(); } })));
     },
   },
