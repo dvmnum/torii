@@ -221,12 +221,18 @@ body:not(.editing) .grid-stack-item > .ui-resizable-handle { display: none !impo
 .grid-stack-item > .ui-resizable-ne,
 .grid-stack-item > .ui-resizable-nw { width: 20px !important; height: 20px !important; transform: none !important; }
 .grid-stack-item > .ui-resizable-se { right: 4px !important; bottom: 4px !important; }
+/* уголок «потяни» — дуга вокруг скругления блока, чуть снаружи (как ручка у виджетов iOS) */
 .grid-stack-item > .ui-resizable-se::after {
-  content: ''; position: absolute; right: 5px; bottom: 5px; width: 9px; height: 9px;
-  border-right: 2px solid var(--ink-2); border-bottom: 2px solid var(--ink-2); border-bottom-right-radius: 5px;
-  opacity: 0; transition: opacity .2s;
+  content: ''; position: absolute; right: -6px; bottom: -6px; width: 26px; height: 26px;
+  border-style: solid; border-width: 0 3.5px 3.5px 0; border-color: transparent currentColor currentColor transparent;
+  border-bottom-right-radius: calc(var(--radius) + 5px);
+  color: rgba(255,255,255,.35);
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.5));
+  opacity: .55; transition: opacity .2s, color .2s, transform .2s var(--ease);
 }
-body.editing .grid-stack-item:hover > .ui-resizable-se::after { opacity: 1; }
+body.editing .grid-stack-item:hover > .ui-resizable-se::after { opacity: 1; color: rgba(255,255,255,.95); }
+body.editing .grid-stack-item > .ui-resizable-se:hover::after,
+.grid-stack-item.ui-resizable-resizing > .ui-resizable-se::after { color: var(--accent); transform: translate(1px, 1px); opacity: 1; }
 
 /* ================= ЧАСЫ ================= */
 .w-clock {
@@ -297,7 +303,8 @@ body.no-motion .clock-time .colon { animation: none; }
   --sh: 46px;
   flex: 1; align-self: center; min-width: 0;
   height: min(var(--sh), calc(100cqh - 4px)); margin: 0 2px;
-  display: flex; align-items: center; gap: 6px; padding: 0 5px;
+  --in: 5px; /* отступ иконок от края строки — одинаковый слева, справа и по вертикали */
+  display: flex; align-items: center; gap: 6px; padding: 0 var(--in);
   border-radius: min(var(--radius), calc(var(--sh) / 2));
   border: 1px solid transparent; transition: border-color .2s, box-shadow .2s;
 }
@@ -313,11 +320,16 @@ body.no-motion .clock-time .colon { animation: none; }
 .w.glass.tinted[data-type="search"] .w-search {
   background: linear-gradient(160deg, color-mix(in srgb, var(--tint) 72%, transparent), color-mix(in srgb, var(--tint) 58%, transparent));
 }
-.w-search:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, transparent) !important; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent) !important; }
+/* фокус: без внешнего кольца (его обрезал край блока) — строка чуть светлеет изнутри, рамка светлая, курсор цвета акцента */
+.w-search:focus-within {
+  border-color: rgba(var(--fg), .3) !important;
+  box-shadow: inset 0 0 0 100vmax rgba(var(--fg), .045), inset 0 1px 0 rgba(255,255,255,.12), var(--elev) !important;
+}
+.search-input { caret-color: var(--accent); }
 
 /* иконка поисковика: монохромная, по клику — список */
 .engine {
-  flex: none; height: calc(100% - 8px); border-radius: 50%; padding: 0;
+  flex: none; height: calc(100% - var(--in) * 2); border-radius: 50%; padding: 0;
   border: 0; background: rgba(var(--fg), .07); color: var(--ink-2);
   display: grid; place-items: center; font-size: clamp(14px, calc(var(--sh) * .42), 22px);
   transition: background .2s, color .2s, transform .2s var(--ease);
@@ -344,7 +356,7 @@ body.no-motion .clock-time .colon { animation: none; }
 /* Enter и призрак — тихие круглые иконки без рамок; Enter подсвечивается, когда есть что искать */
 /* Иконки справа — тихие круглые кнопки; Enter подсвечивается, когда есть что искать */
 .search-go, .search-ghost {
-  flex: none; height: calc(100% - 10px); max-height: 34px; aspect-ratio: 1; padding: 0; border: 0; border-radius: 50%;
+  flex: none; height: calc(100% - var(--in) * 2); aspect-ratio: 1; padding: 0; border: 0; border-radius: 50%;
   display: grid; place-items: center; font-size: clamp(14px, calc(var(--sh) * .38), 18px);
   background: none; color: var(--ink-3); transition: color .2s, background .2s, transform .15s var(--ease);
 }
@@ -382,19 +394,30 @@ body.no-motion .clock-time .colon { animation: none; }
 .em-item kbd { font: 600 11px/1 'Manrope', sans-serif; color: var(--ink-3); padding: 3px 6px; border-radius: 6px; background: rgba(255,255,255,.06); }
 .em-hint { padding: 8px 8px 4px; font-size: 11.5px; color: var(--ink-3); border-top: 1px solid var(--line); margin-top: 4px; }
 
-/* последние запросы */
+/* последние запросы — стеклянная «полка» под строкой поиска, запросы чипсами */
 .search-recent {
-  position: fixed; z-index: 60; padding: 5px; border-radius: 14px;
-  background: rgba(26, 26, 27, .97); border: 1px solid var(--line-2); box-shadow: 0 24px 60px -12px rgba(0,0,0,.7);
+  position: fixed; z-index: 60; padding: 10px 12px 12px; border-radius: 18px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  background: linear-gradient(160deg, rgba(40,40,44,.62), rgba(26,26,28,.55));
+  backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid rgba(255,255,255,.1); box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 20px 50px -18px rgba(0,0,0,.6);
+  opacity: 0; transform: translateY(-4px); transition: opacity .18s, transform .22s var(--ease);
 }
-.sr-row { display: flex; align-items: center; border-radius: 9px; }
-.sr-row:hover { background: rgba(255,255,255,.07); }
-.sr-q { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 8px; border: 0; background: none; color: var(--ink-2); font-size: 14px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sr-row:hover .sr-q { color: var(--ink); }
-.sr-ico { display: grid; font-size: 15px; color: var(--ink-3); flex: none; }
-.sr-del { flex: none; width: 26px; height: 26px; margin-right: 4px; border: 0; border-radius: 7px; background: none; color: var(--ink-3); display: grid; place-items: center; opacity: 0; }
+.search-recent.up { transform: translateY(4px); }
+.search-recent.on { opacity: 1; transform: none; }
+.sr-label { width: 100%; padding: 0 4px 2px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: rgba(244,244,245,.4); }
+.sr-row {
+  display: inline-flex; align-items: center; max-width: 100%; min-width: 0; border-radius: 999px;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.08); transition: background .15s, border-color .15s;
+}
+.sr-row:hover { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.16); }
+.sr-q { min-width: 0; display: flex; align-items: center; gap: 7px; padding: 6px 4px 6px 11px; border: 0; background: none; color: rgba(244,244,245,.85); font-size: 13px; font-weight: 500; text-align: left; }
+.sr-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-row:hover .sr-q { color: #fff; }
+.sr-ico { display: grid; font-size: 13px; color: rgba(244,244,245,.4); flex: none; }
+.sr-del { flex: none; width: 20px; height: 20px; margin-right: 5px; border: 0; border-radius: 50%; background: none; color: rgba(244,244,245,.45); display: grid; place-items: center; font-size: 11px; opacity: .35; transition: opacity .15s, background .15s, color .15s; }
 .sr-row:hover .sr-del { opacity: 1; }
-.sr-del:hover { color: #ff8a9a; background: rgba(255, 90, 110, .15); }
+.sr-del:hover { color: #fff; background: rgba(255, 90, 110, .55); }
 
 /* ================= ССЫЛКИ ================= */
 .w-links {
@@ -517,6 +540,7 @@ body.no-motion .clock-time .colon { animation: none; }
 .w-weather.is-mini { gap: clamp(6px, 4cqw, 14px); padding: 0 clamp(10px, 6cqw, 20px); }
 .w-weather.is-mini .wx-ico { font-size: min(60cqh, 34cqw); }
 .w-weather.is-mini .wx-temp { font-size: min(56cqh, 32cqw); }
+@container (max-width: 150px) { .w-weather.is-mini { padding: 0 6px; gap: 4px; justify-content: center; } }
 .w-weather.is-error .wx-ico { font-size: min(36cqh, 16cqw); color: var(--ink-3); opacity: .7; }
 .w-weather.is-stale .wx-temp { opacity: .6; }
 .wx-ico { font-size: min(55cqh, 26cqw); color: var(--ink); display: grid; flex: none; }
@@ -670,6 +694,24 @@ body.no-motion .clock-time .colon { animation: none; }
   background: linear-gradient(100deg, rgba(var(--fg), .04) 30%, rgba(var(--fg), .12) 50%, rgba(var(--fg), .04) 70%) 0 0 / 250% 100%;
   animation: picShimmer 1.4s linear infinite;
 }
+/* спиннер: кольцо с бегущей дугой; в «Картинке» — по центру заглушки */
+.spinner {
+  display: inline-block; width: 18px; height: 18px; border-radius: 50%; flex: none;
+  border: 2px solid rgba(var(--fg, 244, 244, 245), .18); border-top-color: rgba(var(--fg, 244, 244, 245), .9);
+  animation: spin .8s linear infinite;
+}
+.pic-loading::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: clamp(16px, 14cqmin, 28px); aspect-ratio: 1; margin: calc(clamp(16px, 14cqmin, 28px) / -2) 0 0 calc(clamp(16px, 14cqmin, 28px) / -2);
+  border-radius: 50%; border: 2px solid rgba(var(--fg), .18); border-top-color: rgba(var(--fg), .85);
+  animation: spin .8s linear infinite;
+}
+.busy-pill {
+  position: fixed; top: 16px; left: 50%; z-index: 500; display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px 9px 12px; border-radius: 999px; background: rgb(30,30,32); border: 1px solid rgba(255,255,255,.12);
+  box-shadow: 0 16px 40px -10px rgba(0,0,0,.6); font-size: 13px; font-weight: 600; color: rgba(244,244,245,.9);
+  opacity: 0; transform: translate(-50%, -8px); transition: opacity .2s, transform .25s var(--ease);
+}
+.busy-pill.on { opacity: 1; transform: translate(-50%, 0); }
 @keyframes picShimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
 /* листаем «Ещё» — старая картинка тускнеет, кнопка крутится, пока грузится новая */
 .w-pic.busy img.pic-in.on { opacity: .55; }
@@ -816,7 +858,10 @@ body.editing .editbar { transform: translate(-50%, 0); opacity: 1; }
   opacity: 0; transform: scale(.97); transition: opacity .15s, transform .2s var(--ease);
  
 }
-.inspector.open { opacity: 1; transform: none; }
+.inspector.open { opacity: 1; transform: none; transition: opacity .15s, transform .2s var(--ease), top .3s var(--ease), left .3s var(--ease); }
+/* поля, которые появились по условию (showIf), — выезжают плавно; срабатывает и при открытии */
+.inspector .field:not([hidden]) { animation: fieldIn .28s var(--ease) both; }
+@keyframes fieldIn { from { opacity: 0; transform: translateY(-6px); } }
 .insp-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 4px 18px; position: sticky; top: 0; background: inherit; z-index: 1; }
 .insp-head h3 { margin: 0; font-size: 15px; font-weight: 700; }
 .insp-body { display: flex; flex-direction: column; gap: 12px; padding: 8px 18px 18px; }
@@ -1140,6 +1185,13 @@ svg.brand-svg { fill: currentColor; stroke: none; width: .82em; height: .82em; }
 .w.glass.liquid.tinted:not([data-type="search"]) {
   background: linear-gradient(160deg, color-mix(in srgb, var(--tint) 55%, transparent), color-mix(in srgb, var(--tint) 38%, transparent));
 }
+/* тёмный текст — светлое матовое стекло (как светлый материал в iOS): иначе на тёмном фоне тёмный текст тонул */
+.w.glass.ink-dark:not(.tinted):not([data-type="search"]),
+.w.glass.ink-dark:not(.tinted)[data-type="search"] .w-search {
+  background: linear-gradient(160deg, rgba(255,255,255, calc(var(--glass-alpha) + .42)), rgba(255,255,255, calc(var(--glass-alpha) + .3)));
+  border-color: rgba(255,255,255,.35);
+}
+.w.ink-dark { --tone-f: contrast(calc(1 - var(--t) * .4)) brightness(calc(1 + var(--t) * .6)); }
 /* поля с условием (showIf в buildFields) — скрыты, пока условие не выполнено */
 .field[hidden] { display: none !important; }
 /* тень под блоком: общая (body[data-elev]) или своя у блока (.w[data-elev]) */

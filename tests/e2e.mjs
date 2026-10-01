@@ -257,6 +257,7 @@ await openSettings('w-clock');
 await page.click('.inspector .field-toggle:has-text("Секунды")');
 await page.keyboard.press('Escape'); // закрыть инспектор — всё уже применилось
 await page.keyboard.press('Escape');
+await page.waitForTimeout(600); // выход из редактора анимируется — первый замер не должен попасть в неё
 // замеры группируем по минуте: при смене минуты основное время честно меняет ширину
 const colonX = [];
 for (let i = 0; i < 4; i++) {
@@ -954,7 +955,7 @@ const sb = await page.evaluate(() => {
 check(sb.fh < sb.wh && sb.dc < 2, `поиск: строка тоньше ячейки и по центру (${Math.round(sb.fh)} из ${Math.round(sb.wh)} px)`);
 await page.click('[data-search]');
 await page.waitForTimeout(200);
-check(await page.locator('.search-recent .sr-q').count() === 2, 'поиск: недавние запросы при фокусе');
+check(await page.locator('.search-recent .sr-q').count() === 2 && await page.locator('.search-recent .sr-label').count() === 1, 'поиск: недавние запросы при фокусе (полка с чипсами)');
 await page.screenshot({ path: `${out}/48-search-recent.png`, clip: { x: 300, y: 300, width: 1000, height: 320 } });
 await page.type('[data-search]', '1250*0,13');
 await page.waitForTimeout(150);
@@ -1004,7 +1005,7 @@ const mins = [
   ['rates', 15, 0, 3, 2], ['countdown', 18, 0, 3, 2], ['word', 21, 0, 3, 2],
   ['links', 0, 3, 8, 1], ['search', 8, 3, 6, 1], ['weather', 14, 3, 4, 1],
   ['habits', 0, 5, 4, 2], ['quote', 4, 5, 4, 2], ['pic', 8, 5, 2, 2],
-  ['greeting', 18, 3, 3, 1], ['weather', 21, 3, 3, 1, { view: 'mini', side: 'center' }], ['greeting', 10, 5, 10, 2, { font: 'lobster', sub: 'date' }],
+  ['greeting', 18, 3, 3, 1], ['weather', 21, 3, 2, 1, { view: 'mini', side: 'center' }], ['greeting', 10, 5, 10, 2, { font: 'lobster', sub: 'date' }],
 ];
 await page.evaluate((list) => chrome.storage.local.set({
   settings: {},
@@ -1014,6 +1015,8 @@ await page.evaluate((list) => chrome.storage.local.set({
 await page.reload();
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `${out}/51-min-sizes.png` });
+const miniW = await page.evaluate(() => { const r = document.querySelector('.grid-stack-item[gs-id="m-15"]'); return r && { w: r.gridstackNode.w, minW: r.gridstackNode.minW }; });
+check(miniW && miniW.w === 2 && miniW.minW === 2, `погода «Мини»: ужимается до 2 клеток (${JSON.stringify(miniW)})`);
 const linkC = await page.evaluate(() => {
   const w = document.querySelector('.grid-stack-item[gs-id="m-8"] .w').getBoundingClientRect();
   const icons = [...document.querySelectorAll('.grid-stack-item[gs-id="m-8"] .link-ico')].map(e => e.getBoundingClientRect());
@@ -1079,6 +1082,16 @@ await page.screenshot({ path: `${out}/62-inspector-own.png` });
 await page.click('.inspector .seg-btn:has-text("Как везде")');
 await page.waitForTimeout(150);
 check(await page.$eval('.grid-stack-item[gs-id="w-clock"] .w', el => getComputedStyle(el).borderTopLeftRadius === '22px' && !el.dataset.elev), 'блок: «как везде» возвращает общее скругление и тень');
+// шрифт: наведение на вариант — блок сразу им написан, ушли без выбора — вернулся прежний
+await page.click('.inspector .field:has-text("Шрифт") .dd-btn');
+await page.hover('body > .dd-list .dd-item:has-text("Lobster")');
+await page.waitForTimeout(150);
+const wfHover = await page.$eval('.grid-stack-item[gs-id="w-clock"] .w', el => el.style.getPropertyValue('--wf'));
+await page.screenshot({ path: `${out}/64-font-preview.png` });
+await page.keyboard.press('Escape');
+await page.waitForTimeout(150);
+const wfAfter = await page.$eval('.grid-stack-item[gs-id="w-clock"] .w', el => el.style.getPropertyValue('--wf'));
+check(/Lobster/.test(wfHover) && !/Lobster/.test(wfAfter), `шрифт: предпросмотр при наведении и откат («${wfHover.slice(0, 20)}» → «${wfAfter}»)`);
 await page.keyboard.press('Escape');
 await page.keyboard.press('Escape');
 await page.click('#btn-settings');

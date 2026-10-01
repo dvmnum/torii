@@ -255,10 +255,10 @@
       const m = rawLayouts && rawLayouts[b];
       if (!m || typeof m !== 'object') continue;
       layouts[b] = {};
-      for (const { id, type } of widgets) {
+      for (const { id, type, data } of widgets) {
         const p = m[id];
         if (!p || typeof p !== 'object') continue; // нет позиции — gridstack найдёт место сам
-        const min = Widgets[type].min;
+        const min = minOf({ type, data });
         const w = int(p.w, min.w, COLS);
         const hh = int(p.h, min.h, ROWS);
         layouts[b][id] = { x: int(p.x, 0, COLS - w), y: int(p.y, 0, ROWS - hh), w, h: hh };
@@ -266,6 +266,9 @@
     }
     return { widgets, layouts };
   }
+
+  // минимальный размер блока: у некоторых зависит от вида (погода «Мини» ужимается сильнее)
+  function minOf(item) { const def = Widgets[item.type]; return def.minFor?.(item.data || {}) || def.min; }
 
   function fillDefaults(item) {
     const def = Widgets[item.type];
@@ -466,6 +469,9 @@
     if (item.data.shadow !== 'inherit') rec.shell.dataset.ts = item.data.shadow; else delete rec.shell.dataset.ts;
     if (item.data.elev !== 'inherit') rec.shell.dataset.elev = item.data.elev; else delete rec.shell.dataset.elev;
     rec.shell.dataset.type = item.type;
+    // сменили вид (погода «Мини») — у блока другой минимальный размер
+    const mn = minOf(item), node = rec.el.gridstackNode;
+    if (node && (node.minW !== mn.w || node.minH !== mn.h)) grid.update(rec.el, { minW: mn.w, minH: mn.h });
     rec.inst = Widgets[item.type].render(rec.body, item.data, ctxFor(item)) || null;
     applyInk(item);
     applyLiquid(item);
@@ -568,7 +574,7 @@
       id: item.id,
       x: autoPosition ? undefined : item.x, y: autoPosition ? undefined : item.y,
       w: item.w, h: item.h,
-      minW: def.min.w, minH: def.min.h,
+      minW: minOf(item).w, minH: minOf(item).h,
       autoPosition,
     });
     live.set(item.id, { el, body, shell, inst: null });
@@ -702,7 +708,7 @@
     const item = { id: 'w-' + Math.random().toString(36).slice(2, 9), type, w: def.size.w, h: def.size.h };
     fillDefaults(item);
     if (!grid.willItFit({ w: item.w, h: item.h })) {
-      item.w = def.min.w; item.h = def.min.h;
+      item.w = minOf(item).w; item.h = minOf(item).h;
       if (!grid.willItFit({ w: item.w, h: item.h })) { toast('Места нет — освободи немного'); return; }
     }
     layout.push(item);
@@ -753,6 +759,16 @@
       { type: 'heading', label: 'Подложка' }, ...(glass ? [{ ...glass, label: 'Показывать подложку' }] : []), ...style(['tint']),
     ]
       .map(s => ({ ...s, value: structuredClone(item.data[s.key]) }));
+    // шрифт: наводишь на вариант — блок сразу им написан; название в списке — тем же шрифтом
+    const fontField = fields.find(s => s.key === 'font');
+    if (fontField) Object.assign(fontField, {
+      itemStyle: (v) => `font-family:${FONT_STACK[v] || 'inherit'}`,
+      preview: (v) => {
+        const k = v ?? item.data.font;
+        rec.shell.style.setProperty('--wf', k !== 'inherit' ? FONT_STACK[k] : '');
+        if (item.type === 'greeting') rec.inst?.fit?.(); // приветствие подбирает размер под шрифт
+      },
+    });
     // вид подложки: «как везде» — и всё, полей нет; «свой» — поля начинаются с общих значений
     const looks = LOOK_SETTINGS.filter(s => s.key !== 'glassKind' || Liquid.supported);
     const ownLook = looks.some(s => item.data[s.key] !== s.unset);
@@ -798,6 +814,9 @@
       el.style.top = Math.max(gap, top) + 'px';
     };
     place();
+    // высота меняется (открылись поля «своего стиля») — переставляем, чтобы не уезжало за экран
+    const ro = new ResizeObserver(() => place());
+    ro.observe(el);
     requestAnimationFrame(() => el.classList.add('open'));
 
     const onKey = (e) => {
@@ -822,6 +841,7 @@
       window.removeEventListener('keydown', onKey, true);
       document.removeEventListener('mousedown', onDown, true);
       window.removeEventListener('resize', onMove);
+      ro.disconnect();
       placeInspector = null;
       closePicker?.();
       closeDropdown?.();
@@ -837,7 +857,16 @@
     const getters = {};
     // поле с showIf(get) показывается, только пока условие верно (get(key) — текущее значение другого поля)
     const conds = [];
-    const sync = () => { for (const [node, fn] of conds) node.hidden = !fn((k) => getters[k]?.()); };
+    const sync = () => {
+      let shown = null;
+      for (const [node, fn] of conds) {
+        const hide = !fn((k) => getters[k]?.());
+        if (node.hidden && !hide) shown = node;
+        node.hidden = hide;
+      }
+      // появились новые поля — докручиваем, чтобы их было видно (после переезда инспектора)
+      if (shown && shown.isConnected) setTimeout(() => shown.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 280);
+    };
     const outer = notify;
     notify = (typing) => { sync(); outer(typing); };
     for (const f of fields) {
@@ -881,7 +910,7 @@
         getters[f.key] = () => inp.checked;
       } else if (f.type === 'select') {
         // до трёх вариантов — сегменты (всё видно сразу), больше — выпадающий список
-        const c = f.options.length <= 3 && !f.dropdown ? segmented(f.options, f.value, () => notify()) : dropdown(f.options, f.value, () => notify());
+        const c = f.options.length <= 3 && !f.dropdown ? segmented(f.options, f.value, () => notify()) : dropdown(f.options, f.value, () => notify(), { preview: f.preview, itemStyle: f.itemStyle });
         control = h('div', { class: 'field' }, h('span', {}, f.label), c.el);
         getters[f.key] = c.get;
       } else if (f.type === 'align') {
@@ -969,7 +998,9 @@
   }
 
   let closeDropdown = null; // открыт максимум один список
-  function dropdown(options, value, onChange) {
+  // opts.preview(v) — наведение на вариант (v) и уход без выбора (null): показать вживую, не сохраняя
+  // opts.itemStyle(v) — свой стиль у пункта (например, название шрифта этим же шрифтом)
+  function dropdown(options, value, onChange, opts = {}) {
     let cur = options.some(([v]) => v === value) ? value : options[0][0];
     const label = h('span', { class: 'dd-label' });
     const btn = h('button', { type: 'button', class: 'dd-btn', 'aria-haspopup': 'listbox' }, label,
@@ -981,15 +1012,20 @@
     // список живёт в body: .modal с overflow и backdrop-filter обрезала бы его
     const list = h('div', { class: 'dd-list', role: 'listbox' });
     const items = options.map(([v, t], i) => h('button', {
-      type: 'button', class: 'dd-item', role: 'option', tabindex: '-1',
+      type: 'button', class: 'dd-item', role: 'option', tabindex: '-1', style: opts.itemStyle?.(v) || null,
       onmousemove: () => highlight(i),
       onclick: () => pick(i),
     }, t));
     list.append(...items);
-    const highlight = (i) => { hi = (i + items.length) % items.length; items.forEach((it, j) => it.classList.toggle('hi', j === hi)); };
+    let previewing = false;
+    const highlight = (i, preview = true) => {
+      hi = (i + items.length) % items.length;
+      items.forEach((it, j) => it.classList.toggle('hi', j === hi));
+      if (preview && opts.preview) { previewing = true; opts.preview(options[hi][0]); }
+    };
     const pick = (i) => {
       const changed = cur !== options[i][0];
-      cur = options[i][0]; paint(); close(); btn.focus();
+      cur = options[i][0]; paint(); previewing = false; close(); btn.focus();
       if (changed) onChange?.(cur);
     };
 
@@ -1005,7 +1041,7 @@
       const below = window.innerHeight - r.bottom > options.length * 40 + 16;
       list.style.cssText = `left:${r.left}px;width:${r.width}px;` + (below ? `top:${r.bottom + 6}px` : `bottom:${window.innerHeight - r.top + 6}px`);
       items.forEach((it, i) => it.classList.toggle('sel', options[i][0] === cur));
-      highlight(options.findIndex(([v]) => v === cur));
+      highlight(options.findIndex(([v]) => v === cur), false);
       document.body.append(list);
       requestAnimationFrame(() => list.classList.add('open'));
       btn.classList.add('open');
@@ -1017,6 +1053,7 @@
       closeDropdown = close;
     }
     function close() {
+      if (previewing) { previewing = false; opts.preview?.(null); } // ушли, ничего не выбрав — вернуть как было
       list.classList.remove('open');
       list.remove();
       btn.classList.remove('open');
@@ -1473,7 +1510,10 @@
           h('button', { class: 'accent-swatch' + (settings.accent === c ? ' active' : ''), style: `--c:${c}`, title: c, onclick: () => { setSetting('accent', c); renderSettings(); } })));
         return [
           section('Текст в блоках',
-            h('div', { class: 'field' }, h('span', {}, 'Шрифт'), dropdown(FONTS, settings.text.font, (v) => setSetting('text', { ...settings.text, font: v })).el),
+            h('div', { class: 'field' }, h('span', {}, 'Шрифт'), dropdown(FONTS, settings.text.font, (v) => setSetting('text', { ...settings.text, font: v }), {
+              itemStyle: (v) => `font-family:${FONT_STACK[v]}`,
+              preview: (v) => document.documentElement.style.setProperty('--w-font', FONT_STACK[v ?? settings.text.font]),
+            }).el),
             h('div', { class: 'field' }, h('span', {}, 'Тень'), segmented(SHADOWS, settings.text.shadow, (v) => setSetting('text', { ...settings.text, shadow: v })).el),
             ),
           section('Стекло',
@@ -1621,12 +1661,12 @@
       }
       toast('Фон добавлен в слайд-шоу');
     };
-    const addImages = (files) => Promise.all(files.map(async (f) => {
+    const addImages = (files) => { const done = busy(files.length > 1 ? `Загружаю картинки: ${files.length}` : 'Загружаю картинку…'); return Promise.all(files.map(async (f) => {
       const { full, thumb } = await shrinkImage(f);
       const id = 's' + Math.random().toString(36).slice(2, 9);
       await Store.set('slide:' + id, full);
       return { id, kind: 'image', thumb };
-    })).then((items) => { setS({ items: [...settings.slides.items, ...items] }); toast(`Добавлено: ${items.length}`); });
+    })).then((items) => { setS({ items: [...settings.slides.items, ...items] }); toast(`Добавлено: ${items.length}`); }).finally(done); };
 
     const list = h('div', { class: 'slides' }, s.items.map((it, i) => h('div', { class: 'slide' + (i === s.idx ? ' current' : ''), title: i === s.idx ? 'Сейчас на экране' : 'Показать' },
       h('button', {
@@ -1812,8 +1852,16 @@
     });
   }
 
+  // плашка «Загружаю…» со спиннером сверху экрана; возвращает done(). Короткие операции (<150 мс) не мигают ей.
+  function busy(text) {
+    const el = h('div', { class: 'busy-pill', role: 'status' }, h('i', { class: 'spinner' }), text);
+    const t = setTimeout(() => { document.body.append(el); requestAnimationFrame(() => el.classList.add('on')); }, 150);
+    return () => { clearTimeout(t); el.classList.remove('on'); setTimeout(() => el.remove(), 250); };
+  }
+
   async function loadBgImage(file) {
-    const { full } = await shrinkImage(file);
+    const done = busy('Загружаю картинку…');
+    const { full } = await shrinkImage(file).finally(done);
     setSetting('bgImage', full);
     meshOpen = true; // сразу показываем эффекты картинки
     renderSettings();

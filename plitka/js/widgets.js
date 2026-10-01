@@ -409,16 +409,20 @@ const Widgets = {
         closeRecent();
         if (!data.recent || !data.history?.length || document.activeElement !== input) return;
         const r = form.getBoundingClientRect();
-        recentBox = h('div', { class: 'search-recent', style: `left:${r.left}px;top:${r.bottom + 6}px;width:${r.width}px` },
+        // «полка» чуть уже строки: стекло как у неё, запросы — чипсами
+        recentBox = h('div', { class: 'search-recent', style: `left:${r.left + 10}px;top:${r.bottom + 8}px;width:${r.width - 20}px` },
+          h('div', { class: 'sr-label' }, 'Недавние'),
           data.history.map(q => h('div', { class: 'sr-row' },
             h('button', { type: 'button', class: 'sr-q', onmousedown: (e) => { e.preventDefault(); search(q, how(e)); } },
-              h('span', { class: 'sr-ico', html: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4M12 8v4l3 2"/></svg>' }), q),
+              h('span', { class: 'sr-ico', html: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4M12 8v4l3 2"/></svg>' }), h('span', { class: 'sr-text', translate: 'no' }, q)),
             h('button', {
               type: 'button', class: 'sr-del', title: 'Убрать из истории', html: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
               onmousedown: (e) => { e.preventDefault(); data.history = data.history.filter(x => x !== q); ctx.save(); openRecent(); },
             }))));
         document.body.append(recentBox);
-        flipUp(recentBox, form);
+        flipUp(recentBox, form, 8);
+        const box = recentBox;
+        requestAnimationFrame(() => box.classList.add('on'));
       }
       input.addEventListener('focus', () => { if (!input.value.trim()) openRecent(); });
       input.addEventListener('blur', () => setTimeout(closeRecent, 120));
@@ -555,7 +559,7 @@ const Widgets = {
       ro.observe(body);
       document.fonts?.addEventListener('loadingdone', fit); // свой шрифт догрузился — шире или уже, чем запасной
       const t = setInterval(tick, 15000);
-      return { destroy: () => { clearInterval(t); ro.disconnect(); document.fonts?.removeEventListener('loadingdone', fit); } };
+      return { fit, destroy: () => { clearInterval(t); ro.disconnect(); document.fonts?.removeEventListener('loadingdone', fit); } };
     },
   },
 
@@ -563,6 +567,7 @@ const Widgets = {
     title: 'Погода',
     size: { w: 6, h: 2 }, min: { w: 3, h: 1 },
     defaults: { glass: true, city: 'Москва', view: 'now', side: 'left' },
+    minFor: (d) => d.view === 'mini' ? { w: 2, h: 1 } : null, // иконка и градусы влезают и в 2×1
     settings: [
       { key: 'city', label: 'Город', type: 'text' },
       { key: 'view', label: 'Вид', type: 'select', options: [['now', 'Сейчас'], ['mini', 'Мини'], ['week', 'Неделя']] },

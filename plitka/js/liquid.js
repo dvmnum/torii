@@ -83,7 +83,7 @@ const Liquid = (() => {
       ['x', 0], ['y', 0], ['width', w], ['height', h]]) filter.setAttribute(a, v);
     filter.innerHTML =
       `<feImage href="${makeMap(w, h, rad)}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="none" result="map"/>` +
-      `<feDisplacementMap in="SourceGraphic" in2="map" scale="${strength.toFixed(1)}" xChannelSelector="R" yChannelSelector="G"/>`;
+      `<feDisplacementMap color-interpolation-filters="sRGB" in="SourceGraphic" in2="map" scale="${strength.toFixed(1)}" xChannelSelector="R" yChannelSelector="G"/>`;
     ensureDefs().append(filter);
     // карта-картинка грузится асинхронно — подключаем фильтр, когда она готова
     const img = new Image();
