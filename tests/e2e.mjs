@@ -271,12 +271,13 @@ await page.keyboard.press('Escape');
 await page.waitForTimeout(600); // выход из редактора анимируется — первый замер не должен попасть в неё
 // замеры группируем по минуте: при смене минуты основное время честно меняет ширину
 const colonX = [];
-for (let i = 0; i < 4; i++) {
+for (let i = 0; i < 5; i++) {
   colonX.push(await page.$eval('.clock-time', el => ({ x: el.querySelector('.colon').getBoundingClientRect().left, hm: el.textContent.slice(0, 5) })));
   await page.waitForTimeout(1000);
 }
 console.log('colon x по секундам', colonX.map(c => `${c.hm}@${c.x}`).join(', '));
-const sameMinute = colonX.filter(c => c.hm === colonX[colonX.length - 1].hm);
+// первый замер не считаем: блок мог ещё доезжать после закрытия инспектора и выхода из редактора
+const sameMinute = colonX.slice(1).filter(c => c.hm === colonX[colonX.length - 1].hm);
 check(sameMinute.length >= 2 && sameMinute.every(c => Math.abs(c.x - sameMinute[0].x) < 0.5), 'часы: секунды не двигают основное время');
 await page.screenshot({ path: `${out}/15-clock-seconds.png` });
 

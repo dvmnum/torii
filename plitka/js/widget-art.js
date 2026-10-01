@@ -7,7 +7,13 @@ const WIDGET_ART = (() => {
   const bar = (x, y, w, cls = 'mu', hh = 5) => `<rect class="${cls}" x="${x}" y="${y}" width="${w}" height="${hh}" rx="${hh / 2}"/>`;
   const check = (x, y) => `<rect class="ac" x="${x}" y="${y}" width="11" height="11" rx="3.5"/><path class="ck" d="M${x + 2.8} ${y + 5.8}l2.2 2.2 3.6-4.4"/>`;
   const box = (x, y) => `<rect class="ln" x="${x + .6}" y="${y + .6}" width="9.8" height="9.8" rx="3"/>`;
-  // плитка-ссылка «фирменного» цвета
+  // контурные иконки Lucide (ISC), сетка 24×24 — масштабируем; толщина линии не растёт (vector-effect в CSS, класс ol)
+  const LUCIDE = {
+    hourglass: 'M5 22h14M5 2h14M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2',
+    cloudSun: 'M12 2v2M4.93 4.93l1.41 1.41M20 12h2M19.07 4.93l-1.41 1.41M15.947 12.65a4 4 0 0 0-5.925-4.128M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z',
+    undo: 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5',
+  };
+  const icon = (d, x, y, s, cls = 'ol') => `<path class="${cls}" d="${d}" transform="translate(${x} ${y}) scale(${s})"/>`;
   // плитка-ссылка: монохром разной плотности (цвета брендов в меню рябили)
   const tile = (x, y, o, s = 20) => `<rect x="${x}" y="${y}" width="${s}" height="${s}" rx="6" fill="#fff" fill-opacity="${o}"/>`;
 
@@ -16,11 +22,12 @@ const WIDGET_ART = (() => {
 
     greeting: svg(`<path class="ac" d="M42 30c1.2 7 3 8.8 10 10-7 1.2-8.8 3-10 10-1.2-7-3-8.8-10-10 7-1.2 8.8-3 10-10z"/><path class="ac" d="M30 56c.6 3.4 1.4 4.2 4.8 4.8-3.4.6-4.2 1.4-4.8 4.8-.6-3.4-1.4-4.2-4.8-4.8 3.4-.6 4.2-1.4 4.8-4.8z" opacity=".7"/>${bar(66, 34, 66, 'fg', 9)}${bar(66, 49, 46, 'fg', 9)}${bar(66, 66, 34, 'ac', 4)}`),
 
-    pomodoro: svg(`${card(40, 8, 80, 80)}<circle class="ring" cx="80" cy="44" r="22"/><path class="arc" d="M80 22a22 22 0 1 1-20.9 28.8"/>` +
-      `<text class="fg t-sm" x="80" y="48" text-anchor="middle">25:00</text><circle class="fg" cx="80" cy="76" r="5"/><path class="play" d="M78.6 73.6v4.8l3.8-2.4z"/>`),
+    // кольцо прогресса и кнопка — без цифр
+    pomodoro: svg(`<circle class="ring" cx="80" cy="42" r="24"/><path class="arc" d="M80 18a24 24 0 1 1-22.8 31.4"/>` +
+      `<circle class="fg" cx="80" cy="42" r="9"/><path class="play" d="M77.6 38.2v7.6l6-3.8z"/>`),
 
-    countdown: svg(`${card()}<text class="ac t-big" x="30" y="60">12</text>${bar(78, 36, 50, 'fg', 6)}${bar(78, 48, 36)}` +
-      `<path class="ln" d="M80 62h10M80 74h10M81 62c0 4 8 4 8 6s-8 2-8 6M89 62c0 4-8 4-8 6s8 2 8 6"/>`),
+    // песочные часы и полоска «сколько прошло» — без цифр
+    countdown: svg(icon(LUCIDE.hourglass, 34, 22, 2.1) + bar(92, 36, 40, 'fg', 7) + bar(92, 52, 40, 'mu', 5) + bar(92, 52, 24, 'ac', 5)),
 
     todo: svg(`${card()}${check(28, 24)}${bar(46, 27, 62, 'mu')}<rect class="mu" x="46" y="29" width="62" height="1" />${check(28, 42)}${bar(46, 45, 44, 'mu')}${box(28, 60)}${bar(46, 63, 72, 'fg')}`),
 
@@ -41,19 +48,21 @@ const WIDGET_ART = (() => {
     bookmarks: svg(`${card(8, 30, 144, 36)}<path class="ac" d="M18 40a2 2 0 0 1 2-2h5l2 2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2z" fill-opacity=".85"/>` +
       [.6, .4, .5].map((c, i) => `<circle cx="${52 + i * 34}" cy="48" r="5" fill="#fff" fill-opacity="${c}"/>${bar(60 + i * 34, 45.5, 18)}`).join('')),
 
-    recent: svg(`${card()}` + [.6, .4, .5].map((c, i) => `<circle cx="32" cy="${30 + i * 18}" r="5" fill="#fff" fill-opacity="${c}"/>${bar(44, 27.5 + i * 18, [70, 52, 62][i], i ? 'mu' : 'fg')}`).join('') +
-      `<path class="arc2" d="M128 40a10 10 0 1 1-9 -6"/><path class="arc2" d="M117 29l2 5 5-2"/>`),
+    recent: svg(`${card()}` + [.6, .4, .5].map((c, i) => `<circle cx="32" cy="${30 + i * 18}" r="5" fill="#fff" fill-opacity="${c}"/>${bar(44, 27.5 + i * 18, [56, 40, 48][i], i ? 'mu' : 'fg')}`).join('') +
+      icon(LUCIDE.undo, 112, 34, 1.15, 'ol ol-ac')),
 
-    weather: svg(`<g class="sun"><circle class="ac" cx="54" cy="40" r="12"/>${[...Array(8)].map((_, i) => `<path class="ray" d="M54 22v-5" transform="rotate(${i * 45} 54 40)"/>`).join('')}</g>` +
-      `<path class="fg" d="M48 70h30a11 11 0 0 0 1.3-21.9 15 15 0 0 0-28.7 3.4A9.3 9.3 0 0 0 48 70z"/><text class="fg t-mid" x="96" y="62">11°</text>`),
+    // контурные облако с солнцем — как иконка в самом виджете
+    weather: svg(icon(LUCIDE.cloudSun, 50, 14, 2.6)),
 
-    rates: svg(`${card()}` + [['$', '81.2', 'up'], ['€', '94.6', 'dn'], ['¥', '11.3', 'up']].map(([c, v, d], i) =>
-      `<text class="mu-t t-xs" x="26" y="${33 + i * 18}">${c}</text><text class="fg t-xs" x="38" y="${33 + i * 18}">${v}</text><path class="${d}" d="${d === 'up' ? `M84 ${31 + i * 18}l4-5 4 5z` : `M84 ${26 + i * 18}l4 5 4-5z`}"/>`).join('') +
-      `<polyline class="spark" points="100,60 108,52 115,56 123,40 131,44 136,32"/>`),
+    // строки курсов — без подписей валют: полоска, значение, стрелка; справа график
+    rates: svg(`${card()}` + ['up', 'dn', 'up'].map((d, i) =>
+      bar(28, 27 + i * 16, 10, 'mu', 5) + bar(44, 27 + i * 16, 28, 'fg', 5) +
+      `<path class="${d}" d="${d === 'up' ? `M82 ${33 + i * 16}l4-5 4 5z` : `M82 ${28 + i * 16}l4 5 4-5z`}"/>`).join('') +
+      `<polyline class="spark" points="100,62 108,54 115,58 123,42 131,46 136,34"/>`),
 
-    quote: svg(`${card()}<text class="ac t-quote" x="24" y="52">“</text>${bar(52, 32, 76, 'fg', 6)}${bar(52, 44, 60, 'fg', 6)}${bar(52, 60, 40)}`),
+    quote: svg(`<text class="ac t-quote" x="40" y="62">“</text>${bar(70, 38, 54, 'fg', 6)}${bar(70, 51, 38, 'mu', 5)}`),
 
-    word: svg(`${card()}<text class="fg t-serif" x="28" y="56">Aa</text>${bar(80, 34, 48, 'fg', 7)}${bar(80, 48, 40)}${bar(80, 58, 30)}<rect class="ac" x="28" y="64" width="18" height="3" rx="1.5"/>`),
+    word: svg(`<text class="fg t-serif" x="38" y="60">Aa</text>${bar(94, 40, 32, 'fg', 6)}${bar(94, 52, 22, 'mu', 5)}`),
 
     pic: svg(`<clipPath id="wa-pic"><rect x="24" y="10" width="112" height="76" rx="12"/></clipPath><g clip-path="url(#wa-pic)">` +
       `<rect x="24" y="10" width="112" height="76" class="sky"/><circle class="ac" cx="110" cy="32" r="9"/>` +

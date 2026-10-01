@@ -334,13 +334,14 @@
       .replace(/\{(время|time)\}/gi, d.toLocaleTimeString(I18N.locale(), { hour: '2-digit', minute: '2-digit' }))
       .replace(/\{(дата|date)\}/gi, d.toLocaleDateString(I18N.locale(), { day: 'numeric', month: 'long' }))
       .replace(/\{(день|day)\}/gi, d.toLocaleDateString(I18N.locale(), { weekday: 'long' }));
-    return t.trim() || '​'; // пустой заголовок Chrome заменит адресом — ставим невидимый символ
+    return t.trim() || 'Torii'; // пустое название — как приложение (раньше ставили невидимый символ, и вкладка была без текста)
   }
 
   // рисует иконку в 64×64 и возвращает dataURL (или путь к файлу для логотипа)
   function tabIcon(kind = settings.tab.icon) {
     const tab = settings.tab;
-    if (kind === 'logo' || (kind === 'image' && !tab.image)) return 'icons/icon32.png';
+    // версия в адресе — иначе Chrome держит в кэше старую иконку (после переименования вкладка показывала прежний значок)
+    if (kind === 'logo' || (kind === 'image' && !tab.image)) return 'icons/icon32.png?v=' + (chrome.runtime?.getManifest?.().version || '1');
     if (kind === 'image') return tab.image;
     const c = document.createElement('canvas');
     c.width = c.height = 64;

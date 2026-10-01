@@ -825,6 +825,10 @@ body.editing .editbar { transform: translate(-50%, 0); opacity: 1; }
 .add-item:hover .add-art :is(.arc, .arc2, .spark) { stroke: var(--accent); }
 .add-item:hover .add-art .ray { stroke: var(--accent); }
 .add-art .sky { fill: rgba(255,255,255,.1); }
+/* контурные иконки (Lucide) в макетах: толщина линии не зависит от масштаба */
+.add-art .ol { fill: none; stroke: rgba(255,255,255,.75); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; transition: stroke .2s; }
+.add-art .ol-ac { stroke: rgba(255,255,255,.6); }
+.add-item:hover .add-art .ol-ac { stroke: var(--accent); }
 .add-art .edge { fill: none; stroke: rgba(255,255,255,.18); }
 .add-art text { font-family: 'Manrope', sans-serif; }
 .add-art .t-clock { font-size: 36px; font-weight: 250; letter-spacing: -1.5px; }
