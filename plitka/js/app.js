@@ -14,9 +14,19 @@
     system: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
     serif: "Georgia, 'Times New Roman', serif",
     mono: "ui-monospace, 'Cascadia Mono', Consolas, 'Courier New', monospace",
+    unbounded: "'Unbounded', 'Manrope', sans-serif",
+    playfair: "'Playfair Display', Georgia, serif",
+    oswald: "'Oswald', 'Arial Narrow', sans-serif",
+    comfortaa: "'Comfortaa', 'Manrope', sans-serif",
+    caveat: "'Caveat', cursive",
+    lobster: "'Lobster', cursive",
   };
-  const FONTS = [['manrope', 'Manrope'], ['system', 'Системный'], ['serif', 'С засечками'], ['mono', 'Моноширинный']];
+  const FONTS = [['manrope', 'Manrope'], ['system', 'Системный'], ['serif', 'С засечками'], ['mono', 'Моноширинный'],
+    ['unbounded', 'Unbounded — широкий'], ['playfair', 'Playfair — изящный'], ['oswald', 'Oswald — узкий'],
+    ['comfortaa', 'Comfortaa — круглый'], ['caveat', 'Caveat — от руки'], ['lobster', 'Lobster — вывеска']];
   const SHADOWS = [['none', 'Нет'], ['soft', 'Мягкая'], ['strong', 'Сильная']];
+  // тень под блоком (не путать с тенью текста)
+  const ELEVS = [['none', 'Нет'], ['soft', 'Слабая'], ['strong', 'Сильная']];
   // как часто менять слайд-шоу (нужно уже при чистке настроек)
   const SLIDE_EVERY_KEYS = ['tab', '10m', '1h', '1d'];
 
@@ -44,7 +54,8 @@
     glassBlur: 22,
     glassAlpha: 0.08,
     glassKind: 'glass', // подложка по умолчанию: обычное стекло или «жидкое» (преломление по краям, как в iOS)
-    glassTone: 0.25, // «читаемость»: насколько стекло выравнивает яркость фона под собой (на пёстром — минимум 0.75)
+    glassTone: 0.25, // «читаемость»: насколько стекло выравнивает яркость фона под собой (на пёстром — минимум 0.7)
+    elev: 'soft', // тень под блоками: none | soft | strong
     radius: 22,
     motion: true,
     mesh: DEFAULT_MESH,
@@ -58,16 +69,21 @@
   };
 
   // оформление, общее для всех виджетов: цвет текста и подложки
-  const STYLE_DEFAULTS = { ink: 'auto', tint: null, font: 'inherit', shadow: 'inherit', radius: null, blur: null, alpha: null, glassKind: 'inherit' };
+  const STYLE_DEFAULTS = { ink: 'auto', tint: null, font: 'inherit', shadow: 'inherit', radius: null, blur: null, alpha: null, glassKind: 'inherit', elev: 'inherit' };
   const STYLE_SETTINGS = [
     { key: 'ink', label: 'Цвет', type: 'select', options: [['auto', 'Авто'], ['light', 'Светлый'], ['dark', 'Тёмный']] },
     { key: 'font', label: 'Шрифт', type: 'select', options: [['inherit', 'Как везде'], ...FONTS] },
     { key: 'shadow', label: 'Тень', type: 'select', options: [['inherit', 'Как везде'], ...SHADOWS] },
     { key: 'tint', label: 'Цвет', type: 'color', empty: 'Прозрачная' },
-    { key: 'glassKind', label: 'Вид стекла', type: 'select', dropdown: true, options: [['inherit', 'Как везде'], ['glass', 'Стекло'], ...(Liquid.supported ? [['liquid', 'Жидкое стекло']] : [])] },
-    { key: 'radius', label: 'Скругление', type: 'range', min: 0, max: 48, step: 1, inheritFrom: 'radius', fmt: (v) => v + 'px' },
-    { key: 'blur', label: 'Размытие', type: 'range', min: 0, max: 40, step: 1, inheritFrom: 'glassBlur', fmt: (v) => v + 'px' },
-    { key: 'alpha', label: 'Плотность', type: 'range', min: 0, max: 0.4, step: 0.01, inheritFrom: 'glassAlpha', fmt: (v) => Math.round(v * 100) + '%' },
+  ];
+  // «своя подложка» блока: пока выбрано «как везде», этих полей в настройках нет вовсе (null / 'inherit' — берётся общее);
+  // global — общая настройка, с неё начинается своё значение
+  const LOOK_SETTINGS = [
+    { key: 'glassKind', global: 'glassKind', label: 'Вид стекла', type: 'select', options: [['glass', 'Стекло'], ...(Liquid.supported ? [['liquid', 'Жидкое']] : [])], unset: 'inherit' },
+    { key: 'elev', global: 'elev', label: 'Тень блока', type: 'select', options: ELEVS, unset: 'inherit' },
+    { key: 'radius', global: 'radius', label: 'Скругление', type: 'range', min: 0, max: 48, step: 1, fmt: (v) => v + 'px', unset: null },
+    { key: 'blur', global: 'glassBlur', label: 'Размытие', type: 'range', min: 0, max: 40, step: 1, fmt: (v) => v + 'px', unset: null },
+    { key: 'alpha', global: 'glassAlpha', label: 'Плотность', type: 'range', min: 0, max: 0.4, step: 0.01, fmt: (v) => Math.round(v * 100) + '%', unset: null },
   ];
 
   const DEFAULT_LAYOUT = [
@@ -141,6 +157,7 @@
     const legacy = Mesh.PRESETS.find(p => p.id === LEGACY_BG[raw.bg]);
     if (legacy) s.mesh = fromPreset(legacy);
     if (!['glass', 'liquid'].includes(s.glassKind)) s.glassKind = 'glass';
+    if (!ELEVS.some(([k]) => k === s.elev)) s.elev = 'soft';
     s.glassTone = Math.min(1, Math.max(0, s.glassTone));
     return s;
   }
@@ -260,6 +277,7 @@
     const num = (v, lo, hi) => Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : null;
     item.data.radius = num(item.data.radius, 0, 48); item.data.blur = num(item.data.blur, 0, 40); item.data.alpha = num(item.data.alpha, 0, 0.4);
     if (!['inherit', 'glass', 'liquid'].includes(item.data.glassKind)) item.data.glassKind = 'inherit';
+    if (!['inherit', ...ELEVS.map(([k]) => k)].includes(item.data.elev)) item.data.elev = 'inherit';
   }
 
   // ---------- тема ----------
@@ -278,6 +296,7 @@
     document.querySelector('#bg .bg-image').style.backgroundImage = settings.bgImage ? `url("${settings.bgImage}")` : '';
     r.setProperty('--w-font', FONT_STACK[settings.text.font]);
     document.body.dataset.ts = settings.text.shadow;
+    document.body.dataset.elev = settings.elev;
     applyMesh();
     applyTab();
     // фон поменялся — пересчитать «авто»-цвет текста у блоков (после инициализации сетки)
@@ -445,6 +464,7 @@
     for (const [k, v, u] of [['--radius', item.data.radius, 'px'], ['--glass-blur', item.data.blur, 'px'], ['--glass-alpha', item.data.alpha, '']]) rec.shell.style.setProperty(k, v == null ? '' : v + u);
     rec.shell.classList.toggle('liquid', (item.data.glassKind === 'inherit' ? settings.glassKind : item.data.glassKind) === 'liquid');
     if (item.data.shadow !== 'inherit') rec.shell.dataset.ts = item.data.shadow; else delete rec.shell.dataset.ts;
+    if (item.data.elev !== 'inherit') rec.shell.dataset.elev = item.data.elev; else delete rec.shell.dataset.elev;
     rec.shell.dataset.type = item.type;
     rec.inst = Widgets[item.type].render(rec.body, item.data, ctxFor(item)) || null;
     applyInk(item);
@@ -500,7 +520,8 @@
     let dark = item.data.ink === 'dark';
     const { mean, spread } = lumUnder(rec.el);
     // пёстрый фон под стеклом — стекло выравнивает яркость подложки (сжимает контраст), и любой цвет текста читается
-    const mixed = !!item.data.glass && !item.data.tint && spread > 0.4;
+    // в основном светлый фон с тёмными пятнами — не «пёстрый»: там лучше тёмный текст на светлом стекле, чем затемнять белое в серое
+    const mixed = !!item.data.glass && !item.data.tint && spread > 0.45 && mean < 0.62;
     rec.shell.classList.toggle('bg-mixed', mixed);
     if (item.data.ink === 'auto') {
       let l = mean;
@@ -612,8 +633,8 @@
     }
     if (!mounting) commitPositions();
     placeInspector?.();
-    refreshInk();
-    setTimeout(Liquid.refresh, 350); // после анимации перемещения блоков
+    // после анимации перемещения: раньше блок ещё стоит на старом месте, и яркость под ним мерилась не там
+    setTimeout(() => { refreshInk(); Liquid.refresh(); }, 380);
   });
 
   function applyBucket() {
@@ -661,13 +682,13 @@
 
   // добавление
   const addMenu = document.getElementById('add-menu');
-  // карточки по группам: иконка, название, что умеет
+  // карточки по группам: мини-макет виджета (widget-art.js), название, что умеет
   for (const [g, gTitle] of WIDGET_GROUPS) {
     const items = Object.entries(Widgets).filter(([, def]) => (def.group || 'mood') === g);
     if (!items.length) continue;
     addMenu.append(h('div', { class: 'add-group' }, gTitle),
-      ...items.map(([type, def]) => h('button', { class: 'add-item', type: 'button', onclick: () => { addWidget(type); closeAddMenu(); } },
-        h('span', { class: 'add-ico', html: def.icon || '' }),
+      ...items.map(([type, def]) => h('button', { class: 'add-item', type: 'button', 'data-type': type, onclick: () => { addWidget(type); closeAddMenu(); } },
+        WIDGET_ART[type] ? h('span', { class: 'add-art', html: WIDGET_ART[type] }) : h('span', { class: 'add-ico', html: def.icon || '' }),
         h('span', { class: 'add-txt' }, h('b', {}, def.title), h('small', {}, def.desc || '')))));
   }
   const closeAddMenu = () => addMenu.classList.remove('open');
@@ -677,7 +698,7 @@
   function addWidget(type) {
     const def = Widgets[type];
     // необязательное разрешение спрашиваем сразу — пока клик ещё «свежий»; откажут — виджет покажет кнопку
-    if (def.perm) chrome.permissions?.request({ permissions: [def.perm] }).then((ok) => { if (ok) renderWidget(item); }).catch(() => {});
+    if (def.perm) Perm.ask(def.perm, toast).then((ok) => { if (ok) renderWidget(item); });
     const item = { id: 'w-' + Math.random().toString(36).slice(2, 9), type, w: def.size.w, h: def.size.h };
     fillDefaults(item);
     if (!grid.willItFit({ w: item.w, h: item.h })) {
@@ -729,9 +750,14 @@
     const fields = [
       ...(own.length ? [{ type: 'heading', label: 'Содержимое' }, ...own] : []),
       { type: 'heading', label: 'Текст' }, ...style(['ink', 'font', 'shadow']),
-      { type: 'heading', label: 'Подложка' }, ...(glass ? [{ ...glass, label: 'Показывать подложку' }] : []), ...style(['glassKind', 'tint', 'radius', 'blur', 'alpha']),
+      { type: 'heading', label: 'Подложка' }, ...(glass ? [{ ...glass, label: 'Показывать подложку' }] : []), ...style(['tint']),
     ]
-      .map(s => ({ ...s, value: structuredClone(item.data[s.key]), inherit: s.inheritFrom ? settings[s.inheritFrom] : undefined }));
+      .map(s => ({ ...s, value: structuredClone(item.data[s.key]) }));
+    // вид подложки: «как везде» — и всё, полей нет; «свой» — поля начинаются с общих значений
+    const looks = LOOK_SETTINGS.filter(s => s.key !== 'glassKind' || Liquid.supported);
+    const ownLook = looks.some(s => item.data[s.key] !== s.unset);
+    fields.push({ key: 'look', label: 'Стиль', type: 'select', options: [['inherit', 'Как везде'], ['own', 'Свой']], value: ownLook ? 'own' : 'inherit' },
+      ...looks.map(s => ({ ...s, value: item.data[s.key] !== s.unset ? item.data[s.key] : settings[s.global], showIf: (get) => get('look') === 'own' })));
 
     let getters = {};
     let t = null;
@@ -739,6 +765,8 @@
       clearTimeout(t);
       const v = {};
       for (const k in getters) v[k] = getters[k]();
+      if (v.look === 'inherit') for (const s of looks) v[s.key] = s.unset;
+      delete v.look;
       // ничего не поменялось — не перерисовываем (таймеры и фокус виджета не сбиваем)
       if (Object.keys(v).every(k => JSON.stringify(v[k]) === JSON.stringify(item.data[k]))) return;
       Object.assign(item.data, v);
@@ -807,6 +835,11 @@
   function buildFields(fields, notify = () => {}) {
     const nodes = [];
     const getters = {};
+    // поле с showIf(get) показывается, только пока условие верно (get(key) — текущее значение другого поля)
+    const conds = [];
+    const sync = () => { for (const [node, fn] of conds) node.hidden = !fn((k) => getters[k]?.()); };
+    const outer = notify;
+    notify = (typing) => { sync(); outer(typing); };
     for (const f of fields) {
       const id = 'f-' + f.key + '-' + Math.random().toString(36).slice(2, 6);
       let control;
@@ -834,23 +867,12 @@
         control = h('div', { class: 'field field-row' }, h('span', {}, f.label), h('div', { class: 'row' }, reset, btn));
         getters[f.key] = () => cur;
       } else if (f.type === 'range') {
-        // ползунок с «как везде»: null — берётся общая настройка (f.inherit — её текущее значение для показа)
-        let cur = f.value ?? null;
         const fmt = f.fmt || ((v) => v);
-        const out = h('output', {});
-        const inp = h('input', { type: 'range', min: f.min, max: f.max, step: f.step });
-        const reset = h('button', { type: 'button', class: 'mini-reset', title: 'Как везде' }, 'как везде');
-        const paint = () => {
-          inp.value = cur ?? f.inherit;
-          out.textContent = cur == null ? `как везде · ${fmt(f.inherit)}` : fmt(cur);
-          reset.hidden = cur == null;
-          inp.classList.toggle('inherit', cur == null);
-        };
-        inp.addEventListener('input', () => { cur = +inp.value; paint(); notify(); });
-        reset.addEventListener('click', () => { cur = null; paint(); notify(); });
-        paint();
-        control = h('div', { class: 'field field-range' }, h('span', {}, f.label, h('span', { class: 'rng-r' }, reset, out)), inp);
-        getters[f.key] = () => cur;
+        const inp = h('input', { type: 'range', min: f.min, max: f.max, step: f.step, value: f.value });
+        const out = h('output', {}, fmt(+inp.value));
+        inp.addEventListener('input', () => { out.textContent = fmt(+inp.value); notify(); });
+        control = h('div', { class: 'field field-range' }, h('span', {}, f.label, out), inp);
+        getters[f.key] = () => +inp.value;
       } else if (f.type === 'toggle') {
         const inp = h('input', { type: 'checkbox', id });
         inp.checked = !!f.value;
@@ -901,8 +923,10 @@
         control = h('label', { class: 'field', for: id }, h('span', {}, f.label), inp);
         getters[f.key] = () => inp.value;
       }
+      if (f.showIf) conds.push([control, f.showIf]);
       nodes.push(control);
     }
+    sync();
     return { nodes, getters };
   }
 
@@ -1423,8 +1447,7 @@
   // подвал панели — название и версия, без маркетинга
   panel.append(h('footer', { class: 'panel-footer' },
     h('img', { src: 'icons/icon32.png', alt: '' }),
-    h('span', {}, h('b', {}, 'Plitka'), ' ', chrome.runtime?.getManifest?.().version || ''),
-    h('span', { class: 'pf-note' }, 'Всё хранится у тебя')));
+    h('span', {}, h('b', {}, 'Plitka'), ' ', chrome.runtime?.getManifest?.().version || '')));
 
   function renderSettings() {
     meshPreview?.destroy();
@@ -1458,7 +1481,8 @@
             slider('Размытие', 'glassBlur', 0, 40, 1, v => v + 'px'),
             slider('Плотность', 'glassAlpha', 0, 0.3, 0.01, v => Math.round(v * 100) + '%'),
             slider('Читаемость', 'glassTone', 0, 1, 0.05, v => Math.round(v * 100) + '%', 'Стекло выравнивает яркость фона под собой. На пёстром фоне (и белое, и чёрное сразу) включается само.'),
-            slider('Скругление', 'radius', 0, 36, 1, v => v + 'px')),
+            slider('Скругление', 'radius', 0, 36, 1, v => v + 'px'),
+            h('div', { class: 'field' }, h('span', {}, 'Тень блоков'), segmented(ELEVS, settings.elev, (v) => setSetting('elev', v)).el)),
           section('Акцент', accents),
         ];
       },
@@ -1742,6 +1766,24 @@
   }
   // подпись поля со значком подсказки
   const labelInfo = (label, tip) => h('span', { class: 'lbl' }, label, info(tip));
+  // всплывашка у ⓘ — отдельным элементом в body: псевдоэлемент обрезался краем панели
+  const tipEl = h('div', { class: 'tip', role: 'tooltip' });
+  document.body.append(tipEl);
+  const showTip = (el) => {
+    tipEl.textContent = el.dataset.tip;
+    tipEl.classList.add('on');
+    const a = el.getBoundingClientRect(), W = tipEl.offsetWidth, H = tipEl.offsetHeight;
+    const left = Math.min(Math.max(8, a.left + a.width / 2 - W / 2), innerWidth - W - 8);
+    const top = a.top - H - 8 > 8 ? a.top - H - 8 : a.bottom + 8;
+    tipEl.style.left = left + 'px';
+    tipEl.style.top = top + 'px';
+  };
+  const hideTip = () => tipEl.classList.remove('on');
+  document.addEventListener('pointerover', (e) => { const el = e.target.closest?.('.info'); if (el) showTip(el); });
+  document.addEventListener('pointerout', (e) => { if (e.target.closest?.('.info') && !e.relatedTarget?.closest?.('.info')) hideTip(); });
+  document.addEventListener('focusin', (e) => { if (e.target.matches?.('.info')) showTip(e.target); });
+  document.addEventListener('focusout', hideTip);
+  document.addEventListener('scroll', hideTip, true);
 
   function pickFile(accept, cb, multiple = false) {
     fileInput.accept = accept;

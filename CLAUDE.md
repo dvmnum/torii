@@ -10,8 +10,8 @@
 - MV3 CSP: **никаких inline-скриптов и удалённых скриптов**. Все библиотеки лежат локально в `plitka/js/lib/`.
 - Сетка — `gridstack.js` v14 (`js/lib/gridstack-all.js`, UMD, глобал `GridStack` — это сам класс).
   Обновлять: `npm i gridstack@latest` → скопировать `node_modules/gridstack/dist/gridstack-all.js` и `gridstack.min.css`.
-- Шрифт Manrope (variable, cyrillic + latin) локально в `plitka/fonts/`.
-- Минимум permissions: `storage`, `unlimitedStorage`. Плюс необязательные (`optional_permissions`) `topSites`, `sessions`, `bookmarks` — спрашиваются только при добавлении виджета (поле `perm` у виджета), без них виджет показывает кнопку «Разрешить». Каждое новое разрешение — осознанно (ревью в сторах).
+- Шрифты локально в `plitka/fonts/`: Manrope (основной) + декоративные из fontsource (Unbounded, Playfair Display, Oswald, Comfortaa, Caveat, Lobster — OFL, cyrillic + latin; `FONT_STACK`/`FONTS` в app.js, доступны любому блоку). Новые — качать woff2 с jsDelivr (`@fontsource-variable/<имя>/files/...`).
+- Минимум permissions: `storage`, `unlimitedStorage`. Плюс необязательные (`optional_permissions`) `topSites`, `sessions` + `tabs` (без `tabs` недавно закрытые приходят без адреса и заголовка), `bookmarks` — спрашиваются только при добавлении виджета (поле `perm` у виджета, строка или массив; `Perm.ask(p, onError)` показывает тост, если браузер отказал ошибкой), без них виджет показывает кнопку «Разрешить». Каждое новое разрешение — осознанно (ревью в сторах).
 - Внешние сервисы: Open-Meteo (погода), cbr-xml-daily.ru (курсы ЦБ), cataas.com (котики), nekos.best (аниме-гифки), Google s2 / favicon.yandex.net (иконки). В тестах всё замокано.
 - Никакой аналитики и сбора данных.
 
@@ -22,9 +22,10 @@ plitka/
   newtab.html          разметка: фон, сетка, док, editbar, панель настроек, модалка
   css/style.css        весь дизайн (CSS-переменные в :root, секции по компонентам)
   js/store.js          Store.get/set/remove — chrome.storage.local, фолбэк localStorage (для открытия файла напрямую)
-  js/widgets.js        хелпер h(), favicon(), ENGINES, реестр Widgets, loadWeather()
+  js/widgets.js        хелпер h(), favicon(), ENGINES, реестр Widgets (часы, приветствие, поиск, ссылки, заметки, погода), loadWeather()
   js/engine-icons.js   ENGINE_ICONS — логотипы поисковиков из паков (Simple Icons CC0, Font Awesome CC BY 4.0), сгенерировано, руками не править
   js/content.js        тексты для «Цитаты» (QUOTES, аниме) и «Слова дня» (WORDS)
+  js/widget-art.js     WIDGET_ART — SVG-макеты виджетов для меню «+ Виджет»
   js/widgets-more.js   вторая партия виджетов: дела, помодоро, частые сайты, недавно закрытые, курсы ЦБ,
                        отсчёт, привычки, цитата, слово дня, картинка — дописывает Widgets через Object.assign
   js/i18n.js           I18N: ru/en — словарь EN + шаблоны, перевод на лету MutationObserver-ом (t, setLang, locale)
@@ -45,14 +46,14 @@ tests/debug.mjs        открыть вкладку расширения и в�
     Заготовки — `Mesh.PRESETS` (точка 0 обычно самая тёмная — она же фон у полутона и неона), миниатюры рисует `Mesh.thumb()` на общем невидимом канвасе. `mesh.preset` — id заготовки, пока её не правили (подсветка в панели); любая правка его удаляет.
     Весит ~200 байт — годится для `storage.sync`. Без WebGL — CSS-градиенты из тех же точек (`Mesh.cssPreview`).
 - Поиск: на строке кнопки «призрак» (инкогнито: с текстом — сразу ищет, пусто — включает режим на следующий поиск) и выбор поисковика (`data.showGhost`/`showEngine` прячут). `ENGINES` — 9 поисковиков с монохромными SVG и префиксами (`!yt запрос`), `calc()` — свой разбор выражений (eval запрещён CSP), Enter / Ctrl+Enter (новая вкладка) / Shift+Enter (`chrome.windows.create({ incognito })`, без разрешений), недавние запросы в `data.history` (инкогнито не пишется). Стекло у поиска — на самой строке `.w-search` (высота `data.height`), а не на блоке. Перед переходом со страницы — `ctx.saveNow()`, отложенный `save` не успевает.
-- Ссылки («Ссылки», «Частые сайты», «Панель закладок») рисует общий `linkEl()` (widgets.js): `data.icons` — стиль иконок `glass|big|tint|mono|letter` (класс `.w-links.icons-*`), `--brand` — фирменный цвет из `BRAND` или оттенок из адреса (`brandColor()`).
+- Ссылки («Ссылки», «Частые сайты», «Панель закладок») рисует общий `linkEl()` (widgets.js): `data.icons` — стиль иконок `glass|big|tint|mono|letter` (класс `.w-links.icons-*`), `--brand` — фирменный цвет из `BRAND`, иначе цвет из самой иконки (`Brands.learn`: favicon.yandex.net отдаёт CORS, берём частый насыщенный оттенок, кэш в ключе `brands`), иначе оттенок из адреса (`brandColor()`).
 - Закладки — необязательное разрешение `bookmarks`: виджет «Панель закладок» зеркалит строку закладок (`Bookmarks.bar()`, папки — поповер `openBookmarkFolder`), а в редакторе «Ссылок» есть разовый импорт «Из панели закладок».
 - `photo` — те же `mode/warp/speed/grain/density/clear/duo`, но для своей картинки (без точек), по умолчанию матовое стекло с чистой полосой. `plain: true` — «Как есть»: без узора, анимации, чистой области и зерна (эффекты `fx` остаются). Хранится отдельно от `mesh`, чтобы переключение туда-обратно ничего не теряло.
 - `tab` — `{ title, icon: logo|emoji|letter|clock|pomodoro|image, emoji, letter, image }`: заголовок вкладки (подстановки `{время}`, `{дата}`, `{день}`) и иконка — рисуется на canvas 64×64 в `tabIcon()`, «живые» (часы, помодоро) сверяются раз в секунду. Виджеты занимают заголовок/иконку через глобальный `Tab.set(title, pomo)` (widgets-more.js), не трогая `document.title` напрямую.
 - `text` — `{ font, shadow }`: шрифт (`FONT_STACK`) и тень текста в блоках по умолчанию (тени по умолчанию нет). У блока свои `data.font` / `data.shadow` (`inherit` — как везде): CSS через `--w-font`/`--wf` и `body[data-ts]`/`.w[data-ts]`.
 - `slides` — `{ on, items: [{ id, kind: 'mesh', mesh } | { id, kind: 'image', thumb }], every: tab|10m|1h|1d, order: seq|random, idx, at }`. Полные картинки слайдов — отдельные ключи `slide:<id>`. Смена — `nextSlide()` при открытии вкладки (`slideshowOnLoad`, в самом конце init) и по таймеру, с затуханием (`body.bg-fade`).
 - `thumbs:<версия>` — кэш миниатюр заготовок (рисуются по одной в простое, см. ниже).
-- `glassTone` (0..1, «Читаемость») — стекло выравнивает яркость фона под собой: `--tone-f` (contrast + brightness) встраивается в `backdrop-filter` блока. `applyInk()` меряет разброс яркости под блоком; если там и белое, и чёрное (`spread > 0.4`) — класс `.bg-mixed`, сила не меньше 0.9, текст светлый.
+- `glassTone` (0..1, «Читаемость») — стекло выравнивает яркость фона под собой: `--tone-f` (contrast + brightness) встраивается в `backdrop-filter` блока. `applyInk()` меряет разброс яркости под блоком; если там и белое, и чёрное (`spread > 0.45`, но в среднем не светлый: `mean < 0.62`) — класс `.bg-mixed`: дымчатое тёмное стекло без белой дымки, сила не меньше 0.7, текст светлый. Пересчёт после перемещения — через 380 мс (после анимации gridstack).
 - `fx` — эффекты поверх любого фона: `{ vignette, bloom, particles, chroma, scan }` (0..1) + `mouse` («перспектива»: фон чуть увеличен и смещается от курсора), `daycycle` (оттенок по часам) — bool. Виньетку рисует шейдер; CSS-виньетка только без WebGL.
 - `widgets` — массив `{ id, type, data }`, общий для всех экранов; `data` = `STYLE_DEFAULTS` + дефолты виджета + пользовательские поля.
   - Оформление у всех виджетов (`STYLE_SETTINGS`, добавляется в модалку автоматически): `ink: 'auto'|'light'|'dark'` — цвет текста, `tint: '#rrggbb'|null` — цвет подложки.
@@ -120,9 +121,13 @@ myWidget: {
 - **`backdrop-filter` не работает, пока у стекла или любого его предка `opacity < 1`** (Chrome) — подложка видна без размытия. Поэтому при открытии проявляется только `.w-body`, а не `.w` и не сетка. Не анимируй opacity у `.w` и выше.
 - Картинка-заглушка `#bg .bg-image` лежит поверх канваса (порядок в DOM): при `mesh-on` она уходит с задержкой, когда канвас под ней проявился; для картинки с эффектом заглушку до готовности WebGL не показываем (`photo-fx`), без WebGL — показываем (`no-webgl`).
 - Жидкое стекло (`liquid.js`): фильтр ставится **инлайном** (`url(#…)` через CSS-переменную из внешнего style.css Chrome ищет в файле стилей); координаты фильтра — от угла блока; **без** `color-interpolation-filters="sRGB"` (с ним карта ломается); каждая перестройка — новый `<filter>` с новым id (изменения содержимого подключённого фильтра Chrome не перерисовывает). Проверять на контрастном фоне (полосы), на гладком градиенте преломления не видно.
-- У блока свои `data.radius/blur/alpha` (null — как везде, поле `type: 'range'` с `inheritFrom`) и `glassKind` (`inherit|glass|liquid`); общая `settings.glassKind`.
+- Подложка блока: «Стиль: Как везде / Свой» в инспекторе. Пока «как везде» — полей нет, в data `null`/`inherit`; «свой» — `LOOK_SETTINGS` (`glassKind`, `elev`, `radius`, `blur`, `alpha`) начинаются с общих значений. Условные поля — `showIf(get)` в `buildFields`. Тень под блоком — `settings.elev` / `data.elev` (`none|soft|strong`) → `--elev` через `body[data-elev]` / `.w[data-elev]`.
 - **Языки** (`i18n.js`): строки пишем по-русски прямо в коде, английский — в словаре `EN` (точное совпадение) или `PATTERNS` (строки с переменными). Переводчик ловит текст и атрибуты `placeholder/title/aria-label/data-tip` при появлении в DOM. Пользовательский текст — в контейнере с `translate="no"`. Даты/числа — `I18N.locale()`, не `'ru-RU'`. После новых строк — `npm run i18n`; e2e проверяет, что в английской панели нет кириллицы.
-- Подсказки — значком ⓘ (`info(text)`, `labelInfo(label, tip)`), не абзацем под настройкой.
+- Подсказки — значком ⓘ (`info(text)`, `labelInfo(label, tip)`), не абзацем под настройкой. Всплывашка — один `.tip` в body (`showTip`), держится в пределах экрана.
+- Полоса прокрутки — своя глобально (`::-webkit-scrollbar`, цвет от `--fg`); `scrollbar-width` в Chrome не ставить — он отключает `::-webkit-scrollbar`.
+- Меню «+ Виджет» — карточки с мини-макетами (`WIDGET_ART` в `js/widget-art.js`, SVG 160×96, цвета классами `.add-art .gl/.fg/.mu/.ac/…`, без слов в картинках). Новый виджет — добавь ему макет.
+- Картинки из сети в виджетах показывать после `img.decode()` (иначе проявляются полосами), пока грузится — заглушка `.pic-loading`.
+- Жидкое стекло: размер карты — `offsetWidth/Height`, не `getBoundingClientRect` (тот учитывает transform анимации — засвет съезжал).
 - `el.replaceChildren(…, null)` — DOM API, а не `h()`: `null` превращается в текст «null». Условные дети передавай через `...(cond ? [x] : [])`.
 - `sessions` — разрешение без предупреждения, Chrome выдаёт его молча; API `chrome.sessions`/`chrome.topSites` в уже открытой вкладке может появиться только после перезагрузки — виджеты это обрабатывают.
 - Иконки сайтов: Google s2 → favicon.yandex.net → буква-монограмма. Внутренний `_favicon` Chrome отдаёт серый глобус для непосещённых сайтов — поэтому не используется.

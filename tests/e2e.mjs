@@ -784,9 +784,14 @@ await page.keyboard.press('Escape');
 // меню «+ Виджет» с иконками и группами
 await page.click('#btn-add');
 await page.waitForTimeout(300);
-check(await page.locator('.add-menu .add-item .add-ico svg').count() === await page.locator('.add-menu .add-item').count() && await page.locator('.add-group').count() === 5, 'меню: у каждого виджета иконка, 5 групп');
+check(await page.locator('.add-menu .add-item .add-art svg').count() === await page.locator('.add-menu .add-item').count() && await page.locator('.add-group').count() === 5, 'меню: у каждого виджета картинка-макет, 5 групп');
 await page.screenshot({ path: `${out}/41-add-menu.png` });
-await page.click('#btn-add');
+await page.locator('.add-menu').screenshot({ path: `${out}/41b-add-menu-full.png` });
+// приветствие отдельным блоком, своим шрифтом
+await page.click('.add-item[data-type="greeting"]');
+await page.waitForTimeout(600);
+const gr = await page.evaluate(() => { const t = document.querySelector('.greet-text'); return t && { text: t.textContent, font: getComputedStyle(t).fontFamily, fs: parseFloat(getComputedStyle(t).fontSize), fits: t.scrollWidth <= t.clientWidth + 1 }; });
+check(gr && gr.text.length > 3 && /Playfair/.test(gr.font) && gr.fs > 16 && gr.fits, `приветствие-виджет: «${gr?.text}», ${gr?.font?.slice(0, 20)}, ${gr?.fs}px`);
 await page.keyboard.press('Escape');
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
@@ -999,18 +1004,19 @@ const mins = [
   ['rates', 15, 0, 3, 2], ['countdown', 18, 0, 3, 2], ['word', 21, 0, 3, 2],
   ['links', 0, 3, 8, 1], ['search', 8, 3, 6, 1], ['weather', 14, 3, 4, 1],
   ['habits', 0, 5, 4, 2], ['quote', 4, 5, 4, 2], ['pic', 8, 5, 2, 2],
+  ['greeting', 18, 3, 3, 1], ['weather', 21, 3, 3, 1, { view: 'mini', side: 'center' }], ['greeting', 10, 5, 10, 2, { font: 'lobster', sub: 'date' }],
 ];
 await page.evaluate((list) => chrome.storage.local.set({
   settings: {},
-  widgets: list.map(([type]) => ({ id: 'm-' + type, type, data: type === 'todo' ? { items: [{ id: 'a', text: 'Купить хлеб', done: false }] } : {} })),
-  layouts: { lg: Object.fromEntries(list.map(([type, x, y, w, h]) => ['m-' + type, { x, y, w, h }])) },
+  widgets: list.map(([type, , , , , data], i) => ({ id: 'm-' + i, type, data: type === 'todo' ? { items: [{ id: 'a', text: 'Купить хлеб', done: false }] } : data || {} })),
+  layouts: { lg: Object.fromEntries(list.map(([, x, y, w, h], i) => ['m-' + i, { x, y, w, h }])) },
 }), mins);
 await page.reload();
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `${out}/51-min-sizes.png` });
 const linkC = await page.evaluate(() => {
-  const w = document.querySelector('.grid-stack-item[gs-id="m-links"] .w').getBoundingClientRect();
-  const icons = [...document.querySelectorAll('.grid-stack-item[gs-id="m-links"] .link-ico')].map(e => e.getBoundingClientRect());
+  const w = document.querySelector('.grid-stack-item[gs-id="m-8"] .w').getBoundingClientRect();
+  const icons = [...document.querySelectorAll('.grid-stack-item[gs-id="m-8"] .link-ico')].map(e => e.getBoundingClientRect());
   return { dc: Math.max(...icons.map(i => Math.abs((i.top + i.bottom) / 2 - (w.top + w.bottom) / 2))), inside: icons.every(i => i.top >= w.top && i.bottom <= w.bottom) };
 });
 check(linkC.dc < 3 && linkC.inside, `ссылки: в блоке высотой 1 иконки по центру (сдвиг ${linkC.dc.toFixed(1)} px)`);
@@ -1060,12 +1066,19 @@ await page.evaluate((STRIPES) => chrome.storage.local.set({
 await page.reload();
 await page.waitForTimeout(1200);
 await openSettings('w-clock');
+check(!(await page.locator('.inspector .field-range:has-text("Скругление")').isVisible()), 'блок: пока стиль «как везде», ползунков подложки нет');
+await page.click('.inspector .seg-btn:has-text("Свой")');
 await page.locator('.inspector .field-range:has-text("Скругление") input').fill('40');
 await page.waitForTimeout(200);
 check(await page.$eval('.grid-stack-item[gs-id="w-clock"] .w', el => getComputedStyle(el).borderTopLeftRadius) === '40px', 'блок: своё скругление углов');
-await page.click('.inspector .field-range:has-text("Скругление") .mini-reset');
+await page.click('.inspector .field:has-text("Тень блока") .seg-btn:has-text("Сильная")');
+await page.waitForTimeout(450);
+const elev = await page.$eval('.grid-stack-item[gs-id="w-clock"] .w', el => el.dataset.elev + ' | ' + getComputedStyle(el).boxShadow);
+check(/^strong .*0px 30px 70px/.test(elev), `блок: своя сильная тень (${elev})`);
+await page.screenshot({ path: `${out}/62-inspector-own.png` });
+await page.click('.inspector .seg-btn:has-text("Как везде")');
 await page.waitForTimeout(150);
-check(await page.$eval('.grid-stack-item[gs-id="w-clock"] .w', el => getComputedStyle(el).borderTopLeftRadius) === '22px', 'блок: «как везде» возвращает общее скругление');
+check(await page.$eval('.grid-stack-item[gs-id="w-clock"] .w', el => getComputedStyle(el).borderTopLeftRadius === '22px' && !el.dataset.elev), 'блок: «как везде» возвращает общее скругление и тень');
 await page.keyboard.press('Escape');
 await page.keyboard.press('Escape');
 await page.click('#btn-settings');
@@ -1106,6 +1119,11 @@ await page.click(`body > .dd-list .dd-item:has-text("${part}")`);
 await page.waitForTimeout(500);
 check((await page.textContent('.greet')) === 'Ночь не для сна', 'приветствие: по времени суток важнее «любого времени»');
 await page.screenshot({ path: `${out}/57-greetings.png` });
+await page.hover('.panel .info');
+await page.waitForTimeout(250);
+const tip = await page.evaluate(() => { const r = document.querySelector('.tip.on')?.getBoundingClientRect(); return r && { l: r.left, r: r.right, t: r.top, b: r.bottom }; });
+check(tip && tip.l >= 0 && tip.r <= 1600 && tip.t >= 0 && tip.b <= 900, `подсказка ⓘ целиком на экране (${JSON.stringify(tip)})`);
+await page.screenshot({ path: `${out}/63-info-tip.png` });
 await ptab('more');
 check(await page.locator('.action-card:has-text("Изменить раскладку")').count() === 1 && await page.locator('.hotkeys kbd').count() >= 6 && await page.locator('.panel-footer:has-text("Plitka")').count() === 1, 'ещё: карточка раскладки, клавиши, подвал с названием');
 await page.screenshot({ path: `${out}/58-more.png` });

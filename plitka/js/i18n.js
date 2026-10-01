@@ -67,6 +67,13 @@ const I18N = (() => {
     'Цифровые': 'Digital', 'Стрелочные': 'Analog', 'Сверху': 'Top', 'Снизу': 'Bottom', 'По центру': 'Center', 'по центру': 'center', 'слева': 'left', 'справа': 'right',
     'Содержимое': 'Content', 'Текст': 'Text', 'Показывать подложку': 'Show backing', 'Прозрачная': 'Transparent', 'Вид стекла': 'Glass type',
     'Расстояние между иконками': 'Icon spacing', 'Плотно': 'Tight', 'Обычно': 'Normal', 'Свободно': 'Loose',
+    'Unbounded — широкий': 'Unbounded — wide', 'Playfair — изящный': 'Playfair — elegant', 'Oswald — узкий': 'Oswald — narrow',
+    'Comfortaa — круглый': 'Comfortaa — rounded', 'Caveat — от руки': 'Caveat — handwritten', 'Lobster — вывеска': 'Lobster — signboard',
+    'Браузер не дал доступ': 'The browser denied access', 'Браузер не умеет выдавать доступ расширениям': 'This browser can’t grant extension permissions',
+    'Обнови расширение в chrome://extensions (↻) и попробуй ещё раз': 'Reload the extension in chrome://extensions (↻) and try again',
+    'Доброе утро — крупно и своим шрифтом': 'Good morning — big, in your font',
+    'Жидкое': 'Liquid', 'Жирный': 'Bold', 'Мини': 'Mini', 'Обычный': 'Regular', 'Тонкий': 'Thin', 'Толщина': 'Weight', 'Подпись': 'Caption',
+    'Свой': 'Custom', 'Стиль': 'Style', 'Слабая': 'Soft', 'Слева': 'Left', 'Справа': 'Right', 'Тень блока': 'Block shadow', 'Тень блоков': 'Block shadow',
     'Прямоугольник, где узора нет — тащи на превью': 'A rectangle without the pattern — drag it on the preview',
     // редактор и меню
     'Тащи блоки, тяни за углы и края': 'Drag blocks, pull corners and edges', '+ Виджет': '+ Widget', 'Редактировать раскладку (E)': 'Edit layout (E)',

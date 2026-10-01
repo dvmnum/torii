@@ -134,8 +134,8 @@ function calc(src) {
 const GLASS_SETTING = { key: 'glass', label: 'Стеклянная подложка', type: 'toggle' };
 
 // ---------- ссылки: общий вид для «Ссылок», «Частых сайтов» и «Панели закладок» ----------
-// Фирменные цвета популярных сайтов. Остальным — постоянный оттенок из адреса (цвет из самой иконки
-// не достать: расширению нельзя читать пиксели чужих картинок без лишних разрешений).
+// Фирменные цвета популярных сайтов. Остальным — цвет из самой иконки (Brands ниже), а пока он не известен или иконка
+// бесцветная — постоянный оттенок из адреса.
 const BRAND = {
   'youtube.com': '#ff0033', 'youtu.be': '#ff0033', 'github.com': '#8b949e', 'web.telegram.org': '#2aabee', 'telegram.org': '#2aabee',
   't.me': '#2aabee', 'habr.com': '#77a2b6', 'kinopoisk.ru': '#ff5500', 'claude.ai': '#d97757', 'anthropic.com': '#d97757',
@@ -151,9 +151,59 @@ const BRAND = {
 function brandColor(url) {
   const host = hostOf(url);
   for (const [k, c] of Object.entries(BRAND)) if (host === k || host.endsWith('.' + k)) return c;
+  if (Brands.map?.[host]) return Brands.map[host];
   let n = 0;
   for (const ch of host) n = (n * 31 + ch.charCodeAt(0)) >>> 0;
   return `hsl(${n % 360} 62% 52%)`;
+}
+
+// Цвет из самой иконки: favicon.yandex.net отдаёт картинки с CORS, значит их пиксели можно прочитать (Google s2 — нет).
+// Берём самый частый насыщенный оттенок; иконка серая/без цвета — '' (тогда оттенок из адреса). Кэш — ключ 'brands'.
+const Brands = {
+  map: null, // host → '#rrggbb' | ''
+  ready: null,
+  load() { return this.ready ??= Store.get('brands', {}).then((m) => { this.map = m && typeof m === 'object' ? m : {}; }); },
+  save: null,
+  async learn(host) {
+    await this.load();
+    if (host in this.map) return this.map[host];
+    this.map[host] = ''; // не спрашиваем дважды за раз
+    let color = '';
+    try {
+      const r = await fetch(`https://favicon.yandex.net/favicon/v2/${encodeURIComponent(host)}?size=32`, { signal: AbortSignal.timeout(6000) });
+      if (r.ok) color = dominantColor(await createImageBitmap(await r.blob()));
+    } catch { return ''; } // сеть — попробуем в другой раз
+    this.map[host] = color;
+    clearTimeout(this.save);
+    this.save = setTimeout(() => Store.set('brands', this.map), 500);
+    return color;
+  },
+};
+Brands.load();
+function dominantColor(bmp) {
+  const S = 32;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(bmp, 0, 0, S, S);
+  const d = g.getImageData(0, 0, S, S).data;
+  const bins = Array.from({ length: 24 }, () => ({ w: 0, r: 0, g: 0, b: 0 }));
+  let opaque = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 140) continue;
+    opaque++;
+    const r = d[i] / 255, gg = d[i + 1] / 255, b = d[i + 2] / 255;
+    const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), l = (mx + mn) / 2, ch = mx - mn;
+    if (ch < 0.18 || l < 0.12 || l > 0.94) continue; // серое, чёрное, белое — не цвет бренда
+    let hue = mx === r ? ((gg - b) / ch) % 6 : mx === gg ? (b - r) / ch + 2 : (r - gg) / ch + 4;
+    const bin = bins[Math.floor(((hue * 60 + 360) % 360) / 15)];
+    bin.w += ch; bin.r += d[i] * ch; bin.g += d[i + 1] * ch; bin.b += d[i + 2] * ch;
+  }
+  const best = bins.reduce((a, b) => (b.w > a.w ? b : a));
+  // пустая заглушка или почти без цвета — не угадываем
+  if (opaque < 20 || best.w < opaque * 0.06) return '';
+  const hex = (v) => Math.round(v / best.w).toString(16).padStart(2, '0');
+  return '#' + hex(best.r) + hex(best.g) + hex(best.b);
 }
 
 const ICON_STYLES = [['glass', 'Стекло'], ['big', 'Крупные'], ['tint', 'Цвет бренда'], ['mono', 'Монохром'], ['letter', 'Буквы']];
@@ -167,9 +217,15 @@ function linkEl(l, { newTab = false, icons = 'glass' } = {}) {
   const ico = icons === 'letter'
     ? h('span', { class: 'mono' }, (title.trim()[0] || '?').toUpperCase())
     : favicon(l.url, l.title, icons === 'big' ? 128 : 64);
-  return h('a', { class: 'link', href: l.url, title, target: newTab ? '_blank' : null, rel: 'noopener', style: `--brand:${brandColor(l.url)}` },
+  const a = h('a', { class: 'link', href: l.url, title, target: newTab ? '_blank' : null, rel: 'noopener', style: `--brand:${brandColor(l.url)}` },
     h('span', { class: 'link-ico' }, ico),
     h('span', { class: 'link-title', translate: 'no' }, title));
+  // сайта нет в списке фирменных и цвет ещё не узнавали — узнаём из иконки и перекрашиваем
+  const host = hostOf(l.url);
+  if (host && !Object.keys(BRAND).some(k => host === k || host.endsWith('.' + k)) && !Brands.map?.[host]) {
+    Brands.learn(host).then((c) => { if (c) a.style.setProperty('--brand', c); });
+  }
+  return a;
 }
 
 const Widgets = {
@@ -457,17 +513,65 @@ const Widgets = {
     },
   },
 
-  weather: {
-    title: 'Погода',
-    size: { w: 6, h: 2 }, min: { w: 3, h: 1 },
-    defaults: { glass: true, city: 'Москва', view: 'now' },
+  // отдельное приветствие: те же фразы, что и в часах (свои — в настройках, вкладка «Вкладка»), крупно и своим шрифтом
+  greeting: {
+    title: 'Приветствие',
+    size: { w: 12, h: 2 }, min: { w: 3, h: 1 },
+    defaults: { glass: false, font: 'playfair', weight: 'regular', sub: 'none', align: 'middle-center' },
     settings: [
-      { key: 'city', label: 'Город', type: 'text' },
-      { key: 'view', label: 'Вид', type: 'select', options: [['now', 'Сейчас'], ['week', 'Неделя']] },
+      { key: 'weight', label: 'Толщина', type: 'select', options: [['light', 'Тонкий'], ['regular', 'Обычный'], ['bold', 'Жирный']] },
+      { key: 'sub', label: 'Подпись', type: 'select', options: [['none', 'Нет'], ['date', 'Дата'], ['time', 'Время']] },
+      { key: 'align', label: 'Выравнивание', type: 'align' },
       GLASS_SETTING,
     ],
     render(body, data, ctx) {
-      const box = h('div', { class: 'w-weather is-loading' }, h('div', { class: 'w-muted' }, 'Смотрю в окно…'));
+      data.align = normAlign(data.align);
+      const [v, hz] = data.align.split('-');
+      const text = h('div', { class: 'greet-text', translate: 'no' });
+      const sub = h('div', { class: 'greet-sub' });
+      const box = h('div', { class: `w-greeting v-${v} h-${hz} wt-${data.weight}` }, text, sub);
+      body.append(box);
+      // подбираем размер: крупно, но в одну-две строки и без обрезки
+      const fit = () => {
+        const H = body.clientHeight, W = body.clientWidth;
+        if (!H || !W) return;
+        let fs = Math.min(H * (data.sub === 'none' ? 0.5 : 0.4), 120);
+        text.style.fontSize = fs + 'px';
+        for (let i = 0; i < 30 && (text.scrollWidth > text.clientWidth + 1 || box.scrollHeight > box.clientHeight + 1); i++) {
+          fs *= 0.92;
+          text.style.fontSize = fs + 'px';
+        }
+      };
+      const tick = () => {
+        const d = new Date();
+        const t = pickGreeting(ctx.settings(), d);
+        if (text.textContent !== t) { text.textContent = t; fit(); }
+        sub.hidden = data.sub === 'none';
+        sub.textContent = data.sub === 'date' ? d.toLocaleDateString(I18N.locale(), { weekday: 'long', day: 'numeric', month: 'long' })
+          : data.sub === 'time' ? d.toLocaleTimeString(I18N.locale(), { hour: '2-digit', minute: '2-digit' }) : '';
+      };
+      tick();
+      const ro = new ResizeObserver(fit);
+      ro.observe(body);
+      document.fonts?.addEventListener('loadingdone', fit); // свой шрифт догрузился — шире или уже, чем запасной
+      const t = setInterval(tick, 15000);
+      return { destroy: () => { clearInterval(t); ro.disconnect(); document.fonts?.removeEventListener('loadingdone', fit); } };
+    },
+  },
+
+  weather: {
+    title: 'Погода',
+    size: { w: 6, h: 2 }, min: { w: 3, h: 1 },
+    defaults: { glass: true, city: 'Москва', view: 'now', side: 'left' },
+    settings: [
+      { key: 'city', label: 'Город', type: 'text' },
+      { key: 'view', label: 'Вид', type: 'select', options: [['now', 'Сейчас'], ['mini', 'Мини'], ['week', 'Неделя']] },
+      { key: 'side', label: 'Выравнивание', type: 'select', options: [['left', 'Слева'], ['center', 'По центру'], ['right', 'Справа']] },
+      GLASS_SETTING,
+    ],
+    render(body, data, ctx) {
+      // mini — только иконка и градусы; side — куда прижать содержимое
+      const box = h('div', { class: `w-weather is-loading side-${data.side || 'left'}` + (data.view === 'mini' ? ' is-mini' : '') }, h('div', { class: 'w-muted' }, 'Смотрю в окно…'));
       body.append(box);
       let alive = true;
       let retryT = null;
@@ -491,11 +595,12 @@ const Widgets = {
         const [desc, ico] = weatherInfo(w.code);
         box.classList.remove('is-loading', 'is-error', 'is-week');
         box.classList.toggle('is-stale', stale);
+        box.title = data.view === 'mini' ? `${desc} · ${w.place}` : '';
         box.replaceChildren(
           h('div', { class: 'wx-ico', html: ICONS[ico] }),
           h('div', { class: 'wx-main' },
             h('div', { class: 'wx-temp' }, `${Math.round(w.temp)}°`),
-            h('div', { class: 'wx-meta' },
+            data.view === 'mini' ? '' : h('div', { class: 'wx-meta' },
               h('div', { class: 'wx-desc' }, desc),
               h('div', { class: 'w-muted' }, stale ? `${w.place} · нет сети` : `${w.place} · ${Math.round(w.max)}° / ${Math.round(w.min)}°`),
             ),

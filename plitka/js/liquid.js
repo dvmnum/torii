@@ -65,7 +65,9 @@ const Liquid = (() => {
   // если поменялось только содержимое уже подключённого фильтра (карта «залипала» пустой).
   function build(el, entry) {
     const r = el.getBoundingClientRect();
-    const w = Math.round(r.width), h = Math.round(r.height);
+    // размер — по вёрстке (offsetWidth), а не по getBoundingClientRect: тот учитывает transform, и если блок в этот момент
+    // анимируется (появление, scale в редакторе), карта выходила меньше блока — «засвет» съезжал внутрь
+    const w = el.offsetWidth, h = el.offsetHeight;
     if (w < 8 || h < 8) return;
     const rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
     // координаты фильтра в backdrop-filter — от угла самого блока; позиция — только в ключе (переложить при перемещении)

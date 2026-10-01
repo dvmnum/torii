@@ -26,14 +26,26 @@ const SVG = {
 };
 
 // Необязательные разрешения: спрашиваем по клику (нужен жест пользователя), без них виджет показывает кнопку
+// p — одно разрешение или список. ask() зовём синхронно из клика (иначе браузер не покажет запрос);
+// onError — если браузер отказал не пользователем, а ошибкой (например, расширение не перезагружено после правки manifest)
 const Perm = {
-  has: (p) => chrome.permissions?.contains ? chrome.permissions.contains({ permissions: [p] }) : Promise.resolve(false),
-  ask: (p) => chrome.permissions?.request ? chrome.permissions.request({ permissions: [p] }).catch(() => false) : Promise.resolve(false),
+  has: (p) => chrome.permissions?.contains ? chrome.permissions.contains({ permissions: [].concat(p) }) : Promise.resolve(false),
+  ask: (p, onError) => {
+    if (!chrome.permissions?.request) { onError?.('Браузер не умеет выдавать доступ расширениям'); return Promise.resolve(false); }
+    return chrome.permissions.request({ permissions: [].concat(p) }).catch((e) => {
+      console.warn('[plitka] доступ не выдан:', e?.message);
+      onError?.(/manifest/i.test(e?.message || '') ? 'Обнови расширение в chrome://extensions (↻) и попробуй ещё раз' : 'Браузер не дал доступ');
+      return false;
+    });
+  },
 };
 function permGate(body, perm, text, ctx) {
   body.append(h('div', { class: 'w-empty' },
     h('div', { class: 'w-muted' }, text),
-    h('button', { type: 'button', class: 'pill small', onclick: async () => { if (await Perm.ask(perm)) ctx.rerender(); } }, 'Разрешить'),
+    h('button', { type: 'button', class: 'pill small', onclick: async () => {
+      const ok = await Perm.ask(perm, ctx.toast);
+      if (ok) ctx.rerender();
+    } }, 'Разрешить'),
   ));
 }
 
@@ -326,7 +338,7 @@ Object.assign(Widgets, {
 
   recent: {
     title: 'Недавно закрытые',
-    perm: 'sessions',
+    perm: ['sessions', 'tabs'], // без tabs Chrome отдаёт закрытые вкладки без адреса и заголовка
     size: { w: 5, h: 4 }, min: { w: 3, h: 2 },
     defaults: { glass: true, count: '8' },
     settings: [
@@ -348,9 +360,9 @@ Object.assign(Widgets, {
             h('span', { class: 'recent-title', translate: 'no' }, t.title || hostOf(t.url))))));
         if (!tabs.length) list.replaceChildren(h('li', { class: 'w-muted' }, 'Пока ничего не закрывали'));
       });
-      Perm.has('sessions').then((ok) => {
+      Perm.has(['sessions', 'tabs']).then((ok) => {
         if (!alive) return;
-        if (!ok) return permGate(body, 'sessions', 'Нужен доступ к недавно закрытым вкладкам', ctx);
+        if (!ok) return permGate(body, ['sessions', 'tabs'], 'Нужен доступ к недавно закрытым вкладкам', ctx);
         // разрешение выдали только что — API появится после перезагрузки вкладки
         if (!chrome.sessions?.getRecentlyClosed) {
           return body.append(h('div', { class: 'w-empty' }, h('div', { class: 'w-muted' }, 'Доступ есть — обнови вкладку'),
@@ -521,12 +533,22 @@ Object.assign(Widgets, {
       const more = h('button', { type: 'button', class: 'w-more', title: 'Ещё', html: SVG.more });
       const cap = h('div', { class: 'pic-cap' });
       body.append(frame);
+      // показываем, только когда картинка целиком скачана и раскодирована — иначе она проявлялась полосами сверху вниз;
+      // пока грузится — переливающаяся заглушка (или прежняя картинка, если листаем «Ещё»)
+      let seq = 0;
       const show = (src, caption) => {
-        const img = h('img', { alt: '', referrerpolicy: 'no-referrer', src });
-        img.addEventListener('error', () => { if (alive) msg('Картинка не загрузилась'); });
-        cap.textContent = caption || '';
-        cap.hidden = !caption;
-        frame.replaceChildren(img, cap, more);
+        const my = ++seq;
+        const img = h('img', { alt: '', referrerpolicy: 'no-referrer', src, class: 'pic-in' });
+        if (!frame.querySelector('img')) frame.replaceChildren(h('div', { class: 'pic-loading' }), more);
+        frame.classList.add('busy');
+        img.decode().then(() => {
+          if (!alive || my !== seq) return;
+          cap.textContent = caption || '';
+          cap.hidden = !caption;
+          frame.classList.remove('busy');
+          frame.replaceChildren(img, cap, more);
+          requestAnimationFrame(() => img.classList.add('on'));
+        }).catch(() => { if (alive && my === seq) { frame.classList.remove('busy'); msg('Картинка не загрузилась'); } });
       };
       const msg = (text, btn) => frame.replaceChildren(h('div', { class: 'w-empty' }, h('div', { class: 'w-muted' }, text), btn || null), ...(data.source === 'file' ? [] : [more]));
 
@@ -541,13 +563,14 @@ Object.assign(Widgets, {
         // новую берём по кнопке или раз в час, иначе показываем ту же — не дёргаем сервис на каждую вкладку
         const fresh = data.cache && data.cache.source === data.source && Date.now() - data.cache.at < 3600000;
         const load = () => {
-          msg('Ищу…');
+          if (!frame.querySelector('img')) frame.replaceChildren(h('div', { class: 'pic-loading' }), more);
+          frame.classList.add('busy');
           fetchPic(data.source).then((p) => {
             if (!alive) return;
             data.cache = { ...p, source: data.source, at: Date.now() };
             ctx.save();
             show(p.url, p.caption);
-          }).catch(() => { if (alive) msg('Не достучался до сервиса'); });
+          }).catch(() => { if (alive) { frame.classList.remove('busy'); msg('Не достучался до сервиса'); } });
         };
         more.onclick = load;
         if (fresh) show(data.cache.url, data.cache.caption); else load();
@@ -563,6 +586,7 @@ const WI = (body) => `<svg viewBox="0 0 24 24">${body}</svg>`;
 const F = 'fill="currentColor" fill-opacity=".18" stroke="none"';
 const WIDGET_GROUPS = [['time', 'Время'], ['work', 'Дела'], ['nav', 'Навигация'], ['info', 'Информация'], ['mood', 'Настроение']];
 const WIDGET_META = {
+  greeting: { group: 'time', desc: 'Доброе утро — крупно и своим шрифтом', icon: '' },
   clock: { group: 'time', desc: 'Цифровые или стрелочные, приветствие', icon: WI(`<circle cx="12" cy="12" r="9" ${F}/><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>`) },
   pomodoro: { group: 'time', desc: 'Фокус и перерывы по таймеру', icon: WI(`<circle cx="12" cy="13" r="8" ${F}/><circle cx="12" cy="13" r="8"/><path d="M12 13V9M9.5 2.5h5M12 2.5V5"/><path d="M12 5a8 8 0 0 1 8 8" stroke-width="2.6" opacity=".9"/>`) },
   countdown: { group: 'time', desc: 'Сколько осталось до события', icon: WI(`<path d="M7 3h10M7 21h10" /><path d="M8 3c0 4 8 5 8 9s-8 5-8 9M16 3c0 4-8 5-8 9s8 5 8 9"/><path d="M9.5 19.5c1-1.6 4-1.6 5 0z" ${F.replace('.18', '.5')}/>`) },
