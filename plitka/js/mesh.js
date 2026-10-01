@@ -91,8 +91,10 @@ vec2 warp(vec2 uv, float t, float asp) {
                            noise(uv * 2.2 + vec2(5.2 - t * 0.06, 1.3 + t * 0.08)) - 0.5);
   q += uWarp * 0.06 * vec2(sin(q.y * 5.0 + t * 0.3), cos(q.x * 4.0 - t * 0.25));
 #if MOUSE
+  // параллакс: фон чуть смещается за курсором, как будто лежит глубже экрана; плюс едва заметная мягкая выпуклость
+  q += (uMouse - 0.5) * 0.022;
   vec2 d = (uv - uMouse) * vec2(asp, 1.0);
-  q -= (uv - uMouse) * exp(-dot(d, d) * 14.0) * 0.4;
+  q -= (uv - uMouse) * exp(-dot(d, d) * 3.0) * 0.035;
 #endif
   return q;
 }

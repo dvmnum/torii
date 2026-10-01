@@ -53,6 +53,7 @@
     tab: { title: 'Новая вкладка', icon: 'logo', emoji: '🌙', letter: 'P', image: null },
     text: { font: 'manrope', shadow: 'none' },
     slides: { on: false, items: [], every: 'tab', order: 'seq', idx: -1, at: 0 },
+    greetings: [], // свои приветствия: [{ text, when: any|morning|day|evening|night }], до 5
   };
 
   // оформление, общее для всех виджетов: цвет текста и подложки
@@ -130,6 +131,7 @@
       else if (k === 'tab') s.tab = cleanTab(v);
       else if (k === 'text') s.text = cleanText(v);
       else if (k === 'slides') s.slides = cleanSlides(v);
+      else if (k === 'greetings') s.greetings = Array.isArray(v) ? v.filter(g => g && typeof g.text === 'string').slice(0, 5).map(g => ({ text: g.text.slice(0, 80), when: DAY_PARTS.some(([p]) => p === g.when) ? g.when : 'any' })) : [];
       else if (typeof v === typeof DEFAULT_SETTINGS[k] && (typeof v !== 'number' || Number.isFinite(v))) s[k] = v;
     }
     // старый CSS-фон → та же палитра на меше
@@ -1399,6 +1401,11 @@
   let panelTab = 'bg';
   const panelTabs = h('nav', { class: 'panel-tabs', role: 'tablist' });
   panel.querySelector('.panel-head').after(panelTabs);
+  // подвал панели — название и версия, без маркетинга
+  panel.append(h('footer', { class: 'panel-footer' },
+    h('img', { src: 'icons/icon32.png', alt: '' }),
+    h('span', {}, h('b', {}, 'Plitka'), ' ', chrome.runtime?.getManifest?.().version || ''),
+    h('span', { class: 'pf-note' }, 'Всё хранится у тебя')));
 
   function renderSettings() {
     meshPreview?.destroy();
@@ -1417,7 +1424,7 @@
         fxSlider('Частицы', 'particles'),
         fxSlider('Аберрация', 'chroma'),
         fxSlider('Сканлайны', 'scan'),
-        fxToggle('Линза за курсором', 'mouse'),
+        fxToggle('Параллакс за курсором', 'mouse'),
         fxToggle('Оттенок по времени суток', 'daycycle'),
         h('p', { class: 'field-hint' }, 'Работают и с мешем, и со своей картинкой. Узоры и анимации — во вкладке «Фон» → «Настроить».'))],
       blocks: () => {
@@ -1444,19 +1451,43 @@
         nameInp.addEventListener('input', debounce(() => setSetting('name', nameInp.value.trim(), true), 300));
         return [
           section('Вкладка браузера', ...tabSettings()),
-          section('Приветствие', h('label', { class: 'field' }, h('span', {}, 'Имя'), nameInp)),
+          section('Приветствие', h('label', { class: 'field' }, h('span', {}, 'Имя'), nameInp), greetingsEditor()),
         ];
       },
-      more: () => [
-        section('Раскладка',
-          h('div', { class: 'row' },
-            h('button', { class: 'pill small', onclick: () => { closeSettings(); setEditing(true); } }, 'Редактировать'),
-            h('button', { class: 'pill small', onclick: resetLayout }, 'Сбросить')),
-          h('div', { class: 'row' },
-            h('button', { class: 'pill small', onclick: exportAll }, 'Экспорт'),
-            h('button', { class: 'pill small', onclick: () => pickFile('application/json', importAll) }, 'Импорт'))),
-        h('p', { class: 'panel-foot' }, 'Plitka 0.1 · E — редактор, / — поиск, Esc — закрыть'),
-      ],
+      more: () => {
+        const kbd = (...keys) => h('span', { class: 'keys' }, keys.flatMap((k, i) => [i ? h('span', { class: 'plus' }, '+') : null, h('kbd', {}, k)]).filter(Boolean));
+        const ICO = {
+          grid: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="10" rx="2"/><rect x="13" y="3" width="8" height="6" rx="2"/><rect x="13" y="11" width="8" height="10" rx="2"/><rect x="3" y="15" width="8" height="6" rx="2"/></svg>',
+          down: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
+          up: '<svg viewBox="0 0 24 24"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></svg>',
+        };
+        // «Сбросить» — с подтверждением вторым кликом, это необратимо для всех экранов
+        let armed = 0;
+        const resetBtn = h('button', { type: 'button', class: 'text-btn danger', onclick: () => {
+          if (Date.now() - armed < 3000) { resetLayout(); armed = 0; resetBtn.textContent = 'Сбросить раскладку'; return; }
+          armed = Date.now();
+          resetBtn.textContent = 'Точно? Нажми ещё раз';
+          setTimeout(() => { if (armed && Date.now() - armed >= 3000) resetBtn.textContent = 'Сбросить раскладку'; }, 3100);
+        } }, 'Сбросить раскладку');
+        return [
+          section('Раскладка',
+            h('button', { type: 'button', class: 'action-card', onclick: () => { closeSettings(); setEditing(true); } },
+              h('span', { class: 'ac-ico', html: ICO.grid }),
+              h('span', { class: 'ac-txt' }, h('b', {}, 'Изменить раскладку'), h('small', {}, 'Двигать, растягивать, добавлять блоки')),
+              kbd('E')),
+            h('div', { class: 'row-end' }, resetBtn)),
+          section('Резервная копия',
+            h('p', { class: 'field-hint' }, 'Настройки, блоки и раскладки — одним файлом. Пригодится при переезде на другой компьютер.'),
+            h('div', { class: 'btn-pair' },
+              h('button', { type: 'button', class: 'pill small', onclick: exportAll }, h('span', { class: 'btn-ico', html: ICO.down }), 'Сохранить файл'),
+              h('button', { type: 'button', class: 'pill small', onclick: () => pickFile('application/json', importAll) }, h('span', { class: 'btn-ico', html: ICO.up }), 'Загрузить'))),
+          section('Клавиши',
+            h('dl', { class: 'hotkeys' },
+              ...[[kbd('E'), 'Изменить раскладку'], [kbd('/'), 'Перейти к поиску'], [kbd('Esc'), 'Закрыть панель, выйти из редактора'],
+                [kbd('Ctrl', 'Enter'), 'Поиск в новой вкладке'], [kbd('Shift', 'Enter'), 'Поиск в инкогнито']]
+                .flatMap(([k, t]) => [h('dt', {}, k), h('dd', {}, t)]))),
+        ];
+      },
     };
     panelBody.replaceChildren(...content[panelTab]().filter(Boolean));
 
@@ -1475,33 +1506,41 @@
     const motion = h('input', { type: 'checkbox' });
     motion.checked = settings.motion;
     motion.addEventListener('change', () => setSetting('motion', motion.checked));
+    const removeImg = () => { setSetting('bgImage', null); sampleImage(); renderSettings(); };
 
-    const bgRow = h('div', { class: 'row' },
-      plain ? null : h('button', {
+    // своя картинка: превью сверху, под ним — «как есть / с эффектом»; эффект настраивается сразу, без раскрывашек
+    const photo = img ? [
+      h('div', { class: 'bg-current', style: `background-image:url("${settings.bgImage}")` },
+        h('div', { class: 'bgc-actions' },
+          h('button', { type: 'button', class: 'pill small', onclick: () => pickFile('image/*', loadBgImage) }, 'Заменить'),
+          h('button', { type: 'button', class: 'pill small', onclick: removeImg }, 'Убрать'))),
+      h('div', { class: 'field' }, h('span', {}, 'Показывать'),
+        segmented([['plain', 'Как есть'], ['fx', 'С эффектом']], plain ? 'plain' : 'fx', (v) => {
+          setSetting('photo', { ...settings.photo, plain: v === 'plain' });
+          sampleImage();
+          renderSettings();
+        }).el),
+      slider('Затемнение', 'bgDim', 0, 0.8, 0.05, v => Math.round(v * 100) + '%'),
+      plain ? null : bgEditor(),
+    ] : [];
+
+    // меш: заготовки, «Настроить» раскрывает редактор точек
+    const meshRow = img ? null : h('div', { class: 'row' },
+      h('button', {
         class: 'pill small' + (meshOpen ? ' on' : ''), 'aria-expanded': String(meshOpen),
         onclick: () => { meshOpen = !meshOpen; renderSettings(); },
-      }, meshOpen ? 'Свернуть' : img ? 'Эффект картинки' : 'Настроить'),
-      img ? null : h('button', {
+      }, meshOpen ? 'Свернуть' : 'Настроить'),
+      h('button', {
         class: 'pill small', title: 'Случайные цвета и точки, узор тот же',
         onclick: () => { settings.mesh.points = Mesh.random(); delete settings.mesh.preset; meshSel = 0; setSetting('mesh', settings.mesh); renderSettings(); },
       }, 'Случайный'),
-      h('button', { class: 'pill small', onclick: () => pickFile('image/*', loadBgImage) }, img ? 'Сменить картинку' : 'Своя картинка'),
-      img ? h('button', { class: 'pill small', onclick: () => { setSetting('bgImage', null); renderSettings(); } }, 'Убрать картинку') : null,
-    );
-
-    // своя картинка: как есть или с эффектом поверх
-    const photoMode = img ? h('div', { class: 'field' }, h('span', {}, 'Картинка'),
-      segmented([['plain', 'Как есть'], ['fx', 'С эффектом']], plain ? 'plain' : 'fx', (v) => {
-        setSetting('photo', { ...settings.photo, plain: v === 'plain' });
-        sampleImage();
-        renderSettings();
-      }).el) : null;
+      h('button', { class: 'pill small', onclick: () => pickFile('image/*', loadBgImage) }, 'Своя картинка'));
 
     return [
-      section('Фон', meshPresets(), bgRow, photoMode,
-        img ? slider('Затемнение картинки', 'bgDim', 0, 0.8, 0.05, v => Math.round(v * 100) + '%') : null,
-        meshOpen && !plain ? bgEditor() : null,
-        h('label', { class: 'field field-toggle' }, h('span', {}, 'Живой фон'), h('span', { class: 'switch' }, motion, h('i')))),
+      img ? section('Своя картинка', ...photo) : null,
+      section(img ? 'Или заготовка' : 'Фон', meshPresets(), meshRow, !img && meshOpen ? bgEditor() : null),
+      section('Движение', h('label', { class: 'field field-toggle' }, h('span', {}, 'Живой фон'), h('span', { class: 'switch' }, motion, h('i'))),
+        h('p', { class: 'field-hint' }, 'Выключи — фон и эффекты замрут (меньше нагрузка на ноутбуке).')),
       section('Слайд-шоу', ...slideshowSettings()),
     ];
   }
@@ -1513,7 +1552,8 @@
     const on = h('input', { type: 'checkbox', 'data-slides': 'on' });
     on.checked = s.on;
     on.addEventListener('change', () => { setS({ on: on.checked }); if (on.checked && s.items.length) nextSlide(); });
-    const toggle = h('label', { class: 'field field-toggle' }, h('span', {}, 'Менять фоны сами'), h('span', { class: 'switch' }, on, h('i')));
+    const toggle = h('label', { class: 'field field-toggle' }, h('span', {}, 'Автосмена фона'), h('span', { class: 'switch' }, on, h('i')));
+    const what = h('p', { class: 'field-hint' }, 'Фон сам переключается на следующий из списка ниже — при открытии новой вкладки или по таймеру. Добавь сюда заготовки и свои картинки.');
 
     const addCurrent = async () => {
       const id = 's' + Math.random().toString(36).slice(2, 9);
@@ -1557,8 +1597,8 @@
       }))));
 
     return [
-      toggle,
-      s.items.length ? list : h('p', { class: 'field-hint' }, 'Выбери фон выше и добавь его сюда, или загрузи свои картинки — можно сразу несколько.'),
+      toggle, what,
+      s.items.length ? list : h('p', { class: 'field-hint' }, 'Пока пусто.'),
       h('div', { class: 'row' },
         h('button', { type: 'button', class: 'pill small', onclick: addCurrent }, '+ Текущий фон'),
         h('button', { type: 'button', class: 'pill small', onclick: () => pickFile('image/*', addImages, true) }, '+ Картинки'),
@@ -1568,6 +1608,30 @@
       s.items.length > 1 ? h('div', { class: 'field' }, h('span', {}, 'Порядок'),
         segmented([['seq', 'По порядку'], ['random', 'Случайно']], s.order, (v) => setS({ order: v }, false)).el) : null,
     ];
+  }
+
+  // свои приветствия: до 5 строк, у каждой — время суток или «любое время»
+  function greetingsEditor() {
+    const list = settings.greetings.length ? structuredClone(settings.greetings) : [{ text: '', when: 'any' }];
+    const box = h('div', { class: 'greets' });
+    const save = () => setSetting('greetings', list.filter(g => g.text.trim()).map(g => ({ text: g.text.trim(), when: g.when })), true);
+    const paint = () => {
+      box.replaceChildren(
+        ...list.map((g, i) => {
+          const inp = h('input', { type: 'text', value: g.text, maxlength: 80, placeholder: i ? 'Ещё вариант' : 'Привет, {имя}!', 'data-greet': i });
+          inp.addEventListener('input', debounce(() => { g.text = inp.value; save(); }, 300));
+          const when = dropdown(DAY_PARTS, g.when, (v) => { g.when = v; save(); });
+          when.el.classList.add('greet-when');
+          return h('div', { class: 'greet-row' }, inp, when.el,
+            list.length > 1 || g.text ? h('button', { type: 'button', class: 'tool danger', title: 'Убрать', html: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+              onclick: () => { list.splice(i, 1); if (!list.length) list.push({ text: '', when: 'any' }); save(); paint(); } }) : h('span'));
+        }),
+        list.length < 5 ? h('button', { type: 'button', class: 'text-btn', onclick: () => { list.push({ text: '', when: 'any' }); paint(); box.querySelector('.greet-row:last-of-type input')?.focus(); } }, '+ Ещё приветствие') : null,
+      );
+    };
+    paint();
+    return h('div', { class: 'field' }, h('span', {}, 'Свои приветствия'), box,
+      h('p', { class: 'field-hint' }, '{имя} подставит имя. Если вариантов несколько — показывается случайный; с временем суток — только в это время, иначе стандартное «Доброе утро».'));
   }
 
   // секция «Вкладка»: название с подстановками и иконка — плитки с живым превью

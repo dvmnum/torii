@@ -1038,3 +1038,49 @@ svg.brand-svg { fill: currentColor; stroke: none; width: .82em; height: .82em; }
 .mini-reset { border: 0; background: none; padding: 0; font: 600 11px/1 'Manrope', sans-serif; color: var(--accent); }
 .mini-reset[hidden] { display: none; }
 input[type=range].inherit { opacity: .5; }
+
+/* ================= ПАНЕЛЬ: «ЕЩЁ», ПРИВЕТСТВИЯ, ФОН ================= */
+.action-card {
+  width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px; text-align: left;
+  border: 1px solid var(--line-2); border-radius: 14px; background: rgba(255,255,255,.04); color: var(--ink);
+  transition: background .2s, border-color .2s;
+}
+.action-card:hover { background: rgba(255,255,255,.08); border-color: var(--ink-3); }
+.ac-ico { flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-size: 19px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.ac-txt { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ac-txt b { font-size: 14px; }
+.ac-txt small { font-size: 12px; color: var(--ink-3); font-weight: 500; }
+.row-end { display: flex; justify-content: flex-end; margin-top: -4px; }
+.text-btn { border: 0; background: none; padding: 2px 0; font: 600 12.5px/1.2 'Manrope', sans-serif; color: var(--ink-3); align-self: flex-start; }
+.text-btn:hover { color: var(--ink); }
+.text-btn.danger:hover { color: #ff8a9a; }
+.btn-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn-pair .pill { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.btn-ico { display: grid; font-size: 15px; }
+/* клавиши */
+.hotkeys { display: grid; grid-template-columns: auto 1fr; gap: 9px 14px; margin: 0; align-items: center; }
+.hotkeys dd { margin: 0; font-size: 13px; color: var(--ink-2); }
+.keys { display: inline-flex; align-items: center; gap: 4px; }
+.keys .plus { font-size: 11px; color: var(--ink-3); }
+kbd {
+  display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box;
+  font: 600 11px/1 'Manrope', sans-serif; color: var(--ink); background: rgba(255,255,255,.07);
+  border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 6px;
+}
+.action-card kbd { flex: none; }
+/* подвал панели */
+.panel-footer { display: flex; align-items: center; gap: 8px; white-space: nowrap; padding: 12px 24px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-3); }
+.panel-footer img { width: 16px; height: 16px; border-radius: 4px; }
+.panel-footer b { color: var(--ink-2); }
+.pf-note { margin-left: auto; }
+.panel.peek .panel-footer { opacity: 0; }
+/* приветствия */
+.greets { display: flex; flex-direction: column; gap: 6px; }
+.greet-row { display: grid; grid-template-columns: 1fr 132px 26px; gap: 6px; align-items: center; }
+.greet-row input { font: inherit; font-size: 13.5px; color: var(--ink); background: rgba(255,255,255,.05); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 10px; outline: 0; min-width: 0; user-select: text; }
+.greet-row input:focus { border-color: var(--accent); }
+.greet-when .dd-btn { padding: 8px 8px 8px 10px; font-size: 12.5px; white-space: nowrap; }
+/* текущая картинка-фон */
+.bg-current { position: relative; aspect-ratio: 16 / 9; border-radius: 12px; background: center / cover no-repeat; border: 1px solid var(--line-2); overflow: hidden; }
+.bgc-actions { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; }
+.bgc-actions .pill { background: rgba(20,20,22,.75); }

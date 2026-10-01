@@ -192,7 +192,6 @@ const Widgets = {
       const sub = h('div', { class: 'clock-sub' });
       body.append(h('div', { class: `w-clock v-${v} h-${hz}` + (analog ? ' is-analog' : '') }, time, sub));
 
-      const greet = (hr) => hr < 5 ? 'Доброй ночи' : hr < 12 ? 'Доброе утро' : hr < 18 ? 'Добрый день' : 'Добрый вечер';
       const tick = () => {
         const d = new Date();
         if (analog) time.set(d);
@@ -208,8 +207,7 @@ const Widgets = {
         }
         const parts = [];
         if (data.greeting) {
-          const name = ctx.settings().name;
-          parts.push(`<span class="greet">${greet(d.getHours())}${name ? ', ' + escapeHtml(name) : ''}</span>`);
+          parts.push(`<span class="greet">${escapeHtml(pickGreeting(ctx.settings(), d))}</span>`);
         }
         if (data.date) {
           parts.push(`<span>${d.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}</span>`);
@@ -598,4 +596,31 @@ function analogFace(withSeconds) {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Приветствие: свои фразы (settings.greetings, до 5) с временем суток или на любое время.
+// Есть подходящие по времени — случайная из них, иначе случайная «на любое время», иначе стандартное.
+// Выбор запоминается до смены времени суток — иначе фраза менялась бы каждую секунду.
+const DAY_PARTS = [['any', 'Любое время'], ['morning', 'Утро'], ['day', 'День'], ['evening', 'Вечер'], ['night', 'Ночь']];
+const dayPart = (hr) => hr < 5 ? 'night' : hr < 12 ? 'morning' : hr < 18 ? 'day' : hr < 23 ? 'evening' : 'night';
+const DEFAULT_GREET = { night: 'Доброй ночи', morning: 'Доброе утро', day: 'Добрый день', evening: 'Добрый вечер' };
+let greetPick = null; // { key, text }
+function pickGreeting(s, d = new Date()) {
+  const part = dayPart(d.getHours());
+  const list = (s.greetings || []).filter(g => g.text.trim());
+  const key = part + '|' + JSON.stringify(list) + '|' + s.name;
+  if (greetPick?.key === key) return greetPick.text;
+  const byTime = list.filter(g => g.when === part), any = list.filter(g => g.when === 'any');
+  const pool = byTime.length ? byTime : any;
+  const name = s.name || '';
+  let text;
+  if (pool.length) {
+    text = pool[Math.floor(Math.random() * pool.length)].text;
+    // {имя} — подставить имя; без имени — убрать вместе с запятой перед ним
+    text = name ? text.replace(/\{имя\}/gi, name) : text.replace(/,?\s*\{имя\}/gi, '');
+  } else {
+    text = DEFAULT_GREET[part] + (name ? ', ' + name : '');
+  }
+  greetPick = { key, text: text.trim() };
+  return greetPick.text;
 }

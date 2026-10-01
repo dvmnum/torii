@@ -141,7 +141,7 @@ const layoutBefore = await page.evaluate(() => JSON.stringify(window.__plitka.la
 await page.click('#btn-settings');
 await ptab('more');
 for (const bad of ['не json вообще', JSON.stringify({ app: 'plitka', layout: [{ type: 'nope' }] })]) {
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('.panel button:has-text("Импорт")')]);
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('.panel button:has-text("Загрузить")')]);
   await chooser.setFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from(bad) });
   await page.waitForTimeout(400);
 }
@@ -1083,6 +1083,40 @@ await page.screenshot({ path: `${out}/54-liquid-glass.png` });
 await page.evaluate(() => document.querySelector("filter[id^=lq] feImage").getAttribute("href")).then(u => fs.writeFileSync(`${out}/56-liquid-map.png`, Buffer.from(u.split(",")[1], "base64")));
 console.log("lq filters:", await page.evaluate(() => [...document.querySelectorAll("filter[id^=lq]")].map(f => f.id + " " + f.getAttribute("width") + "x" + f.getAttribute("height") + " img=" + (f.querySelector("feImage")?.getAttribute("href") || "").length + " scale=" + f.querySelector("feDisplacementMap")?.getAttribute("scale") + " ns=" + f.querySelector("feImage")?.namespaceURI).join(" | ")));
 await page.screenshot({ path: `${out}/55-liquid-edge.png`, clip: { x: 440, y: 70, width: 260, height: 320 } });
+await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
+
+// ---------- свои приветствия, «Ещё», картинка во «Фоне» ----------
+await page.evaluate(() => chrome.storage.local.set({
+  settings: { name: 'Вова' },
+  widgets: [{ id: 'w-clock', type: 'clock', data: {} }], layouts: { lg: { 'w-clock': { x: 7, y: 2, w: 10, h: 4 } } },
+}));
+await page.reload();
+await page.waitForTimeout(1000);
+await page.click('#btn-settings');
+await ptab('tab');
+await page.fill('input[data-greet="0"]', 'Йо, {имя}');
+await page.waitForTimeout(500);
+check((await page.textContent('.greet')) === 'Йо, Вова', `приветствие: своё с именем («${await page.textContent('.greet')}»)`);
+await page.click('.greets .text-btn');
+await page.fill('input[data-greet="1"]', 'Ночь не для сна');
+// второе — только на текущее время суток: должно победить «любое время»
+const part = await page.evaluate(() => { const hr = new Date().getHours(); return hr < 5 ? 'Ночь' : hr < 12 ? 'Утро' : hr < 18 ? 'День' : hr < 23 ? 'Вечер' : 'Ночь'; });
+await page.click('.greet-row:nth-child(2) .dd-btn');
+await page.click(`body > .dd-list .dd-item:has-text("${part}")`);
+await page.waitForTimeout(500);
+check((await page.textContent('.greet')) === 'Ночь не для сна', 'приветствие: по времени суток важнее «любого времени»');
+await page.screenshot({ path: `${out}/57-greetings.png` });
+await ptab('more');
+check(await page.locator('.action-card:has-text("Изменить раскладку")').count() === 1 && await page.locator('.hotkeys kbd').count() >= 6 && await page.locator('.panel-footer:has-text("Plitka")').count() === 1, 'ещё: карточка раскладки, клавиши, подвал с названием');
+await page.screenshot({ path: `${out}/58-more.png` });
+await page.click('.panel [data-close]');
+await page.evaluate((u) => chrome.storage.local.set({ settings: { bgImage: u } }), photoUrl);
+await page.reload();
+await page.waitForTimeout(1000);
+await page.click('#btn-settings');
+check(await page.locator('.bg-current').count() === 1 && await page.locator('.panel .mesh-editor').count() === 1, 'фон: превью своей картинки и редактор эффекта сразу, без кнопки');
+await page.screenshot({ path: `${out}/59-bg-photo.png` });
+await page.click('.panel [data-close]');
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
 const real = errors.filter(e => !/Failed to load resource/i.test(e));
