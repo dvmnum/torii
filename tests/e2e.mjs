@@ -894,6 +894,45 @@ await page.waitForTimeout(900);
 await page.screenshot({ path: `${out}/46-after-load.png` });
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
+// ---------- ссылки: стили иконок, закладки ----------
+await page.evaluate(() => chrome.storage.local.set({
+  settings: {},
+  widgets: [{ id: 'w-links', type: 'links', data: { links: [
+    { title: 'YouTube', url: 'https://youtube.com' }, { title: 'GitHub', url: 'https://github.com' },
+    { title: 'Telegram', url: 'https://web.telegram.org' }, { title: 'ВКонтакте', url: 'https://vk.com' },
+    { title: 'Ozon', url: 'https://ozon.ru' }, { title: 'Мой сайт', url: 'https://example-site.dev' },
+  ] } }],
+  layouts: { lg: { 'w-links': { x: 4, y: 4, w: 16, h: 3 } } },
+}));
+await page.reload();
+await page.waitForTimeout(1200);
+check(await page.$eval('.link[title="YouTube"]', el => el.style.getPropertyValue('--brand')) === '#ff0033', 'ссылки: фирменный цвет YouTube');
+check(/^hsl/.test(await page.$eval('.link[title="Мой сайт"]', el => el.style.getPropertyValue('--brand'))), 'ссылки: незнакомому сайту — цвет из адреса');
+for (const [k, name] of [['big', 'Крупные'], ['tint', 'Цвет бренда'], ['mono', 'Монохром'], ['letter', 'Буквы']]) {
+  await openSettings('w-links');
+  await page.click('.inspector .field:has-text("Иконки") .dd-btn');
+  await page.click(`body > .dd-list .dd-item:has-text("${name}")`);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${out}/47-icons-${k}.png`, clip: { x: 260, y: 280, width: 1080, height: 260 } });
+}
+check(await page.locator('.w-links.icons-letter .link-ico .mono').count() === 6 && (await page.textContent('.link[title="YouTube"] .mono')) === 'Y', 'ссылки: стиль «Буквы» — монограммы');
+await openSettings('w-links');
+check(await page.locator('.inspector button:has-text("Из панели закладок")').count() === 1, 'ссылки: кнопка «Из панели закладок» в настройках');
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+// виджет закладок: без разрешения — понятная кнопка (диалог разрешения в тесте не нажать)
+await addViaMenu('Панель закладок');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(500);
+const bmText = await page.evaluate(() => {
+  const it = window.__plitka.layout.find(i => i.type === 'bookmarks');
+  return document.querySelector(`.grid-stack-item[gs-id="${it.id}"] .w-body`)?.innerText || '';
+});
+check(/Разрешить|обнови вкладку/.test(bmText), `закладки: без доступа — кнопка «Разрешить» («${bmText.replace(/\s+/g, ' ').trim()}»)`);
+await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
+
 const real = errors.filter(e => !/Failed to load resource/i.test(e));
 if (fails.length) { console.error('FAIL:', fails.join('; ')); process.exitCode = 1; }
 console.log('errors:', real.length ? real.join('\n') : 'none');

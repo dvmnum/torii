@@ -806,7 +806,20 @@
             h('input', { type: 'text', value: l.url, class: 'le-url', oninput: (e) => { l.url = e.target.value; notify(true); } }),
             h('button', { type: 'button', class: 'tool', title: 'Выше', disabled: i === 0, onclick: () => { [list[i - 1], list[i]] = [list[i], list[i - 1]]; paint(); notify(); }, html: '<svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>' }),
             h('button', { type: 'button', class: 'tool danger', title: 'Удалить', onclick: () => { list.splice(i, 1); paint(); notify(); }, html: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>' }),
-          )), h('button', { type: 'button', class: 'pill small', onclick: () => { list.push({ title: '', url: 'https://' }); paint(); box.querySelector('.le-row:last-of-type .le-url')?.focus(); } }, '+ Ссылка'));
+          )), h('div', { class: 'row' },
+            h('button', { type: 'button', class: 'pill small', onclick: () => { list.push({ title: '', url: 'https://' }); paint(); box.querySelector('.le-row:last-of-type .le-url')?.focus(); } }, '+ Ссылка'),
+            h('button', { type: 'button', class: 'pill small', title: 'Забрать ссылки из строки закладок браузера', onclick: () => fromBookmarks() }, 'Из панели закладок')));
+        };
+        // разово забираем строку закладок (и первый уровень папок); дубликаты пропускаем
+        const fromBookmarks = async () => {
+          if (!(await Perm.has('bookmarks')) && !(await Perm.ask('bookmarks'))) return;
+          if (!Bookmarks.available()) { toast('Доступ есть — обнови вкладку и нажми ещё раз'); return; }
+          const have = new Set(list.map(l => normalizeUrl(l.url)));
+          const add = (await Bookmarks.flat()).filter(b => /^https?:/.test(b.url) && !have.has(normalizeUrl(b.url))).map(b => ({ title: b.title || '', url: b.url }));
+          list.push(...add);
+          paint();
+          notify();
+          toast(add.length ? `Добавлено из закладок: ${add.length}` : 'Новых закладок нет');
         };
         paint();
         control = h('div', { class: 'field field-block' }, h('span', {}, f.label), box);

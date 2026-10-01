@@ -38,11 +38,58 @@ function permGate(body, perm, text, ctx) {
 }
 
 // сайты плитками — как в «Ссылках»
-function linkTiles(list, style, newTab) {
-  return h('div', { class: `w-links style-${style}` }, list.map(l =>
-    h('a', { class: 'link', href: l.url, title: l.title || hostOf(l.url), target: newTab ? '_blank' : null, rel: 'noopener' },
-      h('span', { class: 'link-ico' }, favicon(l.url, l.title)),
-      h('span', { class: 'link-title' }, l.title || hostOf(l.url)))));
+// Строка закладок браузера. У Chrome это папка с folderType 'bookmarks-bar' (раньше — просто первая в дереве).
+const Bookmarks = {
+  available: () => !!chrome.bookmarks?.getTree,
+  bar: () => new Promise((resolve) => chrome.bookmarks.getTree((tree) => {
+    const root = tree[0];
+    const bar = root.children.find(c => c.folderType === 'bookmarks-bar') || root.children[0];
+    resolve(bar?.children || []);
+  })),
+  // плоский список ссылок: прямые закладки и первый уровень папок
+  flat: async () => (await Bookmarks.bar()).flatMap(n => n.url ? [n] : (n.children || []).filter(c => c.url)),
+};
+const FOLDER_SVG = '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor" fill-opacity=".2"/><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+
+// содержимое папки — всплывающим списком у кнопки; вложенные папки раскрываются внутри
+let closeBmPop = null;
+function openBookmarkFolder(anchor, node, newTab) {
+  closeBmPop?.();
+  const item = (n) => n.url
+    ? h('a', { class: 'bm-item', href: n.url, target: newTab ? '_blank' : null, rel: 'noopener', title: n.url },
+      h('span', { class: 'bm-ico' }, favicon(n.url, n.title, 32)), h('span', { class: 'bm-title' }, n.title || hostOf(n.url)))
+    : (() => {
+      const sub = h('div', { class: 'bm-sub', hidden: true }, (n.children || []).map(item));
+      const btn = h('button', { type: 'button', class: 'bm-item bm-folder', onclick: () => { sub.hidden = !sub.hidden; btn.classList.toggle('open', !sub.hidden); } },
+        h('span', { class: 'bm-ico', html: FOLDER_SVG }), h('span', { class: 'bm-title' }, n.title || 'Папка'));
+      return h('div', {}, btn, sub);
+    })();
+  const pop = h('div', { class: 'bm-pop' }, (node.children || []).length ? node.children.map(item) : h('div', { class: 'w-muted bm-empty' }, 'Папка пустая'));
+  document.body.append(pop);
+  const a = anchor.getBoundingClientRect();
+  const W = pop.offsetWidth, H = Math.min(pop.offsetHeight, innerHeight - 24);
+  pop.style.left = Math.min(innerWidth - W - 12, Math.max(12, a.left)) + 'px';
+  pop.style.top = (a.bottom + 8 + H < innerHeight ? a.bottom + 8 : Math.max(12, a.top - 8 - H)) + 'px';
+  requestAnimationFrame(() => pop.classList.add('open'));
+  const at0 = a.top;
+  const onDown = (e) => { if (!pop.contains(e.target) && !anchor.contains(e.target)) close(); };
+  const onKey = (e) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); close(); } };
+  const onScroll = (e) => { if (!pop.contains(e.target) && Math.abs(anchor.getBoundingClientRect().top - at0) > 2) close(); };
+  function close() {
+    pop.remove();
+    document.removeEventListener('mousedown', onDown, true);
+    window.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('scroll', onScroll, true);
+    if (closeBmPop === close) closeBmPop = null;
+  }
+  document.addEventListener('mousedown', onDown, true);
+  window.addEventListener('keydown', onKey, true);
+  window.addEventListener('scroll', onScroll, true);
+  closeBmPop = close;
+}
+
+function linkTiles(list, data) {
+  return h('div', { class: `w-links style-${data.style} icons-${data.icons || 'glass'}` }, list.map(l => linkEl(l, data)));
 }
 
 Object.assign(Widgets, {
@@ -199,10 +246,11 @@ Object.assign(Widgets, {
     title: 'Частые сайты',
     perm: 'topSites',
     size: { w: 10, h: 2 }, min: { w: 2, h: 1 },
-    defaults: { glass: true, count: '8', style: 'tiles', newTab: false },
+    defaults: { glass: true, count: '8', style: 'tiles', icons: 'glass', newTab: false },
     settings: [
       { key: 'count', label: 'Сколько', type: 'select', options: [['4', '4'], ['6', '6'], ['8', '8'], ['10', '10'], ['12', '12']] },
       { key: 'style', label: 'Вид', type: 'select', options: [['tiles', 'Плитки'], ['list', 'Список'], ['icons', 'Только иконки']] },
+      ICONS_SETTING,
       { key: 'newTab', label: 'Открывать в новой вкладке', type: 'toggle' },
       GLASS_SETTING,
     ],
@@ -218,10 +266,59 @@ Object.assign(Widgets, {
         chrome.topSites.get((list) => {
           if (!alive) return;
           const sites = list.filter(s => /^https?:/.test(s.url)).slice(0, +data.count);
-          body.append(sites.length ? linkTiles(sites, data.style, data.newTab) : h('div', { class: 'w-empty' }, h('div', { class: 'w-muted' }, 'Браузер ещё не знает твоих частых сайтов')));
+          body.append(sites.length ? linkTiles(sites, data) : h('div', { class: 'w-empty' }, h('div', { class: 'w-muted' }, 'Браузер ещё не знает твоих частых сайтов')));
         });
       });
       return { destroy: () => { alive = false; } };
+    },
+  },
+
+  bookmarks: {
+    title: 'Панель закладок',
+    perm: 'bookmarks',
+    size: { w: 12, h: 2 }, min: { w: 2, h: 1 },
+    defaults: { glass: true, style: 'tiles', icons: 'glass', newTab: false },
+    settings: [
+      { key: 'style', label: 'Вид', type: 'select', options: [['tiles', 'Плитки'], ['list', 'Список'], ['icons', 'Только иконки']] },
+      ICONS_SETTING,
+      { key: 'newTab', label: 'Открывать в новой вкладке', type: 'toggle' },
+      GLASS_SETTING,
+    ],
+    render(body, data, ctx) {
+      let alive = true, t = 0;
+      const wrap = h('div', { class: `w-links style-${data.style} icons-${data.icons}` });
+      const folderEl = (n) => {
+        const b = h('button', { type: 'button', class: 'link link-folder', title: n.title, onclick: () => openBookmarkFolder(b, n, data.newTab) },
+          h('span', { class: 'link-ico', html: FOLDER_SVG }), h('span', { class: 'link-title' }, n.title || 'Папка'));
+        return b;
+      };
+      const paint = () => Bookmarks.bar().then((nodes) => {
+        if (!alive) return;
+        wrap.replaceChildren(...nodes.map(n => n.url ? linkEl(n, data) : folderEl(n)));
+        if (!nodes.length) wrap.replaceChildren(h('div', { class: 'w-muted' }, 'В строке закладок пока пусто'));
+      });
+      // закладки поменяли в браузере — перерисовываемся (пачкой, если правок много)
+      const later = () => { clearTimeout(t); t = setTimeout(paint, 150); };
+      const evs = ['onCreated', 'onRemoved', 'onChanged', 'onMoved', 'onChildrenReordered'];
+      Perm.has('bookmarks').then((ok) => {
+        if (!alive) return;
+        if (!ok) return permGate(body, 'bookmarks', 'Нужен доступ к закладкам — покажу твою строку закладок', ctx);
+        if (!Bookmarks.available()) {
+          return body.append(h('div', { class: 'w-empty' }, h('div', { class: 'w-muted' }, 'Доступ есть — обнови вкладку'),
+            h('button', { type: 'button', class: 'pill small', onclick: () => location.reload() }, 'Обновить')));
+        }
+        body.append(wrap);
+        paint();
+        for (const e of evs) chrome.bookmarks[e]?.addListener(later);
+      });
+      return {
+        destroy: () => {
+          alive = false;
+          clearTimeout(t);
+          closeBmPop?.();
+          if (Bookmarks.available()) for (const e of evs) chrome.bookmarks[e]?.removeListener(later);
+        },
+      };
     },
   },
 
@@ -472,6 +569,7 @@ const WIDGET_META = {
   habits: { group: 'work', desc: 'Отмечай привычки каждый день', icon: WI(`<rect x="3" y="4" width="18" height="17" rx="3" ${F}/><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5V6M16 2.5V6"/><circle cx="8" cy="13.5" r="1.3" fill="currentColor"/><circle cx="12" cy="13.5" r="1.3" fill="currentColor"/><circle cx="16" cy="13.5" r="1.3"/><circle cx="8" cy="17.5" r="1.3" fill="currentColor"/><circle cx="12" cy="17.5" r="1.3"/>`) },
   search: { group: 'nav', desc: 'Яндекс, Google, DuckDuckGo, Bing', icon: WI(`<circle cx="10.5" cy="10.5" r="6.5" ${F}/><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20.5 20.5" stroke-width="2.4"/>`) },
   links: { group: 'nav', desc: 'Свои закладки плитками', icon: WI(`<rect x="3" y="3" width="7.5" height="7.5" rx="2" ${F}/><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2" ${F}/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>`) },
+  bookmarks: { group: 'nav', desc: 'Твоя строка закладок, папки списком', icon: WI(`<path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" ${F}/><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"/><path d="M9 8h6"/>`) },
   topsites: { group: 'nav', desc: 'Сайты, куда ходишь чаще всего', icon: WI(`<path d="M12 3l2.6 5.5 6 .8-4.4 4.1 1.1 6L12 16.6 6.7 19.4l1.1-6L3.4 9.3l6-.8z" ${F}/><path d="M12 3l2.6 5.5 6 .8-4.4 4.1 1.1 6L12 16.6 6.7 19.4l1.1-6L3.4 9.3l6-.8z"/>`) },
   recent: { group: 'nav', desc: 'Вернуть случайно закрытую вкладку', icon: WI(`<path d="M4 8h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" ${F}/><path d="M4 8V6a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M9 14.5a3.5 3.5 0 1 0 1-2.4M9 10.5v2h2"/>`) },
   weather: { group: 'info', desc: 'Сейчас или на неделю', icon: WI(`<circle cx="9" cy="8" r="3.5" ${F}/><path d="M9 2.5v1.2M3.5 8h1.2M5.1 4.1l.9.9M12.9 4.1l-.9.9"/><circle cx="9" cy="8" r="3.5"/><path d="M8 20h9.5a3.5 3.5 0 0 0 .4-7 5 5 0 0 0-9.4.9A3.1 3.1 0 0 0 8 20z" ${F}/><path d="M8 20h9.5a3.5 3.5 0 0 0 .4-7 5 5 0 0 0-9.4.9A3.1 3.1 0 0 0 8 20z"/>`) },

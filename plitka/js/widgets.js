@@ -46,8 +46,8 @@ function favicon(pageUrl, title, size = 64) {
     img.replaceWith(m);
   };
   img.addEventListener('error', next);
-  // крошечная картинка (16px заглушка) — пробуем следующий источник
-  img.addEventListener('load', () => { if (img.naturalWidth && img.naturalWidth < 17 && i < srcs.length) next(); });
+  // крошечная картинка (заглушка-глобус 16px или прозрачный 1×1 у Яндекса) — следующий источник, а после последнего — буква
+  img.addEventListener('load', () => { if (img.naturalWidth && img.naturalWidth < 17) next(); });
   next();
   return img;
 }
@@ -91,6 +91,43 @@ const ENGINES = {
 };
 
 const GLASS_SETTING = { key: 'glass', label: 'Стеклянная подложка', type: 'toggle' };
+
+// ---------- ссылки: общий вид для «Ссылок», «Частых сайтов» и «Панели закладок» ----------
+// Фирменные цвета популярных сайтов. Остальным — постоянный оттенок из адреса (цвет из самой иконки
+// не достать: расширению нельзя читать пиксели чужих картинок без лишних разрешений).
+const BRAND = {
+  'youtube.com': '#ff0033', 'youtu.be': '#ff0033', 'github.com': '#8b949e', 'web.telegram.org': '#2aabee', 'telegram.org': '#2aabee',
+  't.me': '#2aabee', 'habr.com': '#77a2b6', 'kinopoisk.ru': '#ff5500', 'claude.ai': '#d97757', 'anthropic.com': '#d97757',
+  'vk.com': '#0077ff', 'ya.ru': '#fc3f1d', 'yandex.ru': '#fc3f1d', 'music.yandex.ru': '#ffcc00', 'dzen.ru': '#7f7f7f',
+  'mail.ru': '#005ff9', 'google.com': '#4285f4', 'mail.google.com': '#ea4335', 'drive.google.com': '#1fa463',
+  'twitch.tv': '#9146ff', 'reddit.com': '#ff4500', 'x.com': '#e7e9ea', 'twitter.com': '#1d9bf0', 'wikipedia.org': '#a2a9b1',
+  'spotify.com': '#1db954', 'netflix.com': '#e50914', 'instagram.com': '#e1306c', 'figma.com': '#a259ff', 'notion.so': '#9b9a97',
+  'chatgpt.com': '#10a37f', 'openai.com': '#10a37f', 'avito.ru': '#00aaff', 'ozon.ru': '#005bff', 'wildberries.ru': '#cb11ab',
+  'linkedin.com': '#0a66c2', 'discord.com': '#5865f2', 'pinterest.com': '#e60023', 'behance.net': '#1769ff', 'dribbble.com': '#ea4c89',
+  'stackoverflow.com': '#f48024', 'gitlab.com': '#fc6d26', 'tiktok.com': '#fe2c55', 'whatsapp.com': '#25d366', 'hh.ru': '#d6001c',
+  'gosuslugi.ru': '#0d4cd3', 'sber.ru': '#21a038', 'tbank.ru': '#ffdd2d', 'rutube.ru': '#1f2e6a',
+};
+function brandColor(url) {
+  const host = hostOf(url);
+  for (const [k, c] of Object.entries(BRAND)) if (host === k || host.endsWith('.' + k)) return c;
+  let n = 0;
+  for (const ch of host) n = (n * 31 + ch.charCodeAt(0)) >>> 0;
+  return `hsl(${n % 360} 62% 52%)`;
+}
+
+const ICON_STYLES = [['glass', 'Стекло'], ['big', 'Крупные'], ['tint', 'Цвет бренда'], ['mono', 'Монохром'], ['letter', 'Буквы']];
+const ICONS_SETTING = { key: 'icons', label: 'Иконки', type: 'select', options: ICON_STYLES };
+
+// одна ссылка-плитка; icons — стиль иконки (задаётся классом на обёртке .w-links.icons-*)
+function linkEl(l, { newTab = false, icons = 'glass' } = {}) {
+  const title = l.title || hostOf(l.url);
+  const ico = icons === 'letter'
+    ? h('span', { class: 'mono' }, (title.trim()[0] || '?').toUpperCase())
+    : favicon(l.url, l.title, icons === 'big' ? 128 : 64);
+  return h('a', { class: 'link', href: l.url, title, target: newTab ? '_blank' : null, rel: 'noopener', style: `--brand:${brandColor(l.url)}` },
+    h('span', { class: 'link-ico' }, ico),
+    h('span', { class: 'link-title' }, title));
+}
 
 const Widgets = {
   clock: {
@@ -194,7 +231,7 @@ const Widgets = {
     title: 'Ссылки',
     size: { w: 10, h: 2 }, min: { w: 2, h: 1 },
     defaults: {
-      glass: true, style: 'tiles', newTab: false,
+      glass: true, style: 'tiles', icons: 'glass', newTab: false,
       links: [
         { title: 'YouTube', url: 'https://youtube.com' },
         { title: 'GitHub', url: 'https://github.com' },
@@ -206,20 +243,14 @@ const Widgets = {
     },
     settings: [
       { key: 'style', label: 'Вид', type: 'select', options: [['tiles', 'Плитки'], ['list', 'Список'], ['icons', 'Только иконки']] },
+      ICONS_SETTING,
       { key: 'newTab', label: 'Открывать в новой вкладке', type: 'toggle' },
       GLASS_SETTING,
       { key: 'links', label: 'Ссылки', type: 'links' },
     ],
     render(body, data, ctx) {
-      const wrap = h('div', { class: `w-links style-${data.style}` });
-      for (const l of data.links) {
-        wrap.append(h('a', { class: 'link', href: l.url, title: l.title || hostOf(l.url), target: data.newTab ? '_blank' : null, rel: 'noopener' },
-          h('span', { class: 'link-ico' },
-            favicon(l.url, l.title),
-          ),
-          h('span', { class: 'link-title' }, l.title || hostOf(l.url)),
-        ));
-      }
+      const wrap = h('div', { class: `w-links style-${data.style} icons-${data.icons || 'glass'}` });
+      for (const l of data.links) wrap.append(linkEl(l, { newTab: data.newTab, icons: data.icons }));
       wrap.append(h('button', {
         class: 'link link-add', type: 'button', title: 'Добавить ссылку',
         onclick: () => ctx.modal({

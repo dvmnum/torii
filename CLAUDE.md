@@ -11,7 +11,7 @@
 - Сетка — `gridstack.js` v14 (`js/lib/gridstack-all.js`, UMD, глобал `GridStack` — это сам класс).
   Обновлять: `npm i gridstack@latest` → скопировать `node_modules/gridstack/dist/gridstack-all.js` и `gridstack.min.css`.
 - Шрифт Manrope (variable, cyrillic + latin) локально в `plitka/fonts/`.
-- Минимум permissions: `storage`, `unlimitedStorage`. Плюс необязательные (`optional_permissions`) `topSites`, `sessions` — спрашиваются только при добавлении виджета (поле `perm` у виджета), без них виджет показывает кнопку «Разрешить». Каждое новое разрешение — осознанно (ревью в сторах).
+- Минимум permissions: `storage`, `unlimitedStorage`. Плюс необязательные (`optional_permissions`) `topSites`, `sessions`, `bookmarks` — спрашиваются только при добавлении виджета (поле `perm` у виджета), без них виджет показывает кнопку «Разрешить». Каждое новое разрешение — осознанно (ревью в сторах).
 - Внешние сервисы: Open-Meteo (погода), cbr-xml-daily.ru (курсы ЦБ), cataas.com (котики), nekos.best (аниме-гифки), Google s2 / favicon.yandex.net (иконки). В тестах всё замокано.
 - Никакой аналитики и сбора данных.
 
@@ -40,6 +40,8 @@ tests/debug.mjs        открыть вкладку расширения и в�
     `anim` — «живые обои» (`Mesh.ANIMS`: breathe, kenburns, waves, rain, glitch, shimmer), `animAmt` — сила. Двигает координаты источника (`animUV`), поэтому сочетается с любым узором; у дождя капли ещё и «чистые» поверх узора.
     Заготовки — `Mesh.PRESETS` (точка 0 обычно самая тёмная — она же фон у полутона и неона), миниатюры рисует `Mesh.thumb()` на общем невидимом канвасе. `mesh.preset` — id заготовки, пока её не правили (подсветка в панели); любая правка его удаляет.
     Весит ~200 байт — годится для `storage.sync`. Без WebGL — CSS-градиенты из тех же точек (`Mesh.cssPreview`).
+- Ссылки («Ссылки», «Частые сайты», «Панель закладок») рисует общий `linkEl()` (widgets.js): `data.icons` — стиль иконок `glass|big|tint|mono|letter` (класс `.w-links.icons-*`), `--brand` — фирменный цвет из `BRAND` или оттенок из адреса (`brandColor()`).
+- Закладки — необязательное разрешение `bookmarks`: виджет «Панель закладок» зеркалит строку закладок (`Bookmarks.bar()`, папки — поповер `openBookmarkFolder`), а в редакторе «Ссылок» есть разовый импорт «Из панели закладок».
 - `photo` — те же `mode/warp/speed/grain/density/clear/duo`, но для своей картинки (без точек), по умолчанию матовое стекло с чистой полосой. `plain: true` — «Как есть»: без узора, анимации, чистой области и зерна (эффекты `fx` остаются). Хранится отдельно от `mesh`, чтобы переключение туда-обратно ничего не теряло.
 - `tab` — `{ title, icon: logo|emoji|letter|clock|pomodoro|image, emoji, letter, image }`: заголовок вкладки (подстановки `{время}`, `{дата}`, `{день}`) и иконка — рисуется на canvas 64×64 в `tabIcon()`, «живые» (часы, помодоро) сверяются раз в секунду. Виджеты занимают заголовок/иконку через глобальный `Tab.set(title, pomo)` (widgets-more.js), не трогая `document.title` напрямую.
 - `text` — `{ font, shadow }`: шрифт (`FONT_STACK`) и тень текста в блоках по умолчанию (тени по умолчанию нет). У блока свои `data.font` / `data.shadow` (`inherit` — как везде): CSS через `--w-font`/`--wf` и `body[data-ts]`/`.w[data-ts]`.

@@ -311,6 +311,53 @@ body.no-motion .clock-time .colon { animation: none; }
 .link-add:hover { opacity: 1 !important; }
 .link-add .link-ico { background: none; border-style: dashed; border-color: var(--line-2); box-shadow: none; }
 
+/* стили иконок (класс на обёртке): --brand — фирменный цвет сайта, ставит linkEl() */
+.w-links.icons-big .link-ico { width: clamp(38px, 34cqh, 62px); height: clamp(38px, 34cqh, 62px); background: none; border: 0; box-shadow: none; }
+.w-links.icons-big .link-ico img { width: 100%; height: 100%; border-radius: 24%; filter: drop-shadow(0 6px 12px rgba(0,0,0,.35)); }
+.w-links.icons-big .link-ico .mono {
+  width: 100%; height: 100%; display: grid; place-items: center; border-radius: 24%;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--brand) 85%, white), var(--brand)); color: #fff;
+  font-size: clamp(18px, 16cqh, 28px); box-shadow: 0 6px 12px rgba(0,0,0,.3);
+}
+.w-links.icons-tint .link-ico {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--brand) 42%, transparent), color-mix(in srgb, var(--brand) 22%, transparent));
+  border-color: color-mix(in srgb, var(--brand) 50%, transparent);
+  box-shadow: 0 1px 0 rgba(255,255,255,.14) inset, 0 8px 18px -10px var(--brand);
+}
+.w-links.icons-tint .link-ico img { width: 56%; height: 56%; }
+.w-links.icons-mono .link-ico img { filter: grayscale(1) brightness(1.15) contrast(.9); opacity: .75; transition: filter .25s, opacity .25s; }
+.w-links.icons-mono .link:hover .link-ico img { filter: none; opacity: 1; }
+.w-links.icons-letter .link-ico {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--brand) 85%, white), var(--brand));
+  border: 0; box-shadow: 0 8px 18px -10px var(--brand);
+}
+.w-links.icons-letter .link-ico .mono { color: #fff; font-weight: 800; font-size: clamp(15px, 13cqh, 22px); text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+/* папка закладок */
+.link-folder .link-ico { font-size: clamp(16px, 14cqh, 24px); color: var(--ink-2); }
+.w-links.icons-letter .link-folder .link-ico, .w-links.icons-tint .link-folder .link-ico { background: rgba(var(--fg), .08); border: 1px solid var(--line); box-shadow: none; }
+
+/* всплывающий список папки закладок */
+.bm-pop {
+  position: fixed; z-index: 60; width: 280px; max-height: calc(100vh - 24px); overflow-y: auto; scrollbar-width: thin;
+  padding: 6px; border-radius: 14px; background: rgba(22, 22, 34, .97); border: 1px solid var(--line-2);
+  box-shadow: 0 24px 60px -12px rgba(0,0,0,.7);
+  opacity: 0; transform: translateY(-4px) scale(.98); transition: opacity .15s, transform .2s var(--ease);
+}
+.bm-pop.open { opacity: 1; transform: none; }
+.bm-item {
+  width: 100%; display: flex; align-items: center; gap: 10px; padding: 7px 8px; border: 0; border-radius: 9px;
+  background: none; color: var(--ink-2); text-decoration: none; font-size: 13.5px; font-weight: 500; text-align: left;
+}
+.bm-item:hover { background: rgba(255,255,255,.07); color: var(--ink); }
+.bm-ico { flex: none; width: 18px; height: 18px; display: grid; place-items: center; font-size: 16px; }
+.bm-ico img { width: 16px; height: 16px; border-radius: 3px; }
+.bm-ico .mono { font-size: 11px; }
+.bm-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bm-folder.open { color: var(--ink); }
+.bm-sub { margin-left: 14px; padding-left: 8px; border-left: 1px solid var(--line-2); }
+.bm-sub[hidden] { display: none; }
+.bm-empty { padding: 8px; }
+
 .w-links.style-list { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); align-content: start; }
 .w-links.style-list .link { flex-direction: row; justify-content: flex-start; padding: 8px 10px; }
 .w-links.style-list .link-ico { width: 30px; height: 30px; }
