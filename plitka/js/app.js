@@ -43,6 +43,7 @@
     accent: ACCENTS[0],
     glassBlur: 22,
     glassAlpha: 0.08,
+    glassTone: 0.25, // «читаемость»: насколько стекло выравнивает яркость фона под собой (на пёстром — минимум 0.75)
     radius: 22,
     motion: true,
     mesh: DEFAULT_MESH,
@@ -252,6 +253,7 @@
     r.setProperty('--accent', settings.accent);
     r.setProperty('--glass-blur', settings.glassBlur + 'px');
     r.setProperty('--glass-alpha', settings.glassAlpha);
+    r.setProperty('--glass-tone', settings.glassTone);
     r.setProperty('--radius', settings.radius + 'px');
     r.setProperty('--bg-dim', settings.bgDim);
     document.body.classList.toggle('has-image', !!settings.bgImage);
@@ -449,13 +451,15 @@
     if (settings.bgImage) return 0.3;
     return Mesh.lumAt(settings.mesh, x, y, innerWidth / innerHeight);
   }
+  // → { mean, spread } — средняя яркость под блоком и разброс (пёстрый фон: и белое, и чёрное сразу)
   function lumUnder(el) {
     const r = el.getBoundingClientRect();
-    let sum = 0;
-    for (const fx of [0.2, 0.5, 0.8]) for (const fy of [0.2, 0.5, 0.8]) {
-      sum += bgLum((r.left + r.width * fx) / innerWidth, (r.top + r.height * fy) / innerHeight);
+    let sum = 0, lo = 1, hi = 0;
+    for (const fx of [0.1, 0.3, 0.5, 0.7, 0.9]) for (const fy of [0.2, 0.5, 0.8]) {
+      const l = bgLum((r.left + r.width * fx) / innerWidth, (r.top + r.height * fy) / innerHeight);
+      sum += l; lo = Math.min(lo, l); hi = Math.max(hi, l);
     }
-    return sum / 9;
+    return { mean: sum / 15, spread: hi - lo };
   }
   const hexLum = (hex) => { const n = parseInt(hex.slice(1), 16); return (0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255; };
 
@@ -463,9 +467,14 @@
     const rec = live.get(item.id);
     if (!rec) return;
     let dark = item.data.ink === 'dark';
+    const { mean, spread } = lumUnder(rec.el);
+    // пёстрый фон под стеклом — стекло выравнивает яркость подложки (сжимает контраст), и любой цвет текста читается
+    const mixed = !!item.data.glass && !item.data.tint && spread > 0.4;
+    rec.shell.classList.toggle('bg-mixed', mixed);
     if (item.data.ink === 'auto') {
-      let l = lumUnder(rec.el);
+      let l = mean;
       if (item.data.glass && item.data.tint) l = 0.35 * l + 0.65 * hexLum(item.data.tint);
+      else if (mixed) l = 0.3; // после выравнивания подложка тёмно-серая — текст светлый
       else if (item.data.glass) l = l + (1 - l) * settings.glassAlpha; // белое стекло чуть высветляет
       dark = l > 0.58;
     }
@@ -1377,6 +1386,8 @@
           section('Стекло',
             slider('Размытие', 'glassBlur', 0, 40, 1, v => v + 'px'),
             slider('Плотность', 'glassAlpha', 0, 0.3, 0.01, v => Math.round(v * 100) + '%'),
+            slider('Читаемость', 'glassTone', 0, 1, 0.05, v => Math.round(v * 100) + '%'),
+            h('p', { class: 'field-hint' }, 'Стекло выравнивает яркость фона под собой. На пёстром фоне (и белое, и чёрное сразу) включается само.'),
             slider('Скругление', 'radius', 0, 36, 1, v => v + 'px')),
           section('Акцент', accents),
         ];

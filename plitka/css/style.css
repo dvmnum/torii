@@ -114,8 +114,8 @@ body.narrow #btn-edit, body.narrow #guides { display: none; }
 .w.glass {
   background:
     linear-gradient(160deg, rgba(255,255,255, calc(var(--glass-alpha) + .04)), rgba(255,255,255, var(--glass-alpha)) 60%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(125%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(125%);
+  backdrop-filter: blur(var(--glass-blur)) var(--tone-f) saturate(125%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) var(--tone-f) saturate(125%);
   border-color: var(--line);
   box-shadow: 0 1px 0 rgba(255,255,255,.08) inset, 0 20px 50px -20px rgba(0,0,0,.5);
 }
@@ -261,8 +261,8 @@ body.no-motion .clock-time .colon { animation: none; }
 .w-search.h-large { --sh: 58px; }
 .w.glass[data-type="search"] .w-search {
   background: linear-gradient(160deg, rgba(255,255,255, calc(var(--glass-alpha) + .04)), rgba(255,255,255, var(--glass-alpha)) 60%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(125%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(125%);
+  backdrop-filter: blur(var(--glass-blur)) var(--tone-f) saturate(125%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) var(--tone-f) saturate(125%);
   border-color: var(--line);
   box-shadow: 0 1px 0 rgba(255,255,255,.08) inset, 0 16px 40px -18px rgba(0,0,0,.5);
 }
@@ -988,3 +988,14 @@ body.bg-fade #bg-mesh, body.bg-fade #bg .bg-image { opacity: 0 !important; }
 @container (max-width: 300px) { .hb-streak { visibility: hidden; } .hb-grid { grid-template-columns: minmax(40px, 1fr) repeat(7, minmax(10px, 22px)) 0; column-gap: 3px; } }
 @container (max-height: 150px) { .w-habits .todo-new { display: none; } }
 @container (max-height: 140px) { .w-todo .todo-new { margin-top: 4px; padding-block: 5px; } .todo-clear { display: none; } }
+
+/* ================= ЧИТАЕМОСТЬ СТЕКЛА ================= */
+/* Стекло выравнивает яркость фона под собой: contrast сжимает белое и чёрное к серому, brightness
+   сдвигает под цвет текста (светлый текст — темнее, тёмный — светлее). --t: 0 — как было, 1 — максимум.
+   На пёстром фоне (.bg-mixed, считает applyInk) — не меньше 0.75. */
+.w { --t: var(--glass-tone, .25); }
+.w.bg-mixed { --t: max(var(--glass-tone, .25), .9); }
+.w { --tone-f: contrast(calc(1 - var(--t) * .55)) brightness(calc(1 - var(--t) * .6)); }
+.w.ink-dark { --tone-f: contrast(calc(1 - var(--t) * .55)) brightness(calc(1 + var(--t) * .5)); }
+/* логотипы из паков (Simple Icons, Font Awesome) — заливкой, без обводки; чуть мельче контурных иконок, чтобы визуально совпадали */
+svg.brand-svg { fill: currentColor; stroke: none; width: .82em; height: .82em; }

@@ -23,6 +23,7 @@ plitka/
   css/style.css        весь дизайн (CSS-переменные в :root, секции по компонентам)
   js/store.js          Store.get/set/remove — chrome.storage.local, фолбэк localStorage (для открытия файла напрямую)
   js/widgets.js        хелпер h(), favicon(), ENGINES, реестр Widgets, loadWeather()
+  js/engine-icons.js   ENGINE_ICONS — логотипы поисковиков из паков (Simple Icons CC0, Font Awesome CC BY 4.0), сгенерировано, руками не править
   js/content.js        тексты для «Цитаты» (QUOTES, аниме) и «Слова дня» (WORDS)
   js/widgets-more.js   вторая партия виджетов: дела, помодоро, частые сайты, недавно закрытые, курсы ЦБ,
                        отсчёт, привычки, цитата, слово дня, картинка — дописывает Widgets через Object.assign
@@ -48,6 +49,7 @@ tests/debug.mjs        открыть вкладку расширения и в�
 - `text` — `{ font, shadow }`: шрифт (`FONT_STACK`) и тень текста в блоках по умолчанию (тени по умолчанию нет). У блока свои `data.font` / `data.shadow` (`inherit` — как везде): CSS через `--w-font`/`--wf` и `body[data-ts]`/`.w[data-ts]`.
 - `slides` — `{ on, items: [{ id, kind: 'mesh', mesh } | { id, kind: 'image', thumb }], every: tab|10m|1h|1d, order: seq|random, idx, at }`. Полные картинки слайдов — отдельные ключи `slide:<id>`. Смена — `nextSlide()` при открытии вкладки (`slideshowOnLoad`, в самом конце init) и по таймеру, с затуханием (`body.bg-fade`).
 - `thumbs:<версия>` — кэш миниатюр заготовок (рисуются по одной в простое, см. ниже).
+- `glassTone` (0..1, «Читаемость») — стекло выравнивает яркость фона под собой: `--tone-f` (contrast + brightness) встраивается в `backdrop-filter` блока. `applyInk()` меряет разброс яркости под блоком; если там и белое, и чёрное (`spread > 0.4`) — класс `.bg-mixed`, сила не меньше 0.9, текст светлый.
 - `fx` — эффекты поверх любого фона: `{ vignette, bloom, particles, chroma, scan }` (0..1) + `mouse` (линза за курсором), `daycycle` (оттенок по часам) — bool. Виньетку рисует шейдер; CSS-виньетка только без WebGL.
 - `widgets` — массив `{ id, type, data }`, общий для всех экранов; `data` = `STYLE_DEFAULTS` + дефолты виджета + пользовательские поля.
   - Оформление у всех виджетов (`STYLE_SETTINGS`, добавляется в модалку автоматически): `ink: 'auto'|'light'|'dark'` — цвет текста, `tint: '#rrggbb'|null` — цвет подложки.

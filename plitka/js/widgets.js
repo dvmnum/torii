@@ -83,28 +83,24 @@ function weatherInfo(code) {
   return ['Гроза', 'storm'];
 }
 
-// Поисковики: монохромные иконки в одном стиле (контур, currentColor), bang — префикс «!x запрос»
+// Поисковики; bang — префикс «!x запрос»
 const ENGINES = {
-  yandex: { name: 'Яндекс', in: 'Яндексе', bang: 'y', url: 'https://yandex.ru/search/?text=',
-    icon: '<path d="M15.5 20V4h-3.6a4.2 4.2 0 0 0 0 8.4h3.6M12 12.4L7.6 20"/>' },
-  google: { name: 'Google', bang: 'g', url: 'https://www.google.com/search?q=',
-    icon: '<path d="M18.1 6.9A8 8 0 1 0 20 12h-7.5"/>' },
-  duck: { name: 'DuckDuckGo', bang: 'd', url: 'https://duckduckgo.com/?q=',
-    icon: '<circle cx="12" cy="12" r="8.5"/><circle cx="13.6" cy="9.6" r="1.2" fill="currentColor" stroke="none"/><path d="M8.6 14.6c1.8 1.6 5.2 1.6 7-.4"/>' },
-  bing: { name: 'Bing', bang: 'b', url: 'https://www.bing.com/search?q=',
-    icon: '<path d="M7 3.5l3.6 1.3v11.4l5.1-2.9-2.3-1.1-1.3-3.4 5.9 2.1v3.4l-7.4 4.3L7 18.4z"/>' },
-  perplexity: { name: 'Perplexity', bang: 'p', url: 'https://www.perplexity.ai/search?q=',
-    icon: '<path d="M12 3v18M5 7.5l7 4.5 7-4.5M5 16.5l7-4.5 7 4.5M5 7.5v9M19 7.5v9"/>' },
-  chatgpt: { name: 'ChatGPT', bang: 'gpt', url: 'https://chatgpt.com/?q=',
-    icon: '<path d="M12 3.5l7.4 4.25v8.5L12 20.5l-7.4-4.25v-8.5z"/><path d="M12 8.2v7.6M8.7 10.1l6.6 3.8M15.3 10.1l-6.6 3.8"/>' },
-  claude: { name: 'Claude', bang: 'c', url: 'https://claude.ai/new?q=',
-    icon: '<path d="M12 3.5v5.5M12 15v5.5M3.5 12H9M15 12h5.5M6 6l3.9 3.9M14.1 14.1L18 18M18 6l-3.9 3.9M9.9 14.1L6 18"/>' },
-  youtube: { name: 'YouTube', in: 'YouTube', bang: 'yt', url: 'https://www.youtube.com/results?search_query=',
-    icon: '<rect x="2.8" y="5.5" width="18.4" height="13" rx="4"/><path d="M10.2 9.3v5.4l4.6-2.7z" fill="currentColor" stroke="none"/>' },
-  wiki: { name: 'Википедия', in: 'Википедии', bang: 'w', url: 'https://ru.wikipedia.org/w/index.php?search=',
-    icon: '<path d="M3 6.5l3.8 11.5L12 7.5l5.2 10.5L21 6.5"/>' },
+  yandex: { name: 'Яндекс', in: 'Яндексе', bang: 'y', url: 'https://yandex.ru/search/?text=' },
+  google: { name: 'Google', bang: 'g', url: 'https://www.google.com/search?q=' },
+  duck: { name: 'DuckDuckGo', bang: 'd', url: 'https://duckduckgo.com/?q=' },
+  bing: { name: 'Bing', bang: 'b', url: 'https://www.bing.com/search?q=' },
+  perplexity: { name: 'Perplexity', bang: 'p', url: 'https://www.perplexity.ai/search?q=' },
+  chatgpt: { name: 'ChatGPT', bang: 'gpt', url: 'https://chatgpt.com/?q=' },
+  claude: { name: 'Claude', bang: 'c', url: 'https://claude.ai/new?q=' },
+  youtube: { name: 'YouTube', in: 'YouTube', bang: 'yt', url: 'https://www.youtube.com/results?search_query=' },
+  wiki: { name: 'Википедия', in: 'Википедии', bang: 'w', url: 'https://ru.wikipedia.org/w/index.php?search=' },
 };
-const engineIcon = (e) => `<svg viewBox="0 0 24 24">${e.icon}</svg>`;
+// иконки — из готовых паков (js/engine-icons.js), заливка currentColor
+const engineIcon = (e) => {
+  const k = Object.keys(ENGINES).find(x => ENGINES[x] === e);
+  const i = ENGINE_ICONS[k];
+  return i ? `<svg viewBox="${i.vb}" class="brand-svg"><path d="${i.d}"/></svg>` : '';
+};
 
 // Калькулятор в строке поиска: + − × ÷ ^ % и скобки. Свой разбор — eval в расширениях запрещён (CSP), да и не нужен.
 // Вернёт число или null, если это не выражение.

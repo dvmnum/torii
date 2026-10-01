@@ -421,7 +421,7 @@ await ptab('bg');
 await page.click('.mesh-preset[data-preset="petal"]');
 await page.click('.panel [data-close]');
 await page.waitForTimeout(600);
-check(await inkOf('w-weather'), 'текст: на светлом «Лепестке» погода стала тёмной (авто)');
+check(await inkOf('w-weather') || await page.evaluate(() => document.querySelector('.grid-stack-item[gs-id="w-weather"] .w').classList.contains('bg-mixed')), 'текст: на светлом «Лепестке» погода читается (тёмный текст или выровненное стекло)');
 await page.screenshot({ path: `${out}/26-auto-ink-petal.png` });
 
 // вручную: светлый текст + своя подложка
@@ -1000,6 +1000,33 @@ const linkC = await page.evaluate(() => {
   return { dc: Math.max(...icons.map(i => Math.abs((i.top + i.bottom) / 2 - (w.top + w.bottom) / 2))), inside: icons.every(i => i.top >= w.top && i.bottom <= w.bottom) };
 });
 check(linkC.dc < 3 && linkC.inside, `ссылки: в блоке высотой 1 иконки по центру (сдвиг ${linkC.dc.toFixed(1)} px)`);
+await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
+
+// ---------- пёстрый фон: стекло выравнивает яркость под собой ----------
+const halfUrl = await page.evaluate(() => {
+  const c = document.createElement('canvas'); c.width = 1600; c.height = 900;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f4f4f4'; g.fillRect(0, 0, 1600, 900);
+  g.fillStyle = '#0a0a0a'; g.fillRect(0, 0, 800, 900);
+  return c.toDataURL('image/png');
+});
+await page.evaluate((u) => chrome.storage.local.set({
+  settings: { bgImage: u, bgDim: 0, photo: { plain: true } },
+  widgets: [{ id: 'w-search', type: 'search', data: {} }, { id: 'w-clock', type: 'clock', data: { glass: true } }],
+  layouts: { lg: { 'w-search': { x: 6, y: 7, w: 12, h: 1 }, 'w-clock': { x: 0, y: 0, w: 6, h: 3 } } },
+}), halfUrl);
+await page.reload();
+await page.waitForTimeout(1500);
+const mix = await page.evaluate(() => {
+  const s = document.querySelector('.grid-stack-item[gs-id="w-search"] .w');
+  const c = document.querySelector('.grid-stack-item[gs-id="w-clock"] .w');
+  return { mixed: s.classList.contains('bg-mixed'), dark: s.classList.contains('ink-dark'), clockMixed: c.classList.contains('bg-mixed'),
+    bf: getComputedStyle(s.querySelector('.w-search')).backdropFilter };
+});
+check(mix.mixed && !mix.dark && !mix.clockMixed, 'читаемость: поиск на границе чёрного и белого — «пёстрый», текст светлый; часы на однотонном — нет');
+check(/blur/.test(mix.bf) && /contrast/.test(mix.bf), `читаемость: фильтр принят браузером (${mix.bf})`);
+await page.fill('[data-search]', 'текст поверх белого и чёрного');
+await page.screenshot({ path: `${out}/52-mixed-bg.png` });
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
 const real = errors.filter(e => !/Failed to load resource/i.test(e));
