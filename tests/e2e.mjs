@@ -30,6 +30,8 @@ await page.goto('chrome://extensions');
 const id = await page.evaluate(() => new Promise(r => chrome.management.getAll(l => r(l.find(x => x.name.startsWith('Plitka'))?.id))));
 console.log('ext id', id);
 const url = `chrome-extension://${id}/newtab.html`;
+// вкладки панели настроек: фон, эффекты, блоки, вкладка, ещё
+const ptab = async (k) => { await page.click(`.panel-tab[data-ptab="${k}"]`); await page.waitForTimeout(150); };
 
 await page.goto(url);
 await page.waitForTimeout(2500);
@@ -82,7 +84,9 @@ await page.screenshot({ path: `${out}/05-reloaded.png` });
 
 // настройки
 await page.click('#btn-settings');
-await page.fill('.panel input[type=text]', 'Влад');
+await ptab('tab');
+await page.fill('input[data-setting="name"]', 'Влад');
+await ptab('bg');
 await page.click('.mesh-preset[data-preset="dusk"]');
 await page.waitForTimeout(900);
 await page.screenshot({ path: `${out}/06-settings.png` });
@@ -135,6 +139,7 @@ await page.screenshot({ path: `${out}/09-broken-storage.png` });
 // кривой импорт: тост, ничего не меняется
 const layoutBefore = await page.evaluate(() => JSON.stringify(window.__plitka.layout));
 await page.click('#btn-settings');
+await ptab('more');
 for (const bad of ['не json вообще', JSON.stringify({ app: 'plitka', layout: [{ type: 'nope' }] })]) {
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('.panel button:has-text("Импорт")')]);
   await chooser.setFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from(bad) });
@@ -354,6 +359,7 @@ check(cleaned.points.length === 4 && cleaned.speed === 1, 'меш: кривые 
 // пресеты: миниатюры, применение, скрин каждого на весь экран
 await page.click('#btn-settings');
 await page.waitForTimeout(400);
+await page.waitForFunction(() => document.querySelectorAll('.mesh-preset img').length === 14, null, { timeout: 15000 }); // рисуются по одной в простое
 const thumbsOk = await page.$$eval('.mesh-preset img', imgs => imgs.length === 14 && imgs.every(i => i.src.startsWith('data:image/jpeg') && i.naturalWidth > 0));
 check(thumbsOk, 'пресеты: 14 миниатюр отрисованы WebGL');
 await page.screenshot({ path: `${out}/23-presets-panel.png` });
@@ -411,6 +417,7 @@ check(await page.evaluate(() => window.__plitka.settings().mesh.preset) === 'lag
 const inkOf = (id) => page.evaluate((i) => document.querySelector(`.grid-stack-item[gs-id="${i}"] .w`).classList.contains('ink-dark'), id);
 check(!(await inkOf('w-weather')), 'текст: на тёмном фоне — светлый');
 await page.click('#btn-settings');
+await ptab('bg');
 await page.click('.mesh-preset[data-preset="petal"]');
 await page.click('.panel [data-close]');
 await page.waitForTimeout(600);
@@ -505,6 +512,7 @@ check(await page.evaluate(() => window.__plitka.settings().photo.mode) === 'ribb
 // ---------- эффекты фона ----------
 await page.click('#btn-settings');
 await page.waitForTimeout(300);
+await ptab('fx');
 for (const [k, v] of [['bloom', '0.6'], ['particles', '0.7'], ['chroma', '0.5'], ['scan', '0.4'], ['vignette', '0.8']]) {
   await page.locator(`input[data-fx="${k}"]`).fill(v);
 }
@@ -521,6 +529,7 @@ await page.screenshot({ path: `${out}/32-fx-all.png` });
 // заготовка поверх картинки: картинка уходит, но её можно вернуть
 await page.click('#btn-settings');
 await page.waitForTimeout(300);
+await ptab('bg');
 await page.click('.mesh-preset[data-preset="neon"]');
 await page.waitForTimeout(300);
 check(!(await page.evaluate(() => window.__plitka.settings().bgImage)), 'заготовка: убрала картинку');
@@ -686,6 +695,7 @@ check(+dockOp > 0.2 && +dockOp < 0.5, `док: приглушён (opacity ${doc
 // ---------- «подглядывание» панели ----------
 await page.click('#btn-settings');
 await page.waitForTimeout(400);
+await ptab('fx');
 await page.locator('input[data-fx="vignette"]').scrollIntoViewIfNeeded();
 const vig = await page.locator('input[data-fx="vignette"]').boundingBox();
 await page.mouse.move(vig.x + vig.width * 0.5, vig.y + vig.height / 2);
@@ -728,6 +738,7 @@ await page.waitForTimeout(1200);
 check(await page.title() === 'Новая вкладка', 'вкладка: название по умолчанию');
 await page.click('#btn-settings');
 await page.waitForTimeout(300);
+await ptab('tab');
 await page.fill('input[data-tab="title"]', '');
 await page.click('.tab-tokens .chip:has-text("{время}")');
 await page.keyboard.type(' · Plitka'); // курсор уже в поле, после вставленного {время}
@@ -755,6 +766,7 @@ const css = (sel, prop) => page.$eval(sel, (el, p) => getComputedStyle(el)[p], p
 check(await css(clockBody + ' .clock-sub', 'textShadow') === 'none', 'текст: по умолчанию без тени');
 await page.click('#btn-settings');
 await page.waitForTimeout(300);
+await ptab('blocks');
 await page.click('.panel .seg-btn:has-text("Мягкая")');
 await page.click('.panel .panel-sec:has-text("Текст в блоках") .dd-btn');
 await page.click('body > .dd-list .dd-item:has-text("С засечками")');
@@ -776,6 +788,88 @@ check(await page.locator('.add-menu .add-item .add-ico svg').count() === await p
 await page.screenshot({ path: `${out}/41-add-menu.png` });
 await page.click('#btn-add');
 await page.keyboard.press('Escape');
+await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
+
+// ---------- картинка «как есть» ----------
+await page.evaluate(async (url) => chrome.storage.local.set({ settings: { bgImage: url } }), photoUrl);
+await page.reload();
+await page.waitForTimeout(1200);
+await page.click('#btn-settings');
+await page.waitForTimeout(300);
+await page.click('.panel .seg-btn:has-text("Как есть")');
+await page.waitForTimeout(400);
+check(await page.evaluate(() => window.__plitka.settings().photo.plain) === true && await page.locator('.panel button:has-text("Эффект картинки")').count() === 0, 'картинка: «как есть» — без эффекта, кнопки эффекта нет');
+await page.click('.panel [data-close]');
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${out}/42-photo-plain.png` });
+await page.click('#btn-settings');
+await page.waitForTimeout(300);
+await page.click('.panel .seg-btn:has-text("С эффектом")');
+await page.waitForTimeout(200);
+check(await page.evaluate(() => window.__plitka.settings().photo.plain) === false, 'картинка: «с эффектом» возвращает эффект');
+await page.click('.panel [data-close]');
+
+// ---------- слайд-шоу ----------
+await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
+await page.reload();
+await page.waitForTimeout(1200);
+await page.click('#btn-settings');
+await page.waitForTimeout(300);
+for (const id of ['neon', 'flame']) {
+  await page.click(`.mesh-preset[data-preset="${id}"]`);
+  await page.waitForTimeout(250);
+  await page.locator('.panel button:has-text("+ Текущий фон")').scrollIntoViewIfNeeded();
+  await page.click('.panel button:has-text("+ Текущий фон")');
+  await page.waitForTimeout(250);
+}
+{
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('.panel button:has-text("+ Картинки")')]);
+  await chooser.setFiles([
+    { name: 'a.png', mimeType: 'image/png', buffer: Buffer.from(photoUrl.split(',')[1], 'base64') },
+    { name: 'b.png', mimeType: 'image/png', buffer: png },
+  ]);
+}
+await page.waitForTimeout(1200);
+check(await page.locator('.slides .slide').count() === 4, 'слайд-шоу: 2 фона + 2 картинки в списке');
+await page.locator('label:has(input[data-slides="on"])').click();
+await page.waitForTimeout(900);
+const sl1 = await page.evaluate(() => window.__plitka.settings().slides);
+check(sl1.on && sl1.idx >= 0, `слайд-шоу: включилось, показан слайд ${sl1.idx}`);
+// список закрывается при прокрутке панели (окно пониже, чтобы панель правда прокручивалась)
+await page.setViewportSize({ width: 1600, height: 600 });
+await page.waitForTimeout(400);
+await page.locator('.panel .field:has-text("Менять") .dd-btn').scrollIntoViewIfNeeded();
+await page.click('.panel .field:has-text("Менять") .dd-btn');
+await page.waitForTimeout(250);
+check(await page.locator('.dd-list').count() === 1, 'список: открылся после прокрутки к нему');
+await page.evaluate(() => { const b = document.getElementById('settings-body'); b.scrollTop = 0; });
+await page.waitForTimeout(250);
+check(await page.locator('.dd-list').count() === 0, 'список: закрывается при прокрутке панели');
+await page.setViewportSize({ width: 1600, height: 900 });
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${out}/43-slideshow-panel.png` });
+// «Следующий» и смена на новой вкладке
+const bgKey = () => page.evaluate(() => { const s = window.__plitka.settings(); return s.bgImage ? 'img:' + s.bgImage.length : 'mesh:' + s.mesh.points.map(p => p.color).join(); });
+const b0 = await bgKey();
+await page.locator('.panel button:has-text("Следующий")').scrollIntoViewIfNeeded();
+await page.click('.panel button:has-text("Следующий")');
+await page.waitForTimeout(1400);
+const b1 = await bgKey();
+check(b0 !== b1, 'слайд-шоу: «Следующий» меняет фон');
+await page.click('.panel [data-close]');
+const idxBefore = await page.evaluate(() => window.__plitka.settings().slides.idx);
+await page.waitForTimeout(400);
+await page.reload();
+await page.waitForTimeout(1500);
+const idxAfter = await page.evaluate(() => window.__plitka.settings().slides.idx);
+check(idxAfter === (idxBefore + 1) % 4, `слайд-шоу: новая вкладка — следующий слайд (${idxBefore} → ${idxAfter})`);
+await page.screenshot({ path: `${out}/44-slideshow-next.png` });
+
+// миниатюры заготовок после перезагрузки берутся из кэша — сразу
+await page.click('#btn-settings');
+await page.waitForTimeout(150);
+check(await page.locator('.mesh-preset img').count() === 14, 'миниатюры: из кэша, без перерисовки');
+await page.click('.panel [data-close]');
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
 const real = errors.filter(e => !/Failed to load resource/i.test(e));

@@ -17,6 +17,8 @@
   };
   const FONTS = [['manrope', 'Manrope'], ['system', 'Системный'], ['serif', 'С засечками'], ['mono', 'Моноширинный']];
   const SHADOWS = [['none', 'Нет'], ['soft', 'Мягкая'], ['strong', 'Сильная']];
+  // как часто менять слайд-шоу (нужно уже при чистке настроек)
+  const SLIDE_EVERY_KEYS = ['tab', '10m', '1h', '1d'];
 
   // меш-градиент (js/mesh.js): координаты точек в долях экрана
   // mesh.preset — id заготовки, пока её не правили (для подсветки в панели)
@@ -29,7 +31,7 @@
   // По умолчанию — матовое стекло с чистой полосой по центру.
   const DEFAULT_PHOTO = {
     mode: 'frosted', warp: 0, speed: 0.15, density: 0.55, grain: 0.3, anim: 'none', animAmt: 0.5,
-    clear: { x: 0.3, y: 0.34, w: 0.4, h: 0.16 }, duo: DEFAULT_DUO,
+    clear: { x: 0.3, y: 0.34, w: 0.4, h: 0.16 }, duo: DEFAULT_DUO, plain: false,
   };
   // до v0.2 фоны были CSS-пятнами: settings.bg → заготовка меша с той же палитрой
   const LEGACY_BG = { aurora: 'aurora', dusk: 'dusk', lagoon: 'lagoon', forest: 'forest', mono: 'graphite' };
@@ -48,6 +50,7 @@
     fx: Mesh.FX_DEFAULTS,
     tab: { title: 'Новая вкладка', icon: 'logo', emoji: '🌙', letter: 'P', image: null },
     text: { font: 'manrope', shadow: 'none' },
+    slides: { on: false, items: [], every: 'tab', order: 'seq', idx: -1, at: 0 },
   };
 
   // оформление, общее для всех виджетов: цвет текста и подложки
@@ -120,6 +123,7 @@
       else if (k === 'fx') s.fx = cleanFx(v);
       else if (k === 'tab') s.tab = cleanTab(v);
       else if (k === 'text') s.text = cleanText(v);
+      else if (k === 'slides') s.slides = cleanSlides(v);
       else if (typeof v === typeof DEFAULT_SETTINGS[k] && (typeof v !== 'number' || Number.isFinite(v))) s[k] = v;
     }
     // старый CSS-фон → та же палитра на меше
@@ -134,6 +138,7 @@
     if (!raw || typeof raw !== 'object') return m;
     for (const k of ['warp', 'speed', 'grain', 'density', 'animAmt']) m[k] = unit(raw[k], m[k]);
     m.anim = Mesh.ANIMS[raw.anim] ? raw.anim : 'none';
+    if ('plain' in def) m.plain = !!raw.plain;
     m.mode = Mesh.MODES[raw.mode] ? raw.mode : def.mode;
     const c = raw.clear;
     m.clear = c && typeof c === 'object' && [c.x, c.y, c.w, c.h].every(Number.isFinite)
@@ -168,6 +173,22 @@
     if (typeof raw.letter === 'string' && raw.letter.trim()) t.letter = [...raw.letter.trim()].slice(0, 2).join('');
     t.image = typeof raw.image === 'string' && raw.image.startsWith('data:image/') && raw.image.length < 300000 ? raw.image : null;
     return t;
+  }
+
+  function cleanSlides(raw) {
+    const s = { ...DEFAULT_SETTINGS.slides, items: [] };
+    if (!raw || typeof raw !== 'object') return s;
+    s.on = !!raw.on;
+    if (SLIDE_EVERY_KEYS.includes(raw.every)) s.every = raw.every;
+    if (raw.order === 'random') s.order = 'random';
+    s.at = Number.isFinite(raw.at) ? raw.at : 0;
+    for (const it of Array.isArray(raw.items) ? raw.items.slice(0, 40) : []) {
+      if (!it || typeof it.id !== 'string') continue;
+      if (it.kind === 'image') s.items.push({ id: it.id, kind: 'image', thumb: typeof it.thumb === 'string' && it.thumb.startsWith('data:image/') && it.thumb.length < 60000 ? it.thumb : null });
+      else if (it.kind === 'mesh' && it.mesh && typeof it.mesh === 'object') s.items.push({ id: it.id, kind: 'mesh', mesh: cleanMesh(it.mesh) });
+    }
+    s.idx = Number.isInteger(raw.idx) && raw.idx < s.items.length ? raw.idx : -1;
+    return s;
   }
 
   function cleanText(raw) {
@@ -319,16 +340,23 @@
   const look = () => settings.bgImage ? settings.photo : settings.mesh; // что сейчас редактируем
   function bgParams() {
     const p = settings.bgImage
-      ? { ...settings.photo, image: settings.bgImage, dim: settings.bgDim, fx: settings.fx }
+      ? { ...settings.photo, image: settings.bgImage, dim: settings.bgDim, fx: settings.fx,
+          // «как есть»: картинка без узора, анимации и чистой области — эффекты фона (виньетка и т.п.) остаются
+          ...(settings.photo.plain ? { mode: 'mesh', anim: 'none', clear: null, warp: 0 } : {}) }
       : { ...settings.mesh, fx: settings.fx };
     // «Живой фон» выключен — всё стоит на месте, включая частицы
     return settings.motion ? p : { ...p, speed: 0, fx: { ...p.fx, still: true } };
   }
   function applyMesh() {
     const bg = document.getElementById('bg');
-    bg.style.setProperty('--grain', look().grain * 0.4);
+    bg.style.setProperty('--grain', settings.bgImage && settings.photo.plain ? 0 : look().grain * 0.4);
     bg.style.background = settings.bgImage ? '' : Mesh.cssPreview(settings.mesh);
-    meshBg ??= Mesh.create(document.getElementById('bg-mesh'), { onReady: () => document.body.classList.add('mesh-on') });
+    meshBg ??= Mesh.create(document.getElementById('bg-mesh'), {
+      onReady: () => {
+        document.body.classList.add('mesh-on');
+        console.info(`[plitka] фон готов через ${Math.round(performance.now())} мс после открытия вкладки`);
+      },
+    });
     meshBg?.set(bgParams());
   }
   applyTheme();
@@ -404,6 +432,7 @@
       const d = imgLum.data;
       const l = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255 * (1 - settings.bgDim);
       const p = settings.photo, c = p.clear;
+      if (p.plain) return l; // «как есть» — без узора
       if (c && x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) return l; // чистая область — как есть
       if (p.mode === 'frosted') return l * 0.9 + 0.08;
       if (p.mode === 'halftone') return l * 0.55;
@@ -854,9 +883,14 @@
     };
 
     const onOutside = (e) => { if (!list.contains(e.target) && !btn.contains(e.target)) close(); };
+    // закрываем, только если кнопка правда уехала (а не пришёл запоздалый scroll от прокрутки к ней)
+    let anchorAt = null;
+    const moved = () => { const r = btn.getBoundingClientRect(); return !anchorAt || Math.abs(r.top - anchorAt[0]) > 2 || Math.abs(r.left - anchorAt[1]) > 2; };
+    const onScroll = (e) => { if (!list.contains(e.target) && moved()) close(); };
     function open() {
       closeDropdown?.();
       const r = btn.getBoundingClientRect();
+      anchorAt = [r.top, r.left];
       const below = window.innerHeight - r.bottom > options.length * 40 + 16;
       list.style.cssText = `left:${r.left}px;width:${r.width}px;` + (below ? `top:${r.bottom + 6}px` : `bottom:${window.innerHeight - r.top + 6}px`);
       items.forEach((it, i) => it.classList.toggle('sel', options[i][0] === cur));
@@ -865,7 +899,10 @@
       requestAnimationFrame(() => list.classList.add('open'));
       btn.classList.add('open');
       btn.setAttribute('aria-expanded', 'true');
-      document.addEventListener('mousedown', onOutside, true);
+      document.addEventListener("mousedown", onOutside, true);
+      // список стоит fixed и не едет за прокруткой панели — закрываем, как обычный селект
+      window.addEventListener("scroll", onScroll, true);
+      window.addEventListener("resize", close);
       closeDropdown = close;
     }
     function close() {
@@ -873,7 +910,9 @@
       list.remove();
       btn.classList.remove('open');
       btn.setAttribute('aria-expanded', 'false');
-      document.removeEventListener('mousedown', onOutside, true);
+      document.removeEventListener("mousedown", onOutside, true);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", close);
       if (closeDropdown === close) closeDropdown = null;
     }
     const isOpen = () => list.isConnected;
@@ -962,15 +1001,26 @@
     // Esc закрывает только пикер; клик мимо — тоже
     const onKey = (e) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); close(); } };
     const onOutside = (e) => { if (!pop.contains(e.target) && !anchor.contains(e.target)) close(); };
+    // поповер стоит fixed — если под ним прокрутили панель или инспектор, он бы остался висеть не там
+    const at0 = anchor.getBoundingClientRect();
+    const onScroll = (e) => {
+      if (pop.contains(e.target)) return;
+      const r = anchor.getBoundingClientRect(); // закрываем, только если кнопка правда уехала
+      if (Math.abs(r.top - at0.top) > 2 || Math.abs(r.left - at0.left) > 2) close();
+    };
     function close() {
       pop.remove();
       window.removeEventListener('keydown', onKey, true);
-      document.removeEventListener('mousedown', onOutside, true);
+      document.removeEventListener("mousedown", onOutside, true);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", close);
       if (closePicker === close) closePicker = null;
       if (anchor.closest?.("#settings")) panelPeek(null);
     }
     window.addEventListener('keydown', onKey, true);
-    document.addEventListener('mousedown', onOutside, true);
+    document.addEventListener("mousedown", onOutside, true);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", close);
     closePicker = close;
     if (anchor.closest?.("#settings")) panelPeek(anchor); // цвет из панели — тоже «подглядываем»
 
@@ -1234,22 +1284,123 @@
   }
   let meshOpen = false; // редактор свёрнут по умолчанию — панель и так длинная
 
-  // миниатюры пресетов рисуются WebGL один раз и кэшируются
+  // Миниатюры заготовок. Каждая — свой вариант шейдера, и рисовать все 14 разом значит синхронно
+  // компилировать несколько шейдеров подряд (на Windows — заметное подвисание). Поэтому рисуем по одной
+  // в простое браузера и сохраняем: со второго раза они берутся из хранилища.
+  const THUMBS_KEY = 'thumbs:' + Mesh.PRESETS.length + ':' + JSON.stringify(Mesh.PRESETS).length;
   const thumbs = new Map();
+  Store.get(THUMBS_KEY, null).then((saved) => { if (saved) for (const k in saved) if (!thumbs.has(k)) thumbs.set(k, saved[k]); });
+  const thumbQueue = [];
   function presetThumb(p) {
-    if (!thumbs.has(p.id)) thumbs.set(p.id, Mesh.thumb(p));
-    return thumbs.get(p.id);
+    if (!thumbs.has(p.id) && !thumbQueue.includes(p)) { thumbQueue.push(p); drawThumbsLater(); }
+    return thumbs.get(p.id) || null;
   }
+  let thumbTimer = 0;
+  function drawThumbsLater() {
+    if (thumbTimer) return;
+    const idle = window.requestIdleCallback || ((f) => setTimeout(f, 50));
+    thumbTimer = idle(() => {
+      thumbTimer = 0;
+      const p = thumbQueue.shift();
+      if (!p) return;
+      const src = Mesh.thumb(p);
+      if (src) {
+        thumbs.set(p.id, src);
+        // подменяем в уже открытой панели
+        const tile = panelBody.querySelector(`.mesh-preset[data-preset="${p.id}"]`);
+        if (tile && !tile.querySelector('img')) { tile.style.background = ''; tile.prepend(h('img', { src, alt: '' })); }
+      }
+      if (thumbQueue.length) drawThumbsLater();
+      else Store.set(THUMBS_KEY, Object.fromEntries(thumbs));
+    });
+  }
+
+  // Панель — вкладками, чтобы не листать простыню: фон, эффекты, блоки, вкладка браузера, остальное
+  const PANEL_TABS = [
+    ['bg', 'Фон', '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="M3.5 17l5-4.5 3.5 3 3-2.5 5.5 4.5"/></svg>'],
+    ['fx', 'Эффекты', '<svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>'],
+    ['blocks', 'Блоки', '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="10" rx="2"/><rect x="13" y="3" width="8" height="6" rx="2"/><rect x="13" y="11" width="8" height="10" rx="2"/><rect x="3" y="15" width="8" height="6" rx="2"/></svg>'],
+    ['tab', 'Вкладка', '<svg viewBox="0 0 24 24"><path d="M3 9V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>'],
+    ['more', 'Ещё', '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>'],
+  ];
+  let panelTab = 'bg';
+  const panelTabs = h('nav', { class: 'panel-tabs', role: 'tablist' });
+  panel.querySelector('.panel-head').after(panelTabs);
 
   function renderSettings() {
     meshPreview?.destroy();
     meshPreview = null;
-    const nameInp = h('input', { type: 'text', value: settings.name, placeholder: 'Как к тебе обращаться?' });
-    nameInp.addEventListener('input', debounce(() => setSetting('name', nameInp.value.trim(), true), 300));
+    closeDropdown?.();
+    panelTabs.replaceChildren(...PANEL_TABS.map(([k, label, icon]) => h('button', {
+      type: 'button', class: 'panel-tab' + (panelTab === k ? ' active' : ''), role: 'tab', 'aria-selected': String(panelTab === k), 'data-ptab': k,
+      onclick: () => { panelTab = k; panelBody.scrollTop = 0; renderSettings(); },
+    }, h('span', { html: icon }), label)));
 
+    const content = {
+      bg: () => bgTab(),
+      fx: () => [section('Эффекты поверх фона',
+        fxSlider('Виньетка', 'vignette'),
+        fxSlider('Свечение', 'bloom'),
+        fxSlider('Частицы', 'particles'),
+        fxSlider('Аберрация', 'chroma'),
+        fxSlider('Сканлайны', 'scan'),
+        fxToggle('Линза за курсором', 'mouse'),
+        fxToggle('Оттенок по времени суток', 'daycycle'),
+        h('p', { class: 'field-hint' }, 'Работают и с мешем, и со своей картинкой. Узоры и анимации — во вкладке «Фон» → «Настроить».'))],
+      blocks: () => {
+        const accents = h('div', { class: 'swatches' }, ACCENTS.map(c =>
+          h('button', { class: 'accent-swatch' + (settings.accent === c ? ' active' : ''), style: `--c:${c}`, title: c, onclick: () => { setSetting('accent', c); renderSettings(); } })));
+        return [
+          section('Текст в блоках',
+            h('div', { class: 'field' }, h('span', {}, 'Шрифт'), dropdown(FONTS, settings.text.font, (v) => setSetting('text', { ...settings.text, font: v })).el),
+            h('div', { class: 'field' }, h('span', {}, 'Тень'), segmented(SHADOWS, settings.text.shadow, (v) => setSetting('text', { ...settings.text, shadow: v })).el),
+            h('p', { class: 'field-hint' }, 'У каждого блока можно поставить своё — в его настройках, «Оформление».')),
+          section('Стекло',
+            slider('Размытие', 'glassBlur', 0, 40, 1, v => v + 'px'),
+            slider('Плотность', 'glassAlpha', 0, 0.3, 0.01, v => Math.round(v * 100) + '%'),
+            slider('Скругление', 'radius', 0, 36, 1, v => v + 'px')),
+          section('Акцент', accents),
+        ];
+      },
+      tab: () => {
+        const nameInp = h('input', { type: 'text', value: settings.name, placeholder: 'Как к тебе обращаться?', 'data-setting': 'name' });
+        nameInp.addEventListener('input', debounce(() => setSetting('name', nameInp.value.trim(), true), 300));
+        return [
+          section('Вкладка браузера', ...tabSettings()),
+          section('Приветствие', h('label', { class: 'field' }, h('span', {}, 'Имя'), nameInp)),
+        ];
+      },
+      more: () => [
+        section('Раскладка',
+          h('div', { class: 'row' },
+            h('button', { class: 'pill small', onclick: () => { closeSettings(); setEditing(true); } }, 'Редактировать'),
+            h('button', { class: 'pill small', onclick: resetLayout }, 'Сбросить')),
+          h('div', { class: 'row' },
+            h('button', { class: 'pill small', onclick: exportAll }, 'Экспорт'),
+            h('button', { class: 'pill small', onclick: () => pickFile('application/json', importAll) }, 'Импорт'))),
+        h('p', { class: 'panel-foot' }, 'Plitka 0.1 · E — редактор, / — поиск, Esc — закрыть'),
+      ],
+    };
+    panelBody.replaceChildren(...content[panelTab]().filter(Boolean));
+
+    // превью создаём, когда канвас уже в DOM и у него есть размер
+    const mc = panelBody.querySelector('.mesh-canvas');
+    if (mc) {
+      meshPreview = Mesh.create(mc, { scale: 1 });
+      meshPreview?.set(bgParams());
+    }
+  }
+
+  // вкладка «Фон»: заготовки, своя картинка (как есть или с эффектом), редактор, слайд-шоу
+  function bgTab() {
     const img = !!settings.bgImage;
+    const plain = img && settings.photo.plain;
+    const motion = h('input', { type: 'checkbox' });
+    motion.checked = settings.motion;
+    motion.addEventListener('change', () => setSetting('motion', motion.checked));
+
     const bgRow = h('div', { class: 'row' },
-      h('button', {
+      plain ? null : h('button', {
         class: 'pill small' + (meshOpen ? ' on' : ''), 'aria-expanded': String(meshOpen),
         onclick: () => { meshOpen = !meshOpen; renderSettings(); },
       }, meshOpen ? 'Свернуть' : img ? 'Эффект картинки' : 'Настроить'),
@@ -1261,53 +1412,85 @@
       img ? h('button', { class: 'pill small', onclick: () => { setSetting('bgImage', null); renderSettings(); } }, 'Убрать картинку') : null,
     );
 
-    const accents = h('div', { class: 'swatches' }, ACCENTS.map(c =>
-      h('button', { class: 'accent-swatch' + (settings.accent === c ? ' active' : ''), style: `--c:${c}`, title: c, onclick: () => { setSetting('accent', c); renderSettings(); } })));
+    // своя картинка: как есть или с эффектом поверх
+    const photoMode = img ? h('div', { class: 'field' }, h('span', {}, 'Картинка'),
+      segmented([['plain', 'Как есть'], ['fx', 'С эффектом']], plain ? 'plain' : 'fx', (v) => {
+        setSetting('photo', { ...settings.photo, plain: v === 'plain' });
+        sampleImage();
+        renderSettings();
+      }).el) : null;
 
-    const motion = h('input', { type: 'checkbox' });
-    motion.checked = settings.motion;
-    motion.addEventListener('change', () => setSetting('motion', motion.checked));
-
-    panelBody.replaceChildren(
-      section('Ты',
-        h('label', { class: 'field' }, h('span', {}, 'Имя для приветствия'), nameInp)),
-      section('Вкладка', ...tabSettings()),
-      section('Фон', meshPresets(), bgRow,
+    return [
+      section('Фон', meshPresets(), bgRow, photoMode,
         img ? slider('Затемнение картинки', 'bgDim', 0, 0.8, 0.05, v => Math.round(v * 100) + '%') : null,
-        meshOpen ? bgEditor() : null,
+        meshOpen && !plain ? bgEditor() : null,
         h('label', { class: 'field field-toggle' }, h('span', {}, 'Живой фон'), h('span', { class: 'switch' }, motion, h('i')))),
-      section('Эффекты',
-        fxSlider('Виньетка', 'vignette'),
-        fxSlider('Свечение', 'bloom'),
-        fxSlider('Частицы', 'particles'),
-        fxSlider('Аберрация', 'chroma'),
-        fxSlider('Сканлайны', 'scan'),
-        fxToggle('Линза за курсором', 'mouse'),
-        fxToggle('Оттенок по времени суток', 'daycycle')),
-      section('Стекло',
-        slider('Размытие', 'glassBlur', 0, 40, 1, v => v + 'px'),
-        slider('Плотность', 'glassAlpha', 0, 0.3, 0.01, v => Math.round(v * 100) + '%'),
-        slider('Скругление', 'radius', 0, 36, 1, v => v + 'px')),
-      section('Текст в блоках',
-        h('div', { class: 'field' }, h('span', {}, 'Шрифт'), dropdown(FONTS, settings.text.font, (v) => setSetting('text', { ...settings.text, font: v })).el),
-        h('div', { class: 'field' }, h('span', {}, 'Тень'), segmented(SHADOWS, settings.text.shadow, (v) => setSetting('text', { ...settings.text, shadow: v })).el),
-        h('p', { class: 'field-hint' }, 'У каждого блока можно поставить своё — в его настройках, «Оформление».')),
-      section('Акцент', accents),
-      section('Раскладка',
-        h('div', { class: 'row' },
-          h('button', { class: 'pill small', onclick: () => { closeSettings(); setEditing(true); } }, 'Редактировать'),
-          h('button', { class: 'pill small', onclick: resetLayout }, 'Сбросить')),
-        h('div', { class: 'row' },
-          h('button', { class: 'pill small', onclick: exportAll }, 'Экспорт'),
-          h('button', { class: 'pill small', onclick: () => pickFile('application/json', importAll) }, 'Импорт'))),
-      h('p', { class: 'panel-foot' }, 'Plitka 0.1 · E — редактор, / — поиск'),
-    );
-    // превью создаём, когда канвас уже в DOM и у него есть размер
-    const mc = panelBody.querySelector('.mesh-canvas');
-    if (mc) {
-      meshPreview = Mesh.create(mc, { scale: 1 });
-      meshPreview?.set(bgParams());
-    }
+      section('Слайд-шоу', ...slideshowSettings()),
+    ];
+  }
+
+  // слайд-шоу: список фонов (свои картинки + меши/заготовки), как часто и в каком порядке менять
+  function slideshowSettings() {
+    const s = settings.slides;
+    const setS = (patch, rerender = true) => { settings.slides = { ...settings.slides, ...patch }; saveSettings(); if (rerender) renderSettings(); };
+    const on = h('input', { type: 'checkbox', 'data-slides': 'on' });
+    on.checked = s.on;
+    on.addEventListener('change', () => { setS({ on: on.checked }); if (on.checked && s.items.length) nextSlide(); });
+    const toggle = h('label', { class: 'field field-toggle' }, h('span', {}, 'Менять фоны сами'), h('span', { class: 'switch' }, on, h('i')));
+
+    const addCurrent = async () => {
+      const id = 's' + Math.random().toString(36).slice(2, 9);
+      if (settings.bgImage) {
+        await Store.set('slide:' + id, settings.bgImage);
+        const thumb = await new Promise((res) => {
+          const im = new Image();
+          im.onload = () => {
+            const t = h('canvas', { width: 160, height: 100 });
+            const k = Math.max(160 / im.width, 100 / im.height);
+            t.getContext('2d').drawImage(im, (160 - im.width * k) / 2, (100 - im.height * k) / 2, im.width * k, im.height * k);
+            res(t.toDataURL('image/jpeg', 0.8));
+          };
+          im.src = settings.bgImage;
+        });
+        setS({ items: [...settings.slides.items, { id, kind: 'image', thumb }] });
+      } else {
+        setS({ items: [...settings.slides.items, { id, kind: 'mesh', mesh: structuredClone(settings.mesh) }] });
+      }
+      toast('Фон добавлен в слайд-шоу');
+    };
+    const addImages = (files) => Promise.all(files.map(async (f) => {
+      const { full, thumb } = await shrinkImage(f);
+      const id = 's' + Math.random().toString(36).slice(2, 9);
+      await Store.set('slide:' + id, full);
+      return { id, kind: 'image', thumb };
+    })).then((items) => { setS({ items: [...settings.slides.items, ...items] }); toast(`Добавлено: ${items.length}`); });
+
+    const list = h('div', { class: 'slides' }, s.items.map((it, i) => h('div', { class: 'slide' + (i === s.idx ? ' current' : ''), title: i === s.idx ? 'Сейчас на экране' : 'Показать' },
+      h('button', {
+        type: 'button', class: 'slide-thumb', style: it.kind === 'mesh' ? `background:${Mesh.cssPreview(it.mesh)}` : null,
+        onclick: () => { setS({ idx: i, at: Date.now() }); applySlide(it); },
+      }, it.kind === 'image' && it.thumb ? h('img', { src: it.thumb, alt: '' }) : null),
+      h('button', {
+        type: 'button', class: 'slide-del', title: 'Убрать из слайд-шоу', html: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+        onclick: () => {
+          if (it.kind === 'image') Store.remove('slide:' + it.id);
+          const items = settings.slides.items.filter(x => x !== it);
+          setS({ items, idx: Math.min(settings.slides.idx, items.length - 1) });
+        },
+      }))));
+
+    return [
+      toggle,
+      s.items.length ? list : h('p', { class: 'field-hint' }, 'Выбери фон выше и добавь его сюда, или загрузи свои картинки — можно сразу несколько.'),
+      h('div', { class: 'row' },
+        h('button', { type: 'button', class: 'pill small', onclick: addCurrent }, '+ Текущий фон'),
+        h('button', { type: 'button', class: 'pill small', onclick: () => pickFile('image/*', addImages, true) }, '+ Картинки'),
+        s.items.length > 1 ? h('button', { type: 'button', class: 'pill small', onclick: () => { nextSlide(); setTimeout(renderSettings, 700); } }, 'Следующий') : null),
+      s.items.length > 1 ? h('div', { class: 'field' }, h('span', {}, 'Менять'),
+        dropdown([['tab', 'С каждой новой вкладкой'], ['10m', 'Каждые 10 минут'], ['1h', 'Каждый час'], ['1d', 'Раз в день']], s.every, (v) => setS({ every: v }, false)).el) : null,
+      s.items.length > 1 ? h('div', { class: 'field' }, h('span', {}, 'Порядок'),
+        segmented([['seq', 'По порядку'], ['random', 'Случайно']], s.order, (v) => setS({ order: v }, false)).el) : null,
+    ];
   }
 
   // секция «Вкладка»: название с подстановками и иконка — плитки с живым превью
@@ -1390,28 +1573,85 @@
     return h('section', { class: 'panel-sec' }, h('h4', {}, title), ...children);
   }
 
-  function pickFile(accept, cb) {
+  function pickFile(accept, cb, multiple = false) {
     fileInput.accept = accept;
+    fileInput.multiple = multiple;
     fileInput.value = '';
-    fileInput.onchange = () => fileInput.files[0] && cb(fileInput.files[0]);
+    fileInput.onchange = () => fileInput.files.length && cb(multiple ? [...fileInput.files] : fileInput.files[0]);
     fileInput.click();
   }
 
-  function loadBgImage(file) {
-    const img = new Image();
-    img.onload = () => {
-      // ужимаем до 2560px по длинной стороне, чтобы не раздувать хранилище
-      const k = Math.min(1, 2560 / Math.max(img.width, img.height));
-      const c = document.createElement('canvas');
-      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      setSetting('bgImage', c.toDataURL('image/jpeg', 0.88));
-      URL.revokeObjectURL(img.src);
-      meshOpen = true; // сразу показываем эффекты картинки
-      renderSettings();
-    };
-    img.src = URL.createObjectURL(file);
+  // картинка → { full: JPEG до 2560px (чтобы не раздувать хранилище), thumb: 160×100 для списков }
+  function shrinkImage(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, 2560 / Math.max(img.width, img.height));
+        const c = h('canvas', { width: Math.round(img.width * k), height: Math.round(img.height * k) });
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        const t = h('canvas', { width: 160, height: 100 });
+        const s = Math.max(160 / img.width, 100 / img.height);
+        t.getContext('2d').drawImage(img, (160 - img.width * s) / 2, (100 - img.height * s) / 2, img.width * s, img.height * s);
+        URL.revokeObjectURL(img.src);
+        resolve({ full: c.toDataURL('image/jpeg', 0.88), thumb: t.toDataURL('image/jpeg', 0.8) });
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
   }
+
+  async function loadBgImage(file) {
+    const { full } = await shrinkImage(file);
+    setSetting('bgImage', full);
+    meshOpen = true; // сразу показываем эффекты картинки
+    renderSettings();
+  }
+
+  // ---------- слайд-шоу: свои картинки и фоны вперемешку ----------
+  // Картинки лежат отдельными ключами slide:<id>, в настройках — только превью.
+  const SLIDE_EVERY = { tab: 0, '10m': 6e5, '1h': 36e5, '1d': 864e5 }; // ключи — SLIDE_EVERY_KEYS наверху
+  async function applySlide(item, fade = true) {
+    let image = null;
+    if (item.kind === 'image') {
+      image = await Store.get('slide:' + item.id, null);
+      if (!image) return;
+    }
+    const go = () => {
+      if (item.kind === 'image') settings.bgImage = image;
+      else {
+        const { clear, duo, anim, animAmt } = settings.mesh; // своё оформление поверх фона слайда сохраняем
+        settings.mesh = { ...cleanMesh(item.mesh), clear, duo, anim, animAmt };
+        settings.bgImage = null;
+      }
+      applyTheme();
+      sampleImage();
+      saveSettings();
+    };
+    if (!fade || !document.body.classList.contains('mesh-on')) return go();
+    // плавная смена: гасим фон, меняем, проявляем
+    document.body.classList.add('bg-fade');
+    setTimeout(() => { go(); setTimeout(() => document.body.classList.remove('bg-fade'), 180); }, 450);
+  }
+  function nextSlide(fade = true) {
+    const s = settings.slides;
+    if (!s.items.length) return;
+    let i = s.order === 'random' && s.items.length > 1
+      ? (s.idx + 1 + Math.floor(Math.random() * (s.items.length - 1))) % s.items.length // любой, кроме текущего
+      : (s.idx + 1) % s.items.length;
+    settings.slides = { ...s, idx: i, at: Date.now() };
+    saveSettings();
+    applySlide(settings.slides.items[i], fade);
+  }
+  // при открытии вкладки: пора — следующий слайд, нет — показываем текущий, если фон с ним разошёлся
+  function slideshowOnLoad() {
+    const s = settings.slides;
+    if (!s.on || !s.items.length) return;
+    if (!s.at || Date.now() - s.at >= SLIDE_EVERY[s.every]) nextSlide(false);
+  }
+  setInterval(() => {
+    const s = settings.slides;
+    if (s.on && s.items.length > 1 && s.every !== 'tab' && !document.hidden && Date.now() - s.at >= SLIDE_EVERY[s.every]) nextSlide();
+  }, 30000);
 
   function resetLayout() {
     unmountAll();
@@ -1481,6 +1721,7 @@
     return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
   }
 
+  slideshowOnLoad(); // после всего: слайд-шоу само решит, пора ли сменить фон
   requestAnimationFrame(() => document.body.classList.remove('is-loading'));
   window.__plitka = { grid, get layout() { return layout; }, get layouts() { return layouts; }, get bucket() { return bucket; }, settings: () => settings, setEditing };
 })();
