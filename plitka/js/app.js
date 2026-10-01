@@ -296,12 +296,12 @@
     } else if (kind === 'letter') {
       g.fillStyle = settings.accent;
       g.beginPath(); g.roundRect(2, 2, 60, 60, 16); g.fill();
-      g.fillStyle = '#0b0b12';
+      g.fillStyle = '#0c0c0d';
       g.font = `800 ${tab.letter.length > 1 ? 30 : 40}px Manrope, sans-serif`;
       g.fillText(tab.letter, 32, 35);
     } else if (kind === 'clock') {
       const d = new Date();
-      g.fillStyle = '#15151d'; g.beginPath(); g.arc(32, 32, 30, 0, 7); g.fill();
+      g.fillStyle = '#18181a'; g.beginPath(); g.arc(32, 32, 30, 0, 7); g.fill();
       g.strokeStyle = settings.accent; g.lineWidth = 3; g.stroke();
       const hand = (a, len, w, col) => { g.strokeStyle = col; g.lineWidth = w; g.lineCap = 'round'; g.beginPath(); g.moveTo(32, 32); g.lineTo(32 + Math.sin(a) * len, 32 - Math.cos(a) * len); g.stroke(); };
       const m = d.getMinutes() + d.getSeconds() / 60;
@@ -312,7 +312,7 @@
       // кольцо оставшегося времени и минуты в центре; таймер не идёт — полное тусклое кольцо
       const p = Tab.pomo;
       const col = p?.phase === 'rest' ? '#6fe3b0' : settings.accent;
-      g.fillStyle = '#15151d'; g.beginPath(); g.arc(32, 32, 30, 0, 7); g.fill();
+      g.fillStyle = '#18181a'; g.beginPath(); g.arc(32, 32, 30, 0, 7); g.fill();
       g.lineWidth = 7; g.lineCap = 'round';
       g.strokeStyle = 'rgba(255,255,255,.15)'; g.beginPath(); g.arc(32, 32, 24, 0, 7); g.stroke();
       if (p) {

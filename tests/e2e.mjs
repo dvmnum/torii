@@ -960,7 +960,7 @@ await page.waitForTimeout(150);
 check(await page.locator('.engine.bang').count() === 1, 'поиск: префикс !yt подсвечивает YouTube');
 await page.keyboard.down('Shift');
 await page.waitForTimeout(100);
-check((await page.textContent('.search-go')).includes('Инкогнито'), 'поиск: с Shift клавиша пишет «Инкогнито»');
+check(await page.locator('.search-ghost.on').count() === 1, 'поиск: с Shift подсвечивается призрак (инкогнито)');
 await page.screenshot({ path: `${out}/49-search-incognito.png`, clip: { x: 300, y: 330, width: 1000, height: 120 } });
 await page.keyboard.up('Shift');
 await page.fill('[data-search]', '');
@@ -970,6 +970,20 @@ check(await page.locator('.engine-menu .em-item').count() === 9, 'поиск: м
 await page.screenshot({ path: `${out}/50-engine-menu.png` });
 await page.click('.engine-menu .em-item:has-text("Perplexity")');
 check(await page.evaluate(() => window.__plitka.layout[0].data.engine) === 'perplexity', 'поиск: поисковик выбран из меню');
+// призрак на экране: пустая строка — включает режим инкогнито; в настройках блока кнопки можно спрятать
+await page.fill('[data-search]', '');
+await page.click('.search-ghost');
+check(await page.locator('.search-ghost.on').count() === 1 && /Инкогнито/.test(await page.getAttribute('[data-search]', 'placeholder')), 'поиск: призрак включает режим инкогнито');
+await page.waitForTimeout(350);
+await page.screenshot({ path: `${out}/53-search-ghost.png`, clip: { x: 300, y: 330, width: 1000, height: 120 } });
+await page.click('.search-ghost');
+await page.evaluate(() => document.activeElement.blur()); // иначе «E» уйдёт в строку поиска
+await openSettings('w-search');
+for (const t of ['Кнопка выбора поисковика', 'Кнопка инкогнито']) await page.click(`.inspector .field-toggle:has-text("${t}")`);
+await page.waitForTimeout(200);
+check(await page.locator('.w-search .engine:visible').count() === 0 && await page.locator('.w-search .search-ghost:visible').count() === 0, 'поиск: кнопки выбора и инкогнито прячутся в настройках');
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
 // поиск с префиксом уходит по нужному адресу
 await ctx.route('https://www.youtube.com/**', r => r.fulfill({ body: '<title>yt</title>ok', contentType: 'text/html' }));
 await page.fill('[data-search]', '!yt lofi beats');

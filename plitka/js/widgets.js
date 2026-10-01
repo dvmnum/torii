@@ -226,12 +226,14 @@ const Widgets = {
   search: {
     title: 'Поиск',
     size: { w: 10, h: 1 }, min: { w: 4, h: 1 },
-    defaults: { glass: true, engine: 'yandex', height: 'normal', newTab: false, recent: true, history: [] },
+    defaults: { glass: true, engine: 'yandex', height: 'normal', newTab: false, recent: true, showEngine: true, showGhost: true, history: [] },
     settings: [
       { key: 'engine', label: 'Поисковик', type: 'select', options: Object.entries(ENGINES).map(([k, v]) => [k, v.name]) },
       { key: 'height', label: 'Высота строки', type: 'select', options: [['compact', 'Тонкая'], ['normal', 'Обычная'], ['large', 'Крупная']] },
       { key: 'newTab', label: 'Открывать в новой вкладке', type: 'toggle' },
       { key: 'recent', label: 'Помнить последние запросы', type: 'toggle' },
+      { key: 'showEngine', label: 'Кнопка выбора поисковика', type: 'toggle' },
+      { key: 'showGhost', label: 'Кнопка инкогнито', type: 'toggle' },
       GLASS_SETTING,
     ],
     render(body, data, ctx) {
@@ -239,12 +241,22 @@ const Widgets = {
       const engineBtn = h('button', { type: 'button', class: 'engine', title: 'Выбрать поисковик' });
       const input = h('input', { type: 'text', class: 'search-input', autocomplete: 'off', spellcheck: 'false', 'data-search': '' });
       const result = h('button', { type: 'button', class: 'search-calc', title: 'Скопировать', hidden: true });
-      const keyLabel = h('span', {}, 'Enter');
+      // клавиша Enter — минималистично: только стрелка ↵, подсвечивается, когда есть что искать
       const go = h('button', {
         type: 'submit', class: 'search-go', tabindex: '-1',
         title: 'Enter — искать здесь\nCtrl+Enter — в новой вкладке\nShift+Enter — в окне инкогнито',
-      }, keyLabel, h('span', { class: 'kc-ico', html: '<svg viewBox="0 0 24 24"><path d="M19 5v7a3 3 0 0 1-3 3H5"/><path d="M9 11l-4 4 4 4"/></svg>' }));
-      const form = h('form', { class: `w-search h-${data.height}` }, engineBtn, input, result, go);
+        html: '<svg viewBox="0 0 24 24"><path d="M19 5v7a3 3 0 0 1-3 3H5"/><path d="M9 11l-4 4 4 4"/></svg>',
+      });
+      // призрак — поиск в инкогнито
+      const ghostBtn = h('button', {
+        type: 'button', class: 'search-ghost', tabindex: '-1', title: 'Искать в окне инкогнито (или Shift+Enter)',
+        html: '<svg viewBox="0 0 24 24"><path d="M5 20V11a7 7 0 0 1 14 0v9l-2.3-1.6L14.3 20 12 18.4 9.7 20l-2.4-1.6z"/><circle cx="9.5" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="11" r="1.1" fill="currentColor" stroke="none"/></svg>',
+      });
+      if (data.showEngine === false) engineBtn.hidden = true;
+      if (data.showGhost === false) ghostBtn.hidden = true;
+      // у иконки поисковика — маленький уголок: видно, что это выбор
+      engineBtn.classList.add('pickable');
+      const form = h('form', { class: `w-search h-${data.height}` }, engineBtn, input, result, ghostBtn, go);
       if (!data.recent && data.history?.length) { data.history = []; ctx.save(); }
 
       const paint = () => {
@@ -271,7 +283,8 @@ const Widgets = {
         if (how === 'tab') { if (chrome.tabs?.create) chrome.tabs.create({ url }); else window.open(url, '_blank', 'noopener'); return; }
         location.href = url;
       };
-      const how = (e) => e.shiftKey ? 'incognito' : (e.ctrlKey || e.metaKey || data.newTab) ? 'tab' : 'here';
+      let ghost = false; // режим «следующий поиск — в инкогнито» (кнопка-призрак), не сохраняется
+      const how = (e) => (e.shiftKey || ghost) ? 'incognito' : (e.ctrlKey || e.metaKey || data.newTab) ? 'tab' : 'here';
       const search = (q, mode) => {
         q = q.trim();
         if (!q) return;
@@ -289,11 +302,11 @@ const Widgets = {
         if (mode !== 'here') { input.value = ''; onInput(); }
       };
 
-      // подсказка на клавише: держишь Shift — «Инкогнито», Ctrl — «Новая вкладка»
+      // режим подсвечивается на кнопках: Shift или включённый призрак — инкогнито
       const showMode = (e) => {
         const m = how(e);
-        keyLabel.textContent = m === 'incognito' ? 'Инкогнито' : m === 'tab' && (e.ctrlKey || e.metaKey) ? 'Новая вкладка' : 'Enter';
         form.dataset.mode = m;
+        ghostBtn.classList.toggle('on', m === 'incognito');
       };
       input.addEventListener('keydown', (e) => {
         showMode(e);
@@ -301,8 +314,17 @@ const Widgets = {
         if (e.key === 'Escape' && recentBox) { e.stopPropagation(); closeRecent(); }
       });
       input.addEventListener('keyup', showMode);
-      input.addEventListener('blur', () => { keyLabel.textContent = 'Enter'; delete form.dataset.mode; });
-      form.addEventListener('submit', (e) => { e.preventDefault(); search(input.value, data.newTab ? 'tab' : 'here'); });
+      input.addEventListener('blur', () => { delete form.dataset.mode; ghostBtn.classList.toggle('on', ghost); });
+      form.addEventListener('submit', (e) => { e.preventDefault(); search(input.value, ghost ? 'incognito' : data.newTab ? 'tab' : 'here'); });
+      // призрак: есть текст — сразу ищет в инкогнито; пусто — включает режим «следующий поиск в инкогнито»
+      ghostBtn.addEventListener('click', () => {
+        if (input.value.trim()) return search(input.value, 'incognito');
+        ghost = !ghost;
+        ghostBtn.classList.toggle('on', ghost);
+        form.classList.toggle('ghost', ghost);
+        input.placeholder = ghost ? 'Инкогнито — следующий поиск' : `Искать в ${eng().in || eng().name}`;
+        input.focus();
+      });
 
       // калькулятор: ответ справа, клик — скопировать
       const onInput = () => {
