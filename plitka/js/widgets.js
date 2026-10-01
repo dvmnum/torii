@@ -83,12 +83,57 @@ function weatherInfo(code) {
   return ['Гроза', 'storm'];
 }
 
+// Поисковики: монохромные иконки в одном стиле (контур, currentColor), bang — префикс «!x запрос»
 const ENGINES = {
-  yandex: { name: 'Яндекс', url: 'https://yandex.ru/search/?text=', home: 'https://ya.ru' },
-  google: { name: 'Google', url: 'https://www.google.com/search?q=', home: 'https://www.google.com' },
-  duck: { name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=', home: 'https://duckduckgo.com' },
-  bing: { name: 'Bing', url: 'https://www.bing.com/search?q=', home: 'https://www.bing.com' },
+  yandex: { name: 'Яндекс', in: 'Яндексе', bang: 'y', url: 'https://yandex.ru/search/?text=',
+    icon: '<path d="M15.5 20V4h-3.6a4.2 4.2 0 0 0 0 8.4h3.6M12 12.4L7.6 20"/>' },
+  google: { name: 'Google', bang: 'g', url: 'https://www.google.com/search?q=',
+    icon: '<path d="M18.1 6.9A8 8 0 1 0 20 12h-7.5"/>' },
+  duck: { name: 'DuckDuckGo', bang: 'd', url: 'https://duckduckgo.com/?q=',
+    icon: '<circle cx="12" cy="12" r="8.5"/><circle cx="13.6" cy="9.6" r="1.2" fill="currentColor" stroke="none"/><path d="M8.6 14.6c1.8 1.6 5.2 1.6 7-.4"/>' },
+  bing: { name: 'Bing', bang: 'b', url: 'https://www.bing.com/search?q=',
+    icon: '<path d="M7 3.5l3.6 1.3v11.4l5.1-2.9-2.3-1.1-1.3-3.4 5.9 2.1v3.4l-7.4 4.3L7 18.4z"/>' },
+  perplexity: { name: 'Perplexity', bang: 'p', url: 'https://www.perplexity.ai/search?q=',
+    icon: '<path d="M12 3v18M5 7.5l7 4.5 7-4.5M5 16.5l7-4.5 7 4.5M5 7.5v9M19 7.5v9"/>' },
+  chatgpt: { name: 'ChatGPT', bang: 'gpt', url: 'https://chatgpt.com/?q=',
+    icon: '<path d="M12 3.5l7.4 4.25v8.5L12 20.5l-7.4-4.25v-8.5z"/><path d="M12 8.2v7.6M8.7 10.1l6.6 3.8M15.3 10.1l-6.6 3.8"/>' },
+  claude: { name: 'Claude', bang: 'c', url: 'https://claude.ai/new?q=',
+    icon: '<path d="M12 3.5v5.5M12 15v5.5M3.5 12H9M15 12h5.5M6 6l3.9 3.9M14.1 14.1L18 18M18 6l-3.9 3.9M9.9 14.1L6 18"/>' },
+  youtube: { name: 'YouTube', in: 'YouTube', bang: 'yt', url: 'https://www.youtube.com/results?search_query=',
+    icon: '<rect x="2.8" y="5.5" width="18.4" height="13" rx="4"/><path d="M10.2 9.3v5.4l4.6-2.7z" fill="currentColor" stroke="none"/>' },
+  wiki: { name: 'Википедия', in: 'Википедии', bang: 'w', url: 'https://ru.wikipedia.org/w/index.php?search=',
+    icon: '<path d="M3 6.5l3.8 11.5L12 7.5l5.2 10.5L21 6.5"/>' },
 };
+const engineIcon = (e) => `<svg viewBox="0 0 24 24">${e.icon}</svg>`;
+
+// Калькулятор в строке поиска: + − × ÷ ^ % и скобки. Свой разбор — eval в расширениях запрещён (CSP), да и не нужен.
+// Вернёт число или null, если это не выражение.
+function calc(src) {
+  const s = src.replace(/\s+/g, '').replace(/,/g, '.').replace(/[×х]/g, '*').replace(/[÷:]/g, '/').replace(/−/g, '-');
+  if (!/^[\d.+\-*/^%()]+$/.test(s) || !/\d/.test(s) || !/[+\-*/^%]/.test(s.replace(/^-/, ''))) return null;
+  let i = 0;
+  const peek = () => s[i];
+  const num = () => {
+    const m = s.slice(i).match(/^\d*\.?\d+/);
+    if (!m) throw 0;
+    i += m[0].length;
+    return parseFloat(m[0]);
+  };
+  const atom = () => {
+    if (peek() === '-') { i++; return -atom(); }
+    if (peek() === '(') { i++; const v = expr(); if (s[i++] !== ')') throw 0; return v; }
+    let v = num();
+    if (peek() === '%') { i++; v /= 100; }
+    return v;
+  };
+  const pow = () => { const b = atom(); if (peek() === '^') { i++; return Math.pow(b, pow()); } return b; };
+  const term = () => { let v = pow(); while (peek() === '*' || peek() === '/') v = s[i++] === '*' ? v * pow() : v / pow(); return v; };
+  const expr = () => { let v = term(); while (peek() === '+' || peek() === '-') v = s[i++] === '+' ? v + term() : v - term(); return v; };
+  try {
+    const v = expr();
+    return i === s.length && Number.isFinite(v) ? v : null;
+  } catch { return null; }
+}
 
 const GLASS_SETTING = { key: 'glass', label: 'Стеклянная подложка', type: 'toggle' };
 
@@ -185,45 +230,140 @@ const Widgets = {
   search: {
     title: 'Поиск',
     size: { w: 10, h: 1 }, min: { w: 4, h: 1 },
-    defaults: { glass: true, engine: 'yandex' },
+    defaults: { glass: true, engine: 'yandex', height: 'normal', newTab: false, recent: true, history: [] },
     settings: [
       { key: 'engine', label: 'Поисковик', type: 'select', options: Object.entries(ENGINES).map(([k, v]) => [k, v.name]) },
+      { key: 'height', label: 'Высота строки', type: 'select', options: [['compact', 'Тонкая'], ['normal', 'Обычная'], ['large', 'Крупная']] },
+      { key: 'newTab', label: 'Открывать в новой вкладке', type: 'toggle' },
+      { key: 'recent', label: 'Помнить последние запросы', type: 'toggle' },
       GLASS_SETTING,
     ],
     render(body, data, ctx) {
       const eng = () => ENGINES[data.engine] || ENGINES.yandex;
-      const engineBtn = h('button', { type: 'button', class: 'engine', title: 'Сменить поисковик' });
+      const engineBtn = h('button', { type: 'button', class: 'engine', title: 'Выбрать поисковик' });
       const input = h('input', { type: 'text', class: 'search-input', autocomplete: 'off', spellcheck: 'false', 'data-search': '' });
-      const go = h('button', { type: 'submit', class: 'search-go', title: 'Искать (Enter)', tabindex: '-1' },
-        h('span', {}, 'Enter'),
-        h('span', { html: '<svg viewBox="0 0 24 24"><path d="M19 5v7a3 3 0 0 1-3 3H5"/><path d="M9 11l-4 4 4 4"/></svg>' }));
-      const form = h('form', { class: 'w-search' }, engineBtn, input, go);
-      input.addEventListener('input', () => form.classList.toggle('has-text', !!input.value.trim()));
+      const result = h('button', { type: 'button', class: 'search-calc', title: 'Скопировать', hidden: true });
+      const keyLabel = h('span', {}, 'Enter');
+      const go = h('button', {
+        type: 'submit', class: 'search-go', tabindex: '-1',
+        title: 'Enter — искать здесь\nCtrl+Enter — в новой вкладке\nShift+Enter — в окне инкогнито',
+      }, keyLabel, h('span', { class: 'kc-ico', html: '<svg viewBox="0 0 24 24"><path d="M19 5v7a3 3 0 0 1-3 3H5"/><path d="M9 11l-4 4 4 4"/></svg>' }));
+      const form = h('form', { class: `w-search h-${data.height}` }, engineBtn, input, result, go);
+      if (!data.recent && data.history?.length) { data.history = []; ctx.save(); }
 
       const paint = () => {
-        const ico = favicon(eng().home, eng().name, 64);
-        ico.classList.add('engine-ico');
-        engineBtn.replaceChildren(ico);
-        engineBtn.title = `${eng().name} — нажми, чтобы сменить`;
-        input.placeholder = `Искать в ${eng().name === 'Яндекс' ? 'Яндексе' : eng().name}`;
+        engineBtn.innerHTML = engineIcon(eng());
+        input.placeholder = `Искать в ${eng().in || eng().name}`;
       };
       paint();
 
-      engineBtn.addEventListener('click', () => {
-        const keys = Object.keys(ENGINES);
-        data.engine = keys[(keys.indexOf(data.engine) + 1) % keys.length];
-        ctx.save();
-        paint();
-        input.focus();
-      });
-      form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const q = input.value.trim();
+      // «!yt котики» или «котики !yt» — разовый поиск в другом поисковике
+      const parse = (q) => {
+        let bang = null, text = q;
+        const a = q.match(/^!(\S+)\s+(.+)$/), b = q.match(/^(.+?)\s+!(\S+)$/);
+        if (a) { bang = a[1]; text = a[2]; } else if (b) { bang = b[2]; text = b[1]; }
+        const e = bang && Object.values(ENGINES).find(x => x.bang === bang.toLowerCase());
+        return e ? { e, text } : { e: eng(), text: q };
+      };
+
+      // куда открывать: модификаторы важнее настройки
+      const open = (url, how) => {
+        if (how === 'incognito' && chrome.windows?.create) {
+          chrome.windows.create({ url, incognito: true }, () => { if (chrome.runtime.lastError) ctx.toast('Инкогнито недоступно — открыл в новой вкладке'); });
+          return;
+        }
+        if (how === 'tab') { if (chrome.tabs?.create) chrome.tabs.create({ url }); else window.open(url, '_blank', 'noopener'); return; }
+        location.href = url;
+      };
+      const how = (e) => e.shiftKey ? 'incognito' : (e.ctrlKey || e.metaKey || data.newTab) ? 'tab' : 'here';
+      const search = (q, mode) => {
+        q = q.trim();
         if (!q) return;
         const asUrl = /^(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(q) && !q.includes(' ');
-        location.href = asUrl ? normalizeUrl(q) : eng().url + encodeURIComponent(q);
+        const { e, text } = parse(q);
+        const target = asUrl ? normalizeUrl(q) : e.url + encodeURIComponent(text);
+        closeRecent();
+        if (data.recent && mode !== 'incognito') { // инкогнито-запросы не запоминаем
+          data.history = [q, ...(data.history || []).filter(x => x !== q)].slice(0, 6);
+          // уходим со страницы только после записи — иначе отложенное сохранение не успеет
+          if (mode === 'here') { ctx.saveNow().finally(() => open(target, mode)); return; }
+          ctx.save();
+        }
+        open(target, mode);
+        if (mode !== 'here') { input.value = ''; onInput(); }
+      };
+
+      // подсказка на клавише: держишь Shift — «Инкогнито», Ctrl — «Новая вкладка»
+      const showMode = (e) => {
+        const m = how(e);
+        keyLabel.textContent = m === 'incognito' ? 'Инкогнито' : m === 'tab' && (e.ctrlKey || e.metaKey) ? 'Новая вкладка' : 'Enter';
+        form.dataset.mode = m;
+      };
+      input.addEventListener('keydown', (e) => {
+        showMode(e);
+        if (e.key === 'Enter') { e.preventDefault(); search(input.value, how(e)); }
+        if (e.key === 'Escape' && recentBox) { e.stopPropagation(); closeRecent(); }
       });
+      input.addEventListener('keyup', showMode);
+      input.addEventListener('blur', () => { keyLabel.textContent = 'Enter'; delete form.dataset.mode; });
+      form.addEventListener('submit', (e) => { e.preventDefault(); search(input.value, data.newTab ? 'tab' : 'here'); });
+
+      // калькулятор: ответ справа, клик — скопировать
+      const onInput = () => {
+        const q = input.value.trim();
+        form.classList.toggle('has-text', !!q);
+        const v = calc(q);
+        result.hidden = v == null;
+        if (v != null) result.textContent = '= ' + (+v.toFixed(10)).toLocaleString('ru-RU', { maximumFractionDigits: 10 });
+        // префикс подсвечивает иконку поисковика, в котором будет поиск
+        const { e } = parse(q);
+        engineBtn.innerHTML = engineIcon(e);
+        engineBtn.classList.toggle('bang', e !== eng());
+        if (q) closeRecent(); else openRecent();
+      };
+      input.addEventListener('input', onInput);
+      result.addEventListener('click', () => {
+        navigator.clipboard?.writeText(result.textContent.slice(2).replace(/\s/g, '')).then(() => ctx.toast('Скопировано'));
+        input.focus();
+      });
+
+      // последние запросы — под строкой, пока поле пустое
+      let recentBox = null;
+      function closeRecent() { recentBox?.remove(); recentBox = null; }
+      function openRecent() {
+        closeRecent();
+        if (!data.recent || !data.history?.length || document.activeElement !== input) return;
+        const r = form.getBoundingClientRect();
+        recentBox = h('div', { class: 'search-recent', style: `left:${r.left}px;top:${r.bottom + 6}px;width:${r.width}px` },
+          data.history.map(q => h('div', { class: 'sr-row' },
+            h('button', { type: 'button', class: 'sr-q', onmousedown: (e) => { e.preventDefault(); search(q, how(e)); } },
+              h('span', { class: 'sr-ico', html: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4M12 8v4l3 2"/></svg>' }), q),
+            h('button', {
+              type: 'button', class: 'sr-del', title: 'Убрать из истории', html: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+              onmousedown: (e) => { e.preventDefault(); data.history = data.history.filter(x => x !== q); ctx.save(); openRecent(); },
+            }))));
+        document.body.append(recentBox);
+      }
+      input.addEventListener('focus', () => { if (!input.value.trim()) openRecent(); });
+      input.addEventListener('blur', () => setTimeout(closeRecent, 120));
+
+      // выбор поисковика — список с иконками и префиксами
+      engineBtn.addEventListener('click', () => {
+        if (document.querySelector('.engine-menu')) return document.querySelector('.engine-menu').remove();
+        const r = engineBtn.getBoundingClientRect();
+        const menu = h('div', { class: 'engine-menu', style: `left:${r.left}px;top:${r.bottom + 8}px` },
+          Object.entries(ENGINES).map(([k, e]) => h('button', {
+            type: 'button', class: 'em-item' + (k === data.engine ? ' active' : ''),
+            onclick: () => { data.engine = k; ctx.save(); paint(); onInput(); menu.remove(); input.focus(); },
+          }, h('span', { class: 'em-ico', html: engineIcon(e) }), h('span', { class: 'em-name' }, e.name), h('kbd', {}, '!' + e.bang))),
+          h('div', { class: 'em-hint' }, 'Префикс — разовый поиск: «!yt котики»'));
+        document.body.append(menu);
+        const off = (e) => { if (!menu.contains(e.target) && !engineBtn.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', off, true); } };
+        document.addEventListener('mousedown', off, true);
+      });
+
       body.append(form);
+      return { destroy: () => { closeRecent(); document.querySelector('.engine-menu')?.remove(); } };
     },
   },
 
@@ -251,8 +391,9 @@ const Widgets = {
     render(body, data, ctx) {
       const wrap = h('div', { class: `w-links style-${data.style} icons-${data.icons || 'glass'}` });
       for (const l of data.links) wrap.append(linkEl(l, { newTab: data.newTab, icons: data.icons }));
-      wrap.append(h('button', {
-        class: 'link link-add', type: 'button', title: 'Добавить ссылку',
+      // «+» в углу при наведении — не занимает места в сетке плиток (иначе ломал центровку в низком блоке)
+      const add = h('button', {
+        class: 'w-add', type: 'button', title: 'Добавить ссылку', html: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
         onclick: () => ctx.modal({
           title: 'Новая ссылка',
           fields: [
@@ -265,8 +406,8 @@ const Widgets = {
             ctx.save(); ctx.rerender();
           },
         }),
-      }, h('span', { class: 'link-ico' }, '+'), h('span', { class: 'link-title' }, 'Добавить')));
-      body.append(wrap);
+      });
+      body.append(wrap, add);
     },
   },
 

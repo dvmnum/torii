@@ -297,7 +297,7 @@ check(await page.locator('.w-clock.v-middle.h-right').count() === 1, 'часы: 
 await openSettings('w-search');
 await page.click('.inspector .dd-btn');
 await page.waitForTimeout(250);
-check(await page.locator('body > .dd-list .dd-item').count() === 4, 'поиск: список поисковиков открыт');
+check(await page.locator('body > .dd-list .dd-item').count() === 9, 'поиск: список поисковиков открыт');
 await page.screenshot({ path: `${out}/18-dropdown.png` });
 await page.keyboard.press('ArrowDown');
 await page.keyboard.press('Enter');
@@ -931,6 +931,75 @@ const bmText = await page.evaluate(() => {
   return document.querySelector(`.grid-stack-item[gs-id="${it.id}"] .w-body`)?.innerText || '';
 });
 check(/Разрешить|обнови вкладку/.test(bmText), `закладки: без доступа — кнопка «Разрешить» («${bmText.replace(/\s+/g, ' ').trim()}»)`);
+await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
+
+// ---------- поиск: префиксы, калькулятор, недавние, выбор поисковика, инкогнито ----------
+await page.evaluate(() => chrome.storage.local.set({
+  settings: {},
+  widgets: [{ id: 'w-search', type: 'search', data: { history: ['котики', 'погода завтра'] } }],
+  layouts: { lg: { 'w-search': { x: 6, y: 5, w: 12, h: 1 } } },
+}));
+await page.reload();
+await page.waitForTimeout(1000);
+const sb = await page.evaluate(() => {
+  const f = document.querySelector('.w-search').getBoundingClientRect();
+  const w = document.querySelector('.grid-stack-item[gs-id="w-search"] .w').getBoundingClientRect();
+  return { fh: f.height, wh: w.height, dc: Math.abs((f.top + f.bottom) / 2 - (w.top + w.bottom) / 2) };
+});
+check(sb.fh < sb.wh && sb.dc < 2, `поиск: строка тоньше ячейки и по центру (${Math.round(sb.fh)} из ${Math.round(sb.wh)} px)`);
+await page.click('[data-search]');
+await page.waitForTimeout(200);
+check(await page.locator('.search-recent .sr-q').count() === 2, 'поиск: недавние запросы при фокусе');
+await page.screenshot({ path: `${out}/48-search-recent.png`, clip: { x: 300, y: 300, width: 1000, height: 320 } });
+await page.type('[data-search]', '1250*0,13');
+await page.waitForTimeout(150);
+check((await page.textContent('.search-calc')).replace(/\s/g, '') === '=162,5', `поиск: калькулятор («${await page.textContent('.search-calc')}»)`);
+await page.fill('[data-search]', '!yt lofi');
+await page.dispatchEvent('[data-search]', 'input');
+await page.waitForTimeout(150);
+check(await page.locator('.engine.bang').count() === 1, 'поиск: префикс !yt подсвечивает YouTube');
+await page.keyboard.down('Shift');
+await page.waitForTimeout(100);
+check((await page.textContent('.search-go')).includes('Инкогнито'), 'поиск: с Shift клавиша пишет «Инкогнито»');
+await page.screenshot({ path: `${out}/49-search-incognito.png`, clip: { x: 300, y: 330, width: 1000, height: 120 } });
+await page.keyboard.up('Shift');
+await page.fill('[data-search]', '');
+await page.click('.engine');
+await page.waitForTimeout(200);
+check(await page.locator('.engine-menu .em-item').count() === 9, 'поиск: меню из 9 поисковиков');
+await page.screenshot({ path: `${out}/50-engine-menu.png` });
+await page.click('.engine-menu .em-item:has-text("Perplexity")');
+check(await page.evaluate(() => window.__plitka.layout[0].data.engine) === 'perplexity', 'поиск: поисковик выбран из меню');
+// поиск с префиксом уходит по нужному адресу
+await ctx.route('https://www.youtube.com/**', r => r.fulfill({ body: '<title>yt</title>ok', contentType: 'text/html' }));
+await page.fill('[data-search]', '!yt lofi beats');
+await page.press('[data-search]', 'Enter');
+await page.waitForURL(/youtube\.com\/results\?search_query=lofi%20beats/, { timeout: 5000 }).then(() => check(true, 'поиск: !yt ушёл на YouTube')).catch(() => check(false, 'поиск: !yt ушёл на YouTube'));
+await page.goto(url);
+await page.waitForTimeout(1000);
+check(JSON.stringify(await page.evaluate(() => window.__plitka.layout[0].data.history)) === JSON.stringify(['!yt lofi beats', 'котики', 'погода завтра']), 'поиск: запрос попал в недавние');
+
+// ---------- все виджеты в минимальном размере: отступы и центровка ----------
+const mins = [
+  ['clock', 0, 0, 3, 2], ['notes', 3, 0, 3, 2], ['todo', 6, 0, 3, 2], ['pomodoro', 9, 0, 3, 3], ['recent', 12, 0, 3, 2],
+  ['rates', 15, 0, 3, 2], ['countdown', 18, 0, 3, 2], ['word', 21, 0, 3, 2],
+  ['links', 0, 3, 8, 1], ['search', 8, 3, 6, 1], ['weather', 14, 3, 4, 1],
+  ['habits', 0, 5, 4, 2], ['quote', 4, 5, 4, 2], ['pic', 8, 5, 2, 2],
+];
+await page.evaluate((list) => chrome.storage.local.set({
+  settings: {},
+  widgets: list.map(([type]) => ({ id: 'm-' + type, type, data: type === 'todo' ? { items: [{ id: 'a', text: 'Купить хлеб', done: false }] } : {} })),
+  layouts: { lg: Object.fromEntries(list.map(([type, x, y, w, h]) => ['m-' + type, { x, y, w, h }])) },
+}), mins);
+await page.reload();
+await page.waitForTimeout(1500);
+await page.screenshot({ path: `${out}/51-min-sizes.png` });
+const linkC = await page.evaluate(() => {
+  const w = document.querySelector('.grid-stack-item[gs-id="m-links"] .w').getBoundingClientRect();
+  const icons = [...document.querySelectorAll('.grid-stack-item[gs-id="m-links"] .link-ico')].map(e => e.getBoundingClientRect());
+  return { dc: Math.max(...icons.map(i => Math.abs((i.top + i.bottom) / 2 - (w.top + w.bottom) / 2))), inside: icons.every(i => i.top >= w.top && i.bottom <= w.bottom) };
+});
+check(linkC.dc < 3 && linkC.inside, `ссылки: в блоке высотой 1 иконки по центру (сдвиг ${linkC.dc.toFixed(1)} px)`);
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
 const real = errors.filter(e => !/Failed to load resource/i.test(e));

@@ -405,6 +405,8 @@
       id: item.id,
       settings: () => settings,
       save: saveLayout,
+      // сохранить сразу и дождаться — перед уходом со страницы (поиск, переход по ссылке)
+      saveNow: () => Promise.all([Store.set('widgets', stripGeom(layout)), Store.set('layouts', layouts)]),
       rerender: () => renderWidget(item),
       modal: openModal,
       toast,
