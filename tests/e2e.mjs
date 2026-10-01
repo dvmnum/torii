@@ -872,6 +872,28 @@ check(await page.locator('.mesh-preset img').count() === 14, 'миниатюры
 await page.click('.panel [data-close]');
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
+// ---------- первый кадр: стекло размыто сразу, а не через полсекунды ----------
+// (opacity < 1 у предка выключает backdrop-filter — так было, пока сетка проявлялась целиком)
+await page.evaluate(async (url) => chrome.storage.local.set({
+  settings: { bgImage: url, photo: { plain: true } },
+  widgets: [{ id: 'w-clock', type: 'clock', data: { glass: true } }], layouts: { lg: { 'w-clock': { x: 6, y: 3, w: 12, h: 4 } } },
+}), photoUrl);
+await page.reload({ waitUntil: 'domcontentloaded' });
+await page.waitForSelector('.w.glass', { state: 'attached' });
+const firstFrame = await page.evaluate(() => {
+  const w = document.querySelector('.w.glass');
+  const bad = [];
+  for (let el = w; el && el !== document.documentElement; el = el.parentElement) {
+    if (+getComputedStyle(el).opacity < 1) bad.push(el.className || el.tagName);
+  }
+  return bad;
+});
+check(firstFrame.length === 0, `первый кадр: у стекла и его предков opacity 1 (${firstFrame.join(', ') || 'ок'})`);
+await page.screenshot({ path: `${out}/45-first-frame.png` });
+await page.waitForTimeout(900);
+await page.screenshot({ path: `${out}/46-after-load.png` });
+await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
+
 const real = errors.filter(e => !/Failed to load resource/i.test(e));
 if (fails.length) { console.error('FAIL:', fails.join('; ')); process.exitCode = 1; }
 console.log('errors:', real.length ? real.join('\n') : 'none');

@@ -40,8 +40,11 @@ body {
   font-feature-settings: 'tnum' 0;
   user-select: none;
 }
-body.is-loading .grid-stack { opacity: 0; }
-.grid-stack { transition: opacity .5s var(--ease); }
+/* при открытии проявляется только содержимое блоков: opacity < 1 у стекла или его предка выключает
+   backdrop-filter — подложка была бы без размытия, пока идёт проявление */
+body.is-loading .w-body { opacity: 0; }
+.w-body { transition: opacity .5s var(--ease); }
+body.is-loading #bg .bg-image { transition: none; } /* при открытии фон — сразу, без проявления */
 button { font: inherit; color: inherit; cursor: pointer; }
 svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -54,11 +57,17 @@ svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1
 }
 #bg .bg-image::after { content: ''; position: absolute; inset: 0; background: rgba(5, 5, 10, var(--bg-dim)); }
 body.has-image #bg .bg-image { opacity: 1; }
-body.mesh-on #bg .bg-image { display: none; } /* картинку рисует WebGL с эффектами */
+/* картинка-заглушка остаётся под канвасом; с эффектом — не показываем её «чистой» до готовности WebGL (была бы вспышка) */
+body.photo-fx:not(.mesh-on):not(.no-webgl) #bg .bg-image { opacity: 0; }
+body.no-webgl.has-image #bg .bg-image { opacity: 1; }
+/* заглушка лежит поверх канваса (так в DOM) — уходит, когда канвас под ней уже проявился */
+body.mesh-on:not(.no-webgl) #bg .bg-image { opacity: 0; transition: opacity 0s .4s; }
 
 /* меш-фон: канвас в пониженном разрешении, браузер растягивает — градиенту это не вредит */
 #bg-mesh { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
-body.mesh-on #bg-mesh { display: block; }
+@keyframes bgIn { from { opacity: 0; } }
+/* канвас проявляется поверх заглушки (CSS-градиент или та же картинка) — без вспышки */
+body.mesh-on #bg-mesh { display: block; animation: bgIn .35s var(--ease); }
 
 #bg .grain {
   position: absolute; inset: -50%; opacity: var(--grain, .07); pointer-events: none;

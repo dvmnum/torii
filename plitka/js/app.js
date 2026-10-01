@@ -255,6 +255,8 @@
     r.setProperty('--radius', settings.radius + 'px');
     r.setProperty('--bg-dim', settings.bgDim);
     document.body.classList.toggle('has-image', !!settings.bgImage);
+    // картинка с эффектом: «чистую» заглушку до готовности WebGL не показываем (см. CSS)
+    document.body.classList.toggle('photo-fx', !!settings.bgImage && !settings.photo.plain);
     document.body.classList.toggle('no-motion', !settings.motion);
     document.querySelector('#bg .bg-image').style.backgroundImage = settings.bgImage ? `url("${settings.bgImage}")` : '';
     r.setProperty('--w-font', FONT_STACK[settings.text.font]);
@@ -358,6 +360,8 @@
       },
     });
     meshBg?.set(bgParams());
+    // без WebGL остаётся CSS-заглушка — тогда картинку показываем как есть
+    document.body.classList.toggle('no-webgl', !meshBg);
   }
   applyTheme();
 
