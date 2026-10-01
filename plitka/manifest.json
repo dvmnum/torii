@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Torii — новая вкладка",
   "short_name": "Torii",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Новая вкладка со свободной раскладкой: двигай и растягивай виджеты как хочешь.",
   "chrome_url_overrides": {
     "newtab": "newtab.html"

@@ -16,6 +16,21 @@ const Store = (() => {
     }
   }
 
+  // несколько ключей одним запросом (при старте вкладки — вместо цепочки get по очереди) → { key: value ?? fallback }
+  async function getMany(defaults) {
+    const keys = Object.keys(defaults);
+    try {
+      if (hasChrome) {
+        const res = await chrome.storage.local.get(keys);
+        return Object.fromEntries(keys.map(k => [k, res[k] ?? defaults[k]]));
+      }
+      return Object.fromEntries(keys.map(k => { const raw = localStorage.getItem(k); return [k, raw ? JSON.parse(raw) : defaults[k]]; }));
+    } catch (e) {
+      console.warn('[store] getMany failed', keys, e);
+      return { ...defaults };
+    }
+  }
+
   async function set(key, value) {
     try {
       if (hasChrome) return await chrome.storage.local.set({ [key]: value });
@@ -32,5 +47,5 @@ const Store = (() => {
     } catch (e) { /* ignore */ }
   }
 
-  return { get, set, remove, hasChrome };
+  return { get, getMany, set, remove, hasChrome };
 })();

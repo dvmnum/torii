@@ -7,6 +7,7 @@ const Liquid = (() => {
   const NS = 'http://www.w3.org/2000/svg';
   let defs = null, seq = 0;
   const live = new Map(); // el → { id, filter, ro, key }
+  const maps = new Map(); // размер карты → data-URL
 
   const ensureDefs = () => {
     if (defs) return defs;
@@ -27,6 +28,9 @@ const Liquid = (() => {
     const k = Math.min(1, 320 / Math.max(w, h)); // карта мельче блока — растянется, она гладкая
     const W = Math.max(8, Math.round(w * k)), H = Math.max(8, Math.round(h * k));
     const R = Math.min(r * k, W / 2, H / 2);
+    // одинаковые блоки (одного размера и скругления) — одна карта: кодирование в PNG тоже не бесплатное
+    const key = `${W}x${H}r${R.toFixed(1)}`;
+    if (maps.has(key)) return maps.get(key);
     const bezel = Math.max(4, Math.min(Math.min(W, H) * 0.38, 46 * k));
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
@@ -41,6 +45,12 @@ const Liquid = (() => {
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const px = x + 0.5, py = y + 0.5;
+        // внутренность (дальше кромки от прямых краёв, не в углу) — без смещения, расстояние не считаем: это почти весь блок
+        if (Math.min(px, W - px, py, H - py) > bezel && ((px > R && px < W - R) || (py > R && py < H - R))) {
+          const i = (y * W + x) * 4;
+          img.data[i] = img.data[i + 1] = img.data[i + 2] = 128; img.data[i + 3] = 255;
+          continue;
+        }
         const d = -sdf(px, py); // расстояние до края внутрь
         let dx = 0, dy = 0;
         if (d < bezel) {
@@ -58,7 +68,10 @@ const Liquid = (() => {
       }
     }
     g.putImageData(img, 0, 0);
-    return c.toDataURL('image/png');
+    const url = c.toDataURL('image/png');
+    if (maps.size > 40) maps.clear();
+    maps.set(key, url);
+    return url;
   }
 
   // Каждая перестройка — новый <filter> с новым id: Chrome не перерисовывает backdrop-filter,

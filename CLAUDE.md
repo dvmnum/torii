@@ -26,7 +26,7 @@ plitka/
   js/widgets.js        хелпер h(), favicon(), ENGINES, реестр Widgets (часы, приветствие, поиск, ссылки, заметки, погода), loadWeather()
   js/engine-icons.js   ENGINE_ICONS — логотипы поисковиков из паков (Simple Icons CC0, Font Awesome CC BY 4.0), сгенерировано, руками не править
   js/content.js        тексты для «Цитаты» (QUOTES, аниме) и «Слова дня» (WORDS)
-  js/widget-art.js     WIDGET_ART — SVG-макеты виджетов для меню «+ Виджет»
+  js/widget-art.js     WIDGET_ART — SVG-макеты виджетов для меню «+ Виджет»; грузится лениво (loadScript) при первом открытии меню
   js/widgets-more.js   вторая партия виджетов: дела, помодоро, частые сайты, недавно закрытые, курсы ЦБ,
                        отсчёт, привычки, цитата, слово дня, картинка — дописывает Widgets через Object.assign
   js/i18n.js           I18N: ru/en — словарь EN + шаблоны, перевод на лету MutationObserver-ом (t, setLang, locale)
@@ -34,13 +34,14 @@ plitka/
   js/mesh.js           Mesh: живой фон на WebGL1 (create/random/cssPreview/lumAt), без библиотек
   js/app.js            IIFE: настройки, тема, сетка, редактор, модалки, панель, тосты, хоткеи
 tests/e2e.mjs          Playwright-смоук (npm test)
+tests/perf.mjs         замер скорости (npm run perf; --profile — топ функций): открытие с тяжёлой картинкой, долгие задачи, цена ползунка
 tests/i18n-scan.mjs    русские строки без английского перевода (npm run i18n) — гонять после новых текстов
 scripts/make-icons.mjs PNG-иконки 16/32/48/128 из plitka/icons/icon.svg (ворота-тории) — после правки svg
 tests/debug.mjs        открыть вкладку расширения и вывести ошибки консоли (npm run debug) — когда e2e падает на старте
 ```
 
 ## Модель данных (chrome.storage.local)
-- `settings` — `{ name, bgImage(dataURL|null), bgDim, accent, glassBlur, glassAlpha, radius, motion, mesh, photo, fx }`. Фон всегда рисует WebGL: источник — меш или своя картинка (текстура). Старый `bg` (CSS-пятна до v0.2) при загрузке превращается в заготовку (`LEGACY_BG`).
+- `settings` — `{ name, bgImage(dataURL|null — в хранилище отдельным ключом `bgImage`, в settings пишется null; `persistSettings()`), bgDim, accent, glassBlur, glassAlpha, radius, motion, mesh, photo, fx }`. Фон всегда рисует WebGL: источник — меш или своя картинка (текстура). Старый `bg` (CSS-пятна до v0.2) при загрузке превращается в заготовку (`LEGACY_BG`).
   - `mesh = { preset?, mode, points: [{ x, y, color:'#rrggbb' }] (2..6, x/y — доли экрана), warp, speed, grain, density }` (числа 0..1), чистится `cleanMesh()`.
     `mode` — узор поверх источника: `mesh` (без узора) | `frosted` (матовое стекло) | `ribbed` | `halftone` | `duotone` | `flow` (неоновые ленты) | `ripple`; всё в одном шейдере (`uMode`, номера в `MODE_NUM`).
     `clear: { x, y, w, h } | null` — «чистая область» без узора; `duo: [тени, света]` — цвета дуотона.
@@ -140,3 +141,12 @@ myWidget: {
 - `chrome.storage.local` без `unlimitedStorage` — 10 МБ; фон-картинка ужимается до 2560px JPEG.
 - Если нужен `chrome.storage.sync`: лимит ~100 КБ всего и 8 КБ на ключ — картинки туда нельзя.
 - Firefox: `chrome.*` работает через совместимость, но `unlimitedStorage` и часть CSS (`backdrop-filter` ок, `color-mix` ок с 113+) проверять отдельно.
+
+## Скорость (вкладка должна «летать»)
+- Замер — `npm run perf` (+ `--profile`). Ориентиры: вкладка готова ≲100 мс, долгих задач при открытии — 0, шаг ползунка — доли мс.
+- При старте всё нужное читается одним `Store.getMany`. Картинка-фон — отдельный ключ `bgImage` (мегабайты), настройки без неё ~1 КБ.
+- `applyTheme()` зовётся на каждый шаг ползунка: CSS-переменные — через `setVar` (пишет, только если изменилось), CSS-картинку фона ставим только при смене, `refreshInkSoon()` вместо пересчёта на каждый шаг.
+- Большие картинки раскодировать вне главного потока: `createImageBitmap(blob, { resizeWidth })` (текстура фона — до ширины экрана, образец для цвета текста — 48×27). `drawImage` + `getImageData` по большой картинке — долгая задача.
+- Замеры размеров блоков — пачкой, потом записи (`refreshInk`): чередование `getBoundingClientRect` и правок классов заставляет пересчитывать раскладку.
+- Карты жидкого стекла кэшируются по размеру; внутренность блока не считается (меняется только кромка).
+- По требованию: панель и кэш миниатюр — при первом открытии панели (`loadThumbs`), меню «+ Виджет» и `widget-art.js` — при первом открытии меню, шрифты — браузер грузит сам, только выбранные.

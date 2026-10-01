@@ -691,7 +691,8 @@ body.no-motion .clock-time .colon { animation: none; }
 .w-pic img.pic-in.on { opacity: 1; transform: none; }
 .pic-loading {
   position: absolute; inset: 0;
-  background: linear-gradient(100deg, rgba(var(--fg), .04) 30%, rgba(var(--fg), .12) 50%, rgba(var(--fg), .04) 70%) 0 0 / 250% 100%;
+  border-radius: inherit;
+  background: linear-gradient(100deg, rgba(var(--fg), .06) 30%, rgba(var(--fg), .14) 50%, rgba(var(--fg), .06) 70%) 0 0 / 250% 100%;
   animation: picShimmer 1.4s linear infinite;
 }
 /* спиннер: кольцо с бегущей дугой; в «Картинке» — по центру заглушки */
@@ -789,39 +790,41 @@ body.editing .editbar { transform: translate(-50%, 0); opacity: 1; }
 @media (max-width: 760px) { .add-menu { grid-template-columns: 1fr 1fr; } }
 
 /* карточки с мини-макетом виджета (js/widget-art.js) */
-.add-menu { width: min(860px, calc(100vw - 32px)); grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; }
-.add-item:has(.add-art) { flex-direction: column; align-items: stretch; gap: 8px; padding: 6px 6px 10px; }
-.add-item:has(.add-art) .add-txt { padding: 0 4px; }
+/* компактные и спокойные: монохром, акцент проявляется только при наведении */
+.add-menu { width: min(720px, calc(100vw - 32px)); grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px; }
+.add-item:has(.add-art) { flex-direction: column; align-items: stretch; gap: 7px; padding: 6px 6px 9px; }
+.add-item:has(.add-art) .add-txt { padding: 0 3px; }
+.add-item:has(.add-art) .add-txt b { font-size: 13px; }
+.add-item:has(.add-art) .add-txt small { font-size: 11px; }
 .add-art {
-  display: block; aspect-ratio: 160 / 96; border-radius: 12px; overflow: hidden; position: relative;
-  background:
-    radial-gradient(120% 90% at 85% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%),
-    radial-gradient(90% 80% at 0% 100%, rgba(90,120,255,.16), transparent 60%),
-    rgb(34,34,37);
-  border: 1px solid rgba(255,255,255,.07);
+  display: block; height: 64px; border-radius: 11px; overflow: hidden; position: relative;
+  background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.06);
+  transition: background .2s, border-color .2s;
 }
 .add-art svg { width: 100%; height: 100%; display: block; stroke: none; stroke-width: 1; transition: transform .35s var(--ease); }
-.add-item:hover .add-art svg { transform: scale(1.05); }
-.add-item:hover .add-art { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
-.add-art .gl { fill: rgba(255,255,255,.07); stroke: rgba(255,255,255,.14); }
-.add-art .fg { fill: rgba(255,255,255,.92); }
+.add-item:hover .add-art { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.1); }
+.add-item:hover .add-art svg { transform: scale(1.04); }
+.add-art .gl { fill: rgba(255,255,255,.045); stroke: none; } /* без второй рамки — рамка уже у самой карточки */
+.add-art .fg { fill: rgba(255,255,255,.78); }
 .add-art .mu { fill: rgba(255,255,255,.3); }
 .add-art .mu-t { fill: rgba(255,255,255,.45); }
-.add-art .ac { fill: var(--accent); }
+.add-art .ac { fill: rgba(255,255,255,.62); transition: fill .2s; }
+.add-item:hover .add-art .ac { fill: var(--accent); }
 .add-art .ln { fill: none; stroke: rgba(255,255,255,.45); stroke-width: 1.4; }
 .add-art .ln2 { fill: none; stroke: rgba(255,255,255,.6); stroke-width: 2; stroke-linecap: round; }
 .add-art .ck { fill: none; stroke: #111; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .add-art .play { fill: #111; }
 .add-art .ring { fill: none; stroke: rgba(255,255,255,.12); stroke-width: 4; }
 .add-art .ring2 { fill: none; stroke: rgba(255,255,255,.25); stroke-width: 1.3; }
-.add-art .arc { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; }
-.add-art .arc2 { fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-.add-art .ray { stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round; }
+.add-art .arc { fill: none; stroke: rgba(255,255,255,.6); stroke-width: 4; stroke-linecap: round; }
+.add-art .arc2 { fill: none; stroke: rgba(255,255,255,.6); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.add-art .ray { stroke: rgba(255,255,255,.62); stroke-width: 2.4; stroke-linecap: round; }
 .add-art .shine { fill: rgba(255,255,255,.12); }
-.add-art .up { fill: #3ddc84; }
-.add-art .dn { fill: #ff5c7a; }
-.add-art .spark { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.add-art .sky { fill: color-mix(in srgb, var(--accent) 45%, rgb(40,50,90)); }
+.add-art .up, .add-art .dn { fill: rgba(255,255,255,.45); }
+.add-art .spark { fill: none; stroke: rgba(255,255,255,.6); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.add-item:hover .add-art :is(.arc, .arc2, .spark) { stroke: var(--accent); }
+.add-item:hover .add-art .ray { stroke: var(--accent); }
+.add-art .sky { fill: rgba(255,255,255,.1); }
 .add-art .edge { fill: none; stroke: rgba(255,255,255,.18); }
 .add-art text { font-family: 'Manrope', sans-serif; }
 .add-art .t-clock { font-size: 36px; font-weight: 250; letter-spacing: -1.5px; }
@@ -1029,6 +1032,8 @@ body.bg-fade #bg-mesh, body.bg-fade #bg .bg-image { opacity: 0 !important; }
   font-size: 12px; font-weight: 600; color: var(--ink-2); transition: background .2s, border-color .2s;
 }
 .tab-icon img { width: 28px; height: 28px; border-radius: 6px; }
+.tab-icon .ti-upload { display: grid; place-items: center; width: 28px; height: 28px; font-size: 26px; color: var(--ink-3); }
+.tab-icon:hover .ti-upload { color: var(--ink); }
 .tab-icon:hover { background: rgba(255,255,255,.08); color: var(--ink); }
 .tab-icon.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--ink); }
 .tab-extra { width: 90px; text-align: center; font-size: 18px !important; }

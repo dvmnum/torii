@@ -1,6 +1,6 @@
 {
   "name": "torii",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "description": "Новая вкладка со свободной раскладкой виджетов (Chrome MV3)",
@@ -8,6 +8,7 @@
     "test": "node tests/e2e.mjs",
     "debug": "node tests/debug.mjs",
     "i18n": "node tests/i18n-scan.mjs",
+    "perf": "node tests/perf.mjs",
     "zip": "node -e \"console.log('TODO: упаковка plitka/ в zip для стора')\""
   },
   "devDependencies": {

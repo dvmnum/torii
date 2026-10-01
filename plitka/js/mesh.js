@@ -473,26 +473,43 @@ void main() {
       texSrc = srcUrl;
       imgReady = false;
       if (!srcUrl) return;
-      const img = new Image();
-      img.onload = () => {
+      const upload = (src, w, h) => {
         if (texSrc !== srcUrl) return; // пока грузилась, выбрали другую
         gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
-        imgAsp = img.width / img.height;
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, src);
+        imgAsp = w / h;
         imgReady = true;
         if (params) draw();
       };
-      img.src = srcUrl;
+      // картинку раскодируем вне главного потока (createImageBitmap) и сразу ужимаем до размера экрана:
+      // иначе texImage2D раскодировал 2560px синхронно — долгая задача ~90 мс при открытии вкладки
+      const maxW = Math.min(2560, Math.ceil(innerWidth * (devicePixelRatio || 1)));
+      fetch(srcUrl).then(r => r.blob()).then(async (blob) => {
+        const probe = await createImageBitmap(blob);
+        const k = Math.min(1, maxW / probe.width);
+        if (k >= 1) return upload(probe, probe.width, probe.height);
+        const w = probe.width, h = probe.height;
+        probe.close();
+        const bmp = await createImageBitmap(blob, { resizeWidth: Math.round(w * k), resizeHeight: Math.round(h * k), resizeQuality: 'high' });
+        upload(bmp, w, h);
+      }).catch(() => {
+        const img = new Image(); // запасной путь — как раньше
+        img.onload = () => upload(img, img.width, img.height);
+        img.src = srcUrl;
+      });
     };
 
     const detailed = () => params.image || (params.mode && params.mode !== 'mesh') || params.fx?.scan > 0 || params.fx?.particles > 0;
+    // размер канваса на экране — из ResizeObserver, а не clientWidth в каждом кадре (тот заставлял браузер
+    // пересчитывать раскладку посреди отрисовки, если в DOM что-то поменялось)
+    let cssW = canvas.clientWidth, cssH = canvas.clientHeight;
     const resize = () => {
       let w, h;
       if (size) [w, h] = size;
       else {
         const s = detailed() ? Math.min(1, scale * 2.4) : scale;
-        w = Math.round(canvas.clientWidth * s);
-        h = Math.round(canvas.clientHeight * s);
+        w = Math.round(cssW * s);
+        h = Math.round(cssH * s);
       }
       w = Math.max(2, w); h = Math.max(2, h);
       if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
@@ -558,7 +575,7 @@ void main() {
       if (!animated() && raf) { cancelAnimationFrame(raf); raf = 0; }
     };
 
-    const ro = size ? null : new ResizeObserver(() => { if (params) draw(); });
+    const ro = size ? null : new ResizeObserver(([e]) => { cssW = e.contentRect.width; cssH = e.contentRect.height; if (params) draw(); });
     ro?.observe(canvas);
 
     let once = 0;

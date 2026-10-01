@@ -20,6 +20,17 @@ const ctx = await chromium.launchPersistentContext(userDir, {
 // подсовываем ответы Open-Meteo, чтобы тест не зависел от сети
 await ctx.route('https://geocoding-api.open-meteo.com/**', r => r.fulfill({ json: { results: [{ name: 'Москва', latitude: 55.75, longitude: 37.62 }] } }));
 await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ json: { current: { temperature_2m: 11.4, weather_code: 2 }, daily: { temperature_2m_max: [14.2], temperature_2m_min: [7.8] } } }));
+// тест подкладывает настройки целиком ({ settings: {...} }); картинка-фон теперь живёт отдельным ключом bgImage —
+// если в подложенных настройках картинки нет, убираем и её ключ (как было бы при «settings целиком»)
+await ctx.addInitScript(() => {
+  const area = globalThis.chrome?.storage?.local;
+  if (!area) return;
+  const set = area.set.bind(area);
+  area.set = (items, ...rest) => {
+    if (items && 'settings' in items && !('bgImage' in (items.settings || {})) && !('bgImage' in items)) area.remove('bgImage');
+    return set(items, ...rest);
+  };
+});
 const errors = [];
 const page = await ctx.newPage();
 page.on('console', m => { if (['error', 'warning'].includes(m.type())) errors.push(`[${m.type()}] ${m.text()}`); });
@@ -736,7 +747,7 @@ await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 await freshLayout();
 await page.reload();
 await page.waitForTimeout(1200);
-check(await page.title() === 'Новая вкладка', 'вкладка: название по умолчанию');
+check(await page.title() === 'Torii', 'вкладка: название по умолчанию — как приложение');
 await page.click('#btn-settings');
 await page.waitForTimeout(300);
 await ptab('tab');
@@ -1186,7 +1197,7 @@ await page.evaluate(() => chrome.storage.local.set({
 await page.reload();
 await page.waitForTimeout(1500);
 const en = await page.evaluate(() => ({ greet: document.querySelector('.greet').textContent, ph: document.querySelector('[data-search]').placeholder, lang: document.documentElement.lang, title: document.title }));
-check(en.lang === 'en' && /^Good (morning|afternoon|evening|night), Vova$/.test(en.greet) && /^Search [A-Za-z]/.test(en.ph) && en.title === 'New Tab', `english: приветствие, поиск, заголовок («${en.greet}», «${en.ph}», «${en.title}»)`);
+check(en.lang === 'en' && /^Good (morning|afternoon|evening|night), Vova$/.test(en.greet) && /^Search [A-Za-z]/.test(en.ph) && en.title === 'Torii', `english: приветствие, поиск, заголовок («${en.greet}», «${en.ph}», «${en.title}»)`);
 await page.click('#btn-settings');
 await page.waitForTimeout(400);
 const cyr = await page.evaluate(() => {

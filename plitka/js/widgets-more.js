@@ -541,7 +541,8 @@ Object.assign(Widgets, {
         const img = h('img', { alt: '', referrerpolicy: 'no-referrer', src, class: 'pic-in' });
         if (!frame.querySelector('img')) frame.replaceChildren(h('div', { class: 'pic-loading' }), more);
         frame.classList.add('busy');
-        img.decode().then(() => {
+        // сервис завис — через 15 с честно говорим, а не крутим спиннер вечно
+        Promise.race([img.decode(), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 15000))]).then(() => {
           if (!alive || my !== seq) return;
           cap.textContent = caption || '';
           cap.hidden = !caption;

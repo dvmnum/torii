@@ -61,7 +61,7 @@
     mesh: DEFAULT_MESH,
     photo: DEFAULT_PHOTO,
     fx: Mesh.FX_DEFAULTS,
-    tab: { title: 'Новая вкладка', icon: 'logo', emoji: '🌙', letter: 'T', image: null },
+    tab: { title: 'Torii', icon: 'logo', emoji: '🌙', letter: 'T', image: null }, // по умолчанию вкладка — как приложение: название и иконка Torii
     text: { font: 'manrope', shadow: 'none' },
     slides: { on: false, items: [], every: 'tab', order: 'seq', idx: -1, at: 0 },
     lang: 'auto', // язык интерфейса: auto (как в браузере) | ru | en
@@ -101,7 +101,13 @@
   const geom = (n) => ({ x: n.x, y: n.y, w: n.w, h: n.h });
   const stripGeom = (list) => list.map(({ id, type, data }) => ({ id, type, data }));
 
-  let settings = cleanSettings(await Store.get('settings', {}));
+  // всё для первого кадра — одним запросом. Картинка-фон лежит отдельным ключом bgImage (мегабайты):
+  // иначе её перечитывали бы и перезаписывали вместе с настройками на каждый шаг любого ползунка
+  const boot = await Store.getMany({ settings: {}, bgImage: null, widgets: null, layouts: null });
+  let settings = cleanSettings(boot.settings);
+  persistSettings.img = boot.bgImage;
+  if (!settings.bgImage && typeof boot.bgImage === 'string' && boot.bgImage.startsWith('data:image/')) settings.bgImage = boot.bgImage;
+  if (boot.settings?.bgImage) persistSettings(); // старый формат (картинка внутри settings) — разносим по ключам
   I18N.setLang(settings.lang); // до отрисовки: дальше переводчик ловит всё, что появляется в DOM
   // layout — общие для всех экранов виджеты { id, type, data } + x/y/w/h текущего диапазона;
   // layouts — { md?, lg? }: позиции { [id]: { x, y, w, h } }
@@ -110,7 +116,7 @@
   let bucket = bucketOf(window.innerWidth);
 
   async function loadState() {
-    let st = cleanState(await Store.get('widgets', null), await Store.get('layouts', null));
+    let st = cleanState(boot.widgets, boot.layouts);
     if (!st) {
       // миграция с v0.1: одна раскладка на все экраны → становится lg
       const legacy = fromLegacy(await Store.get('layout', null));
@@ -197,7 +203,8 @@
   function cleanTab(raw) {
     const t = { ...DEFAULT_SETTINGS.tab };
     if (!raw || typeof raw !== 'object') return t;
-    if (typeof raw.title === 'string') t.title = raw.title.slice(0, 80);
+    // «Новая вкладка» — старое название по умолчанию (его никто не вводил сам) → как приложение
+    if (typeof raw.title === 'string') t.title = raw.title === 'Новая вкладка' ? 'Torii' : raw.title.slice(0, 80);
     if (TAB_ICONS.some(([k]) => k === raw.icon)) t.icon = raw.icon;
     if (typeof raw.emoji === 'string' && raw.emoji.trim()) t.emoji = [...raw.emoji.trim()].slice(0, 4).join('');
     if (typeof raw.letter === 'string' && raw.letter.trim()) t.letter = [...raw.letter.trim()].slice(0, 2).join('');
@@ -284,34 +291,46 @@
   }
 
   // ---------- тема ----------
+  // applyTheme зовётся на каждый шаг ползунка — трогаем только то, что правда поменялось:
+  // любая запись CSS-переменной на :root пересчитывает стили всех блоков, а картинка-фон — мегабайты data-URL
+  const themeVars = new Map();
+  let shownBgImage;
+  function setVar(k, v) {
+    v = String(v);
+    if (themeVars.get(k) === v) return;
+    themeVars.set(k, v);
+    document.documentElement.style.setProperty(k, v);
+  }
   function applyTheme() {
-    const r = document.documentElement.style;
-    r.setProperty('--accent', settings.accent);
-    r.setProperty('--glass-blur', settings.glassBlur + 'px');
-    r.setProperty('--glass-alpha', settings.glassAlpha);
-    r.setProperty('--glass-tone', settings.glassTone);
-    r.setProperty('--radius', settings.radius + 'px');
-    r.setProperty('--bg-dim', settings.bgDim);
+    setVar('--accent', settings.accent);
+    setVar('--glass-blur', settings.glassBlur + 'px');
+    setVar('--glass-alpha', settings.glassAlpha);
+    setVar('--glass-tone', settings.glassTone);
+    setVar('--radius', settings.radius + 'px');
+    setVar('--bg-dim', settings.bgDim);
+    setVar('--w-font', FONT_STACK[settings.text.font]);
     document.body.classList.toggle('has-image', !!settings.bgImage);
     // картинка с эффектом: «чистую» заглушку до готовности WebGL не показываем (см. CSS)
     document.body.classList.toggle('photo-fx', !!settings.bgImage && !settings.photo.plain);
     document.body.classList.toggle('no-motion', !settings.motion);
-    document.querySelector('#bg .bg-image').style.backgroundImage = settings.bgImage ? `url("${settings.bgImage}")` : '';
-    r.setProperty('--w-font', FONT_STACK[settings.text.font]);
-    document.body.dataset.ts = settings.text.shadow;
-    document.body.dataset.elev = settings.elev;
+    if (shownBgImage !== settings.bgImage) {
+      shownBgImage = settings.bgImage;
+      document.querySelector('#bg .bg-image').style.backgroundImage = settings.bgImage ? `url("${settings.bgImage}")` : '';
+    }
+    if (document.body.dataset.ts !== settings.text.shadow) document.body.dataset.ts = settings.text.shadow;
+    if (document.body.dataset.elev !== settings.elev) document.body.dataset.elev = settings.elev;
     applyMesh();
     applyTab();
-    // фон поменялся — пересчитать «авто»-цвет текста у блоков (после инициализации сетки)
-    setTimeout(refreshInk, 60);
+    // фон поменялся — пересчитать «авто»-цвет текста у блоков (после инициализации сетки), один раз после серии изменений
+    refreshInkSoon();
   }
 
   // ---------- вкладка: заголовок и иконка ----------
   // В заголовке можно {время}, {дата}, {день}. Помодоро временно занимает его через Tab.set (widgets-more.js).
   function tabTitle() {
     const d = new Date();
-    // название по умолчанию — на языке интерфейса; подстановки понимаются и по-английски ({time}, {date}, {day})
-    const t = (settings.tab.title === 'Новая вкладка' ? I18N.t('Новая вкладка') : settings.tab.title || '')
+    // подстановки понимаются и по-английски ({time}, {date}, {day})
+    const t = (settings.tab.title || '')
       .replace(/\{(время|time)\}/gi, d.toLocaleTimeString(I18N.locale(), { hour: '2-digit', minute: '2-digit' }))
       .replace(/\{(дата|date)\}/gi, d.toLocaleDateString(I18N.locale(), { day: 'numeric', month: 'long' }))
       .replace(/\{(день|day)\}/gi, d.toLocaleDateString(I18N.locale(), { weekday: 'long' }));
@@ -438,7 +457,17 @@
     Store.set('widgets', stripGeom(layout));
     Store.set('layouts', layouts);
   }, 250);
-  const saveSettings = debounce(() => Store.set('settings', settings), 250);
+  const saveSettings = debounce(() => persistSettings(), 250);
+  // настройки — без картинки; картинка (ключ bgImage) пишется, только когда сменилась. persistSettings.img — что уже лежит
+  function persistSettings(s = settings) {
+    const { bgImage, ...rest } = s;
+    const jobs = [Store.set('settings', { ...rest, bgImage: null })]; // null: картинка (если есть) — в своём ключе
+    if (bgImage !== persistSettings.img) {
+      persistSettings.img = bgImage;
+      jobs.push(bgImage ? Store.set('bgImage', bgImage) : Store.remove('bgImage'));
+    }
+    return Promise.all(jobs);
+  }
 
   function ctxFor(item) {
     return {
@@ -473,7 +502,7 @@
     const mn = minOf(item), node = rec.el.gridstackNode;
     if (node && (node.minW !== mn.w || node.minH !== mn.h)) grid.update(rec.el, { minW: mn.w, minH: mn.h });
     rec.inst = Widgets[item.type].render(rec.body, item.data, ctxFor(item)) || null;
-    applyInk(item);
+    if (!mounting) applyInk(item); // при монтаже всех блоков — один общий refreshInk в конце (без пересчёта раскладки на каждом)
     applyLiquid(item);
   }
 
@@ -509,8 +538,8 @@
     return Mesh.lumAt(settings.mesh, x, y, innerWidth / innerHeight);
   }
   // → { mean, spread } — средняя яркость под блоком и разброс (пёстрый фон: и белое, и чёрное сразу)
-  function lumUnder(el) {
-    const r = el.getBoundingClientRect();
+  function lumUnder(el, rect) {
+    const r = rect || el.getBoundingClientRect();
     let sum = 0, lo = 1, hi = 0;
     for (const fx of [0.1, 0.3, 0.5, 0.7, 0.9]) for (const fy of [0.2, 0.5, 0.8]) {
       const l = bgLum((r.left + r.width * fx) / innerWidth, (r.top + r.height * fy) / innerHeight);
@@ -520,11 +549,11 @@
   }
   const hexLum = (hex) => { const n = parseInt(hex.slice(1), 16); return (0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255; };
 
-  function applyInk(item) {
+  function applyInk(item, rect) {
     const rec = live.get(item.id);
     if (!rec) return;
     let dark = item.data.ink === 'dark';
-    const { mean, spread } = lumUnder(rec.el);
+    const { mean, spread } = lumUnder(rec.el, rect);
     // пёстрый фон под стеклом — стекло выравнивает яркость подложки (сжимает контраст), и любой цвет текста читается
     // в основном светлый фон с тёмными пятнами — не «пёстрый»: там лучше тёмный текст на светлом стекле, чем затемнять белое в серое
     const mixed = !!item.data.glass && !item.data.tint && spread > 0.45 && mean < 0.62;
@@ -538,22 +567,30 @@
     }
     rec.shell.classList.toggle('ink-dark', dark);
   }
-  function refreshInk() { for (const it of layout) applyInk(it); }
+  // сначала все замеры, потом все записи классов — иначе каждый блок заставлял браузер пересчитать раскладку
+  function refreshInk() {
+    const rects = layout.map(it => live.get(it.id)?.el.getBoundingClientRect());
+    layout.forEach((it, i) => applyInk(it, rects[i]));
+  }
+  // через function и свойство — зовётся из applyTheme ещё до этой строки (let здесь дал бы TDZ)
+  function refreshInkSoon() { clearTimeout(refreshInkSoon.t); refreshInkSoon.t = setTimeout(refreshInk, 80); }
 
   // уменьшенная копия картинки-фона для «авто»-текста
   function sampleImage() {
     imgLum = null;
     if (!settings.bgImage) return;
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement('canvas');
-      c.width = 48; c.height = 27;
-      const g = c.getContext('2d');
-      g.drawImage(img, 0, 0, c.width, c.height);
-      imgLum = { w: c.width, h: c.height, data: g.getImageData(0, 0, c.width, c.height).data };
+    const src = settings.bgImage;
+    // ужимаем до 48×27 вне главного потока (createImageBitmap): drawImage большой картинки + getImageData
+    // раскодировали её синхронно — долгая задача ~90 мс при каждом открытии вкладки
+    fetch(src).then(r => r.blob()).then(b => createImageBitmap(b, { resizeWidth: 48, resizeHeight: 27, resizeQuality: 'medium' })).then((bmp) => {
+      if (settings.bgImage !== src) return;
+      const c = h('canvas', { width: 48, height: 27 });
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(bmp, 0, 0);
+      bmp.close();
+      imgLum = { w: 48, h: 27, data: g.getImageData(0, 0, 48, 27).data };
       refreshInk();
-    };
-    img.src = settings.bgImage;
+    }).catch((e) => console.warn('[plitka] не смог прочитать картинку-фон', e));
   }
 
   // pos — где стоять; без неё gridstack сам ищет свободное место
@@ -688,17 +725,28 @@
 
   // добавление
   const addMenu = document.getElementById('add-menu');
-  // карточки по группам: мини-макет виджета (widget-art.js), название, что умеет
-  for (const [g, gTitle] of WIDGET_GROUPS) {
-    const items = Object.entries(Widgets).filter(([, def]) => (def.group || 'mood') === g);
-    if (!items.length) continue;
-    addMenu.append(h('div', { class: 'add-group' }, gTitle),
-      ...items.map(([type, def]) => h('button', { class: 'add-item', type: 'button', 'data-type': type, onclick: () => { addWidget(type); closeAddMenu(); } },
-        WIDGET_ART[type] ? h('span', { class: 'add-art', html: WIDGET_ART[type] }) : h('span', { class: 'add-ico', html: def.icon || '' }),
-        h('span', { class: 'add-txt' }, h('b', {}, def.title), h('small', {}, def.desc || '')))));
+  // карточки по группам: мини-макет виджета (widget-art.js), название, что умеет — собираем при первом открытии меню
+  // скрипт по требованию (MV3: только свои файлы, тегом <script src>) — для того, что нужно не при каждом открытии вкладки
+  function loadScript(src) {
+    loadScript.p ??= {};
+    return loadScript.p[src] ??= new Promise((ok, fail) => document.head.append(h('script', { src, onload: ok, onerror: fail })));
+  }
+  async function buildAddMenu() {
+    if (addMenu.childElementCount) return;
+    await loadScript('js/widget-art.js').catch(() => {}); // картинки меню — только когда меню открыли
+    if (addMenu.childElementCount) return; // пока грузился скрипт, меню уже собрал другой клик
+    const ART = typeof WIDGET_ART === 'undefined' ? {} : WIDGET_ART;
+    for (const [g, gTitle] of WIDGET_GROUPS) {
+      const items = Object.entries(Widgets).filter(([, def]) => (def.group || 'mood') === g);
+      if (!items.length) continue;
+      addMenu.append(h('div', { class: 'add-group' }, gTitle),
+        ...items.map(([type, def]) => h('button', { class: 'add-item', type: 'button', 'data-type': type, onclick: () => { addWidget(type); closeAddMenu(); } },
+          ART[type] ? h('span', { class: 'add-art', html: ART[type] }) : h('span', { class: 'add-ico', html: def.icon || '' }),
+          h('span', { class: 'add-txt' }, h('b', {}, def.title), h('small', {}, def.desc || '')))));
+    }
   }
   const closeAddMenu = () => addMenu.classList.remove('open');
-  document.getElementById('btn-add').addEventListener('click', (e) => { e.stopPropagation(); addMenu.classList.toggle('open'); });
+  document.getElementById('btn-add').addEventListener('click', async (e) => { e.stopPropagation(); await buildAddMenu(); requestAnimationFrame(() => addMenu.classList.toggle('open')); });
   document.addEventListener('click', (e) => { if (!addMenu.contains(e.target)) closeAddMenu(); });
 
   function addWidget(type) {
@@ -1220,7 +1268,9 @@
   panel.addEventListener('pointerdown', (e) => { if (e.target.matches('input[type=range]')) panelPeek(e.target); });
   window.addEventListener('pointerup', () => { if (panel.classList.contains('peek') && !closePicker) panelPeek(null); });
 
-  function openSettings() { renderSettings(); panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false'); }
+  function openSettings() {
+    loadThumbs().then(() => { renderSettings(); panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false'); });
+  }
   // клик мимо панели закрывает её (но не клики по её поповерам: списки, выбор цвета, тосты, док)
   document.addEventListener('mousedown', (e) => {
     if (!panel.classList.contains('open') || panel.contains(e.target)) return;
@@ -1444,7 +1494,10 @@
   // в простое браузера и сохраняем: со второго раза они берутся из хранилища.
   const THUMBS_KEY = 'thumbs:' + Mesh.PRESETS.length + ':' + JSON.stringify(Mesh.PRESETS).length;
   const thumbs = new Map();
-  Store.get(THUMBS_KEY, null).then((saved) => { if (saved) for (const k in saved) if (!thumbs.has(k)) thumbs.set(k, saved[k]); });
+  // кэш миниатюр нужен только панели — читаем при первом её открытии, а не при каждом открытии вкладки
+  function loadThumbs() {
+    return loadThumbs.p ??= Store.get(THUMBS_KEY, null).then((saved) => { if (saved) for (const k in saved) if (!thumbs.has(k)) thumbs.set(k, saved[k]); });
+  }
   const thumbQueue = [];
   function presetThumb(p) {
     if (!thumbs.has(p.id) && !thumbQueue.includes(p)) { thumbQueue.push(p); drawThumbsLater(); }
@@ -1562,7 +1615,7 @@
               h('button', { type: 'button', class: 'pill small', onclick: exportAll }, h('span', { class: 'btn-ico', html: ICO.down }), 'Сохранить файл'),
               h('button', { type: 'button', class: 'pill small', onclick: () => pickFile('application/json', importAll) }, h('span', { class: 'btn-ico', html: ICO.up }), 'Загрузить'))),
           section('Язык',
-            segmented([['auto', 'Как в браузере'], ['ru', 'Русский'], ['en', 'English']], settings.lang, (v) => { settings.lang = v; Store.set('settings', settings).then(() => location.reload()); }).el),
+            segmented([['auto', 'Авто'], ['ru', 'Русский'], ['en', 'English']], settings.lang, (v) => { settings.lang = v; persistSettings().then(() => location.reload()); }).el),
           section('Клавиши',
             h('dl', { class: 'hotkeys' },
               ...[[kbd('E'), 'Изменить раскладку'], [kbd('/'), 'Перейти к поиску'], [kbd('Esc'), 'Закрыть панель, выйти из редактора'],
@@ -1723,7 +1776,7 @@
   // секция «Вкладка»: название с подстановками и иконка — плитки с живым превью
   function tabSettings() {
     const setTab = (patch) => setSetting('tab', { ...settings.tab, ...patch });
-    const title = h('input', { type: 'text', value: settings.tab.title, placeholder: 'Новая вкладка', 'data-tab': 'title' });
+    const title = h('input', { type: 'text', value: settings.tab.title, placeholder: 'Torii', 'data-tab': 'title' });
     title.addEventListener('input', debounce(() => setTab({ title: title.value }), 250));
     const tokens = h('div', { class: 'tab-tokens' }, 'Вставить:', ['{время}', '{дата}', '{день}'].map(tk =>
       h('button', {
@@ -1742,7 +1795,12 @@
       h('button', {
         type: 'button', class: 'tab-icon' + (settings.tab.icon === k ? ' active' : ''), 'data-icon': k, title: label,
         onclick: () => { setTab({ icon: k }); renderSettings(); },
-      }, h('img', { src: tabIcon(k), alt: '' }), h('span', {}, label))));
+      },
+      // «Своя» без картинки — значок загрузки, а не та же иконка Torii (выглядело как дубль)
+      k === 'image' && !settings.tab.image
+        ? h('span', { class: 'ti-upload', html: '<svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4.5" stroke-dasharray="3 2.6"/><path d="M12 15.5V8.5M9 11.5l3-3 3 3"/></svg>' })
+        : h('img', { src: tabIcon(k), alt: '' }),
+      h('span', {}, label))));
 
     // поле под выбранный вариант
     let extra = null;
@@ -1938,7 +1996,8 @@
       const src = d.widgets ? d : fromLegacy(d.layout); // v1: один общий layout
       const st = cleanState(src.widgets, src.layouts);
       if (!st) throw new Error('no widgets');
-      await Store.set('settings', cleanSettings(d.settings));
+      persistSettings.img = undefined; // картинку из бэкапа записать заново (или убрать)
+      await persistSettings(cleanSettings(d.settings));
       await Store.set('widgets', stripGeom(st.widgets));
       await Store.set('layouts', st.layouts);
       await Store.remove('layout');
@@ -1983,5 +2042,6 @@
 
   slideshowOnLoad(); // после всего: слайд-шоу само решит, пора ли сменить фон
   requestAnimationFrame(() => document.body.classList.remove('is-loading'));
+  console.info(`[plitka] вкладка готова через ${Math.round(performance.now())} мс`);
   window.__plitka = { grid, get layout() { return layout; }, get layouts() { return layouts; }, get bucket() { return bucket; }, settings: () => settings, setEditing };
 })();

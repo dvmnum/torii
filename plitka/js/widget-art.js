@@ -8,7 +8,8 @@ const WIDGET_ART = (() => {
   const check = (x, y) => `<rect class="ac" x="${x}" y="${y}" width="11" height="11" rx="3.5"/><path class="ck" d="M${x + 2.8} ${y + 5.8}l2.2 2.2 3.6-4.4"/>`;
   const box = (x, y) => `<rect class="ln" x="${x + .6}" y="${y + .6}" width="9.8" height="9.8" rx="3"/>`;
   // плитка-ссылка «фирменного» цвета
-  const tile = (x, y, c, s = 20) => `<rect x="${x}" y="${y}" width="${s}" height="${s}" rx="6" fill="${c}" fill-opacity=".9"/><rect x="${x}" y="${y}" width="${s}" height="${s}" rx="6" class="shine"/>`;
+  // плитка-ссылка: монохром разной плотности (цвета брендов в меню рябили)
+  const tile = (x, y, o, s = 20) => `<rect x="${x}" y="${y}" width="${s}" height="${s}" rx="6" fill="#fff" fill-opacity="${o}"/>`;
 
   return {
     clock: svg(`<text class="fg t-clock" x="80" y="56" text-anchor="middle">21:07</text>${bar(50, 66, 60)}<circle class="ac" cx="45" cy="68.5" r="2"/>`),
@@ -31,16 +32,16 @@ const WIDGET_ART = (() => {
     search: svg(`<rect class="gl" x="10" y="33" width="140" height="30" rx="15"/><circle class="ln2" cx="28" cy="47" r="5.5"/><path class="ln2" d="M32 51l4 4"/>` +
       `${bar(44, 45.5, 58)}<circle class="ac" cx="134" cy="48" r="9"/><path class="ck" d="M130.5 48h6M134 45l3 3-3 3"/>`),
 
-    links: svg(`${card(10, 22, 140, 52)}` + ['#ff3b5c', '#2aabee', '#1db954', '#ff9f1c', '#9b8cff'].map((c, i) => tile(22 + i * 25, 32, c, 18) + bar(24 + i * 25, 56, 14, 'mu', 3)).join('')),
+    links: svg(`${card(10, 22, 140, 52)}` + [.5, .3, .42, .26, .36].map((c, i) => tile(22 + i * 25, 32, c, 18) + bar(24 + i * 25, 56, 14, 'mu', 3)).join('')),
 
-    topsites: svg(`${card()}` + ['#ff3b5c', '#8b949e', '#fc3f1d', '#0077ff', '#10a37f', '#e1306c', '#ffcc00', '#5865f2']
+    topsites: svg(`${card()}` + [.5, .28, .4, .32, .24, .44, .3, .36]
       .map((c, i) => tile(31 + (i % 4) * 26, 22 + Math.floor(i / 4) * 28, c, 18)).join('') +
       `<path class="ac" d="M131 18l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/>`),
 
     bookmarks: svg(`${card(8, 30, 144, 36)}<path class="ac" d="M18 40a2 2 0 0 1 2-2h5l2 2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2z" fill-opacity=".85"/>` +
-      ['#ff3b5c', '#2aabee', '#1db954'].map((c, i) => `<circle cx="${52 + i * 34}" cy="48" r="5" fill="${c}"/>${bar(60 + i * 34, 45.5, 18)}`).join('')),
+      [.6, .4, .5].map((c, i) => `<circle cx="${52 + i * 34}" cy="48" r="5" fill="#fff" fill-opacity="${c}"/>${bar(60 + i * 34, 45.5, 18)}`).join('')),
 
-    recent: svg(`${card()}` + ['#ff3b5c', '#2aabee', '#ff9f1c'].map((c, i) => `<circle cx="32" cy="${30 + i * 18}" r="5" fill="${c}"/>${bar(44, 27.5 + i * 18, [70, 52, 62][i], i ? 'mu' : 'fg')}`).join('') +
+    recent: svg(`${card()}` + [.6, .4, .5].map((c, i) => `<circle cx="32" cy="${30 + i * 18}" r="5" fill="#fff" fill-opacity="${c}"/>${bar(44, 27.5 + i * 18, [70, 52, 62][i], i ? 'mu' : 'fg')}`).join('') +
       `<path class="arc2" d="M128 40a10 10 0 1 1-9 -6"/><path class="arc2" d="M117 29l2 5 5-2"/>`),
 
     weather: svg(`<g class="sun"><circle class="ac" cx="54" cy="40" r="12"/>${[...Array(8)].map((_, i) => `<path class="ray" d="M54 22v-5" transform="rotate(${i * 45} 54 40)"/>`).join('')}</g>` +
