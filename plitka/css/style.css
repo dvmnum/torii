@@ -273,7 +273,7 @@ body.no-motion .clock-time .colon { animation: none; }
 
 /* иконка поисковика: монохромная, по клику — список */
 .engine {
-  flex: none; height: calc(100% - 8px); aspect-ratio: 1; border-radius: 50%; padding: 0;
+  flex: none; height: calc(100% - 8px); border-radius: 50%; padding: 0;
   border: 0; background: rgba(var(--fg), .07); color: var(--ink-2);
   display: grid; place-items: center; font-size: clamp(14px, calc(var(--sh) * .42), 22px);
   transition: background .2s, color .2s, transform .2s var(--ease);
@@ -298,25 +298,33 @@ body.no-motion .clock-time .colon { animation: none; }
 .search-calc[hidden] { display: none; }
 
 /* Enter и призрак — тихие круглые иконки без рамок; Enter подсвечивается, когда есть что искать */
+/* Иконки справа — тихие; при наведении на строку раскрываются подписи («Инкогнито», «Enter»), у поисковика — шеврон */
 .search-go, .search-ghost {
-  flex: none; height: calc(100% - 10px); max-height: 34px; aspect-ratio: 1; padding: 0; border: 0; border-radius: 50%;
-  display: grid; place-items: center; font-size: clamp(14px, calc(var(--sh) * .38), 18px);
-  background: none; color: var(--ink-3); transition: color .2s, background .2s, transform .15s var(--ease);
+  flex: none; height: calc(100% - 10px); max-height: 34px; min-width: calc(min(var(--sh), 100cqh - 4px) - 10px); padding: 0 8px; border: 0; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0; font-size: clamp(14px, calc(var(--sh) * .38), 18px);
+  background: none; color: var(--ink-3); transition: color .2s, background .2s, transform .15s var(--ease), gap .25s var(--ease);
 }
+.btn-label {
+  font: 600 12px/1 'Manrope', sans-serif; white-space: nowrap; overflow: hidden;
+  max-width: 0; opacity: 0; transition: max-width .3s var(--ease), opacity .2s;
+}
+.w-search:hover .btn-label, .w-search:focus-within .btn-label { max-width: 90px; opacity: 1; }
+.w-search:hover .search-go, .w-search:hover .search-ghost,
+.w-search:focus-within .search-go, .w-search:focus-within .search-ghost { gap: 6px; }
 .search-go:hover, .search-ghost:hover { color: var(--ink); background: rgba(var(--fg), .08); }
-.search-go:active { transform: scale(.92); }
+.search-go:active { transform: scale(.95); }
 .w-search.has-text .search-go { color: #0c0c0d; background: var(--accent); }
 .search-ghost.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, transparent); }
 .w-search.ghost { border-color: color-mix(in srgb, var(--accent) 45%, transparent) !important; } /* режим инкогнито включён — видно по рамке */
 .w-search.has-text .search-ghost.on ~ .search-go,
 .w-search[data-mode="incognito"].has-text .search-go { background: rgba(var(--fg), .85); color: #0c0c0d; }
 .search-ghost[hidden], .engine[hidden] { display: none; }
-/* иконка поисковика — с уголком снизу справа: видно, что по ней выбор */
-.engine.pickable { position: relative; }
-.engine.pickable::after {
-  content: ''; position: absolute; right: 12%; bottom: 12%; width: 5px; height: 5px;
-  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; opacity: .55; border-radius: 0 0 1px 0;
-}
+/* иконка поисковика + шеврон, который выезжает при наведении на строку */
+.engine { aspect-ratio: auto; width: auto; padding: 0; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 0; }
+.eng-ico { display: grid; place-items: center; width: calc(min(var(--sh), 100cqh - 4px) - 8px); }
+.eng-chev { display: grid; font-size: .7em; max-width: 0; opacity: 0; overflow: hidden; transition: max-width .3s var(--ease), opacity .2s, margin .3s var(--ease); }
+.w-search:hover .eng-chev, .w-search:focus-within .eng-chev { max-width: 16px; opacity: .7; margin: 0 7px 0 -4px; }
+@container (max-width: 380px) { .btn-label { display: none; } }
 @container (max-width: 260px) { .search-ghost { display: none; } }
 @container (max-width: 220px) { .search-calc { display: none; } }
 
@@ -1005,3 +1013,28 @@ body.bg-fade #bg-mesh, body.bg-fade #bg .bg-image { opacity: 0 !important; }
 .w.ink-dark { --tone-f: contrast(calc(1 - var(--t) * .55)) brightness(calc(1 + var(--t) * .5)); }
 /* логотипы из паков (Simple Icons, Font Awesome) — заливкой, без обводки; чуть мельче контурных иконок, чтобы визуально совпадали */
 svg.brand-svg { fill: currentColor; stroke: none; width: .82em; height: .82em; }
+
+/* ================= ЖИДКОЕ СТЕКЛО ================= */
+/* Фильтр с картой преломления (js/liquid.js) ставится инлайном. Размытие слабее обычного стекла — главное преломление;
+   кромка — тонкие блики сверху-слева и снизу-справа, как у толстого стекла. */
+.w.glass.liquid:not([data-type="search"]),
+.w.glass.liquid[data-type="search"] .w-search {
+  /* сам backdrop-filter с url(#фильтр) ставит js/liquid.js инлайном; здесь — пока карта не готова */
+  backdrop-filter: blur(calc(var(--glass-blur) * .25)) var(--tone-f) saturate(150%) brightness(1.04);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * .25)) var(--tone-f) saturate(150%) brightness(1.04);
+  background: linear-gradient(160deg, rgba(255,255,255, calc(var(--glass-alpha) * .6)), rgba(255,255,255, calc(var(--glass-alpha) * .25)));
+  border-color: rgba(255,255,255,.14);
+  box-shadow:
+    inset 1.5px 1.5px 0 -0.5px rgba(255,255,255,.55),
+    inset -1px -1px 0 -0.5px rgba(255,255,255,.28),
+    inset 0 0 18px -6px rgba(255,255,255,.22),
+    0 18px 40px -18px rgba(0,0,0,.45);
+}
+.w.glass.liquid.tinted:not([data-type="search"]) {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--tint) 55%, transparent), color-mix(in srgb, var(--tint) 38%, transparent));
+}
+/* ползунок с «как везде» (поле type: 'range' в настройках блока) */
+.rng-r { display: inline-flex; align-items: center; gap: 8px; }
+.mini-reset { border: 0; background: none; padding: 0; font: 600 11px/1 'Manrope', sans-serif; color: var(--accent); }
+.mini-reset[hidden] { display: none; }
+input[type=range].inherit { opacity: .5; }

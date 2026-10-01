@@ -245,22 +245,23 @@ const Widgets = {
       const go = h('button', {
         type: 'submit', class: 'search-go', tabindex: '-1',
         title: 'Enter — искать здесь\nCtrl+Enter — в новой вкладке\nShift+Enter — в окне инкогнито',
-        html: '<svg viewBox="0 0 24 24"><path d="M19 5v7a3 3 0 0 1-3 3H5"/><path d="M9 11l-4 4 4 4"/></svg>',
+        html: '<svg viewBox="0 0 24 24"><path d="M19 5v7a3 3 0 0 1-3 3H5"/><path d="M9 11l-4 4 4 4"/></svg><span class="btn-label">Enter</span>',
       });
       // призрак — поиск в инкогнито
       const ghostBtn = h('button', {
         type: 'button', class: 'search-ghost', tabindex: '-1', title: 'Искать в окне инкогнито (или Shift+Enter)',
-        html: '<svg viewBox="0 0 24 24"><path d="M5 20V11a7 7 0 0 1 14 0v9l-2.3-1.6L14.3 20 12 18.4 9.7 20l-2.4-1.6z"/><circle cx="9.5" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="11" r="1.1" fill="currentColor" stroke="none"/></svg>',
+        html: '<svg viewBox="0 0 24 24"><path d="M5 20V11a7 7 0 0 1 14 0v9l-2.3-1.6L14.3 20 12 18.4 9.7 20l-2.4-1.6z"/><circle cx="9.5" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="11" r="1.1" fill="currentColor" stroke="none"/></svg><span class="btn-label">Инкогнито</span>',
       });
       if (data.showEngine === false) engineBtn.hidden = true;
       if (data.showGhost === false) ghostBtn.hidden = true;
-      // у иконки поисковика — маленький уголок: видно, что это выбор
-      engineBtn.classList.add('pickable');
+      // при наведении на строку у иконки поисковика появляется шеврон — видно, что это выбор
+      engineBtn.innerHTML = '<span class="eng-ico"></span><span class="eng-chev"><svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg></span>';
+      const engIco = engineBtn.firstChild;
       const form = h('form', { class: `w-search h-${data.height}` }, engineBtn, input, result, ghostBtn, go);
       if (!data.recent && data.history?.length) { data.history = []; ctx.save(); }
 
       const paint = () => {
-        engineBtn.innerHTML = engineIcon(eng());
+        engIco.innerHTML = engineIcon(eng());
         input.placeholder = `Искать в ${eng().in || eng().name}`;
       };
       paint();
@@ -335,7 +336,7 @@ const Widgets = {
         if (v != null) result.textContent = '= ' + (+v.toFixed(10)).toLocaleString('ru-RU', { maximumFractionDigits: 10 });
         // префикс подсвечивает иконку поисковика, в котором будет поиск
         const { e } = parse(q);
-        engineBtn.innerHTML = engineIcon(e);
+        engIco.innerHTML = engineIcon(e);
         engineBtn.classList.toggle('bang', e !== eng());
         if (q) closeRecent(); else openRecent();
       };

@@ -1043,6 +1043,48 @@ await page.fill('[data-search]', 'текст поверх белого и чёр
 await page.screenshot({ path: `${out}/52-mixed-bg.png` });
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
+// ---------- свои углы и стекло у блока, жидкое стекло ----------
+// контрастные полосы — на них видно, как стекло преломляет фон у краёв
+const STRIPES = await page.evaluate(() => {
+  const c = document.createElement('canvas'); c.width = 1600; c.height = 900;
+  const g = c.getContext('2d');
+  for (let i = 0; i < 40; i++) { g.fillStyle = i % 2 ? '#f2f2f2' : '#1a1a2a'; g.fillRect(i * 40, 0, 40, 900); }
+  g.fillStyle = '#ff5a3c'; g.fillRect(0, 430, 1600, 40);
+  return c.toDataURL('image/png');
+});
+await page.evaluate((STRIPES) => chrome.storage.local.set({
+  settings: { bgImage: STRIPES, bgDim: 0, photo: { plain: true } },
+  widgets: [{ id: 'w-clock', type: 'clock', data: { glass: true } }, { id: 'w-search', type: 'search', data: {} }, { id: 'w-links', type: 'links', data: {} }],
+  layouts: { lg: { 'w-clock': { x: 7, y: 1, w: 10, h: 4 }, 'w-search': { x: 6, y: 6, w: 12, h: 1 }, 'w-links': { x: 6, y: 8, w: 12, h: 2 } } },
+}), STRIPES);
+await page.reload();
+await page.waitForTimeout(1200);
+await openSettings('w-clock');
+await page.locator('.inspector .field-range:has-text("Скругление углов") input').fill('40');
+await page.waitForTimeout(200);
+check(await page.$eval('.grid-stack-item[gs-id="w-clock"] .w', el => getComputedStyle(el).borderTopLeftRadius) === '40px', 'блок: своё скругление углов');
+await page.click('.inspector .field-range:has-text("Скругление углов") .mini-reset');
+await page.waitForTimeout(150);
+check(await page.$eval('.grid-stack-item[gs-id="w-clock"] .w', el => getComputedStyle(el).borderTopLeftRadius) === '22px', 'блок: «как везде» возвращает общее скругление');
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+await page.click('#btn-settings');
+await ptab('blocks');
+await page.click('.panel .seg-btn:has-text("Жидкое стекло")');
+await page.click('.panel [data-close]');
+await page.waitForTimeout(800);
+const lq = await page.evaluate(() => ({
+  clock: getComputedStyle(document.querySelector('.grid-stack-item[gs-id="w-clock"] .w')).backdropFilter,
+  search: getComputedStyle(document.querySelector('.w-search')).backdropFilter,
+  maps: document.querySelectorAll('filter feDisplacementMap').length,
+}));
+check(/url\(/.test(lq.clock) && /url\(/.test(lq.search) && lq.maps >= 3, `жидкое стекло: фильтр-линза на блоках (${lq.maps} шт., ${lq.clock.slice(0, 40)}…)`);
+await page.screenshot({ path: `${out}/54-liquid-glass.png` });
+await page.evaluate(() => document.querySelector("filter[id^=lq] feImage").getAttribute("href")).then(u => fs.writeFileSync(`${out}/56-liquid-map.png`, Buffer.from(u.split(",")[1], "base64")));
+console.log("lq filters:", await page.evaluate(() => [...document.querySelectorAll("filter[id^=lq]")].map(f => f.id + " " + f.getAttribute("width") + "x" + f.getAttribute("height") + " img=" + (f.querySelector("feImage")?.getAttribute("href") || "").length + " scale=" + f.querySelector("feDisplacementMap")?.getAttribute("scale") + " ns=" + f.querySelector("feImage")?.namespaceURI).join(" | ")));
+await page.screenshot({ path: `${out}/55-liquid-edge.png`, clip: { x: 440, y: 70, width: 260, height: 320 } });
+await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
+
 const real = errors.filter(e => !/Failed to load resource/i.test(e));
 if (fails.length) { console.error('FAIL:', fails.join('; ')); process.exitCode = 1; }
 console.log('errors:', real.length ? real.join('\n') : 'none');

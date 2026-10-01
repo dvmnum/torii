@@ -43,6 +43,7 @@
     accent: ACCENTS[0],
     glassBlur: 22,
     glassAlpha: 0.08,
+    glassKind: 'glass', // подложка по умолчанию: обычное стекло или «жидкое» (преломление по краям, как в iOS)
     glassTone: 0.25, // «читаемость»: насколько стекло выравнивает яркость фона под собой (на пёстром — минимум 0.75)
     radius: 22,
     motion: true,
@@ -55,12 +56,16 @@
   };
 
   // оформление, общее для всех виджетов: цвет текста и подложки
-  const STYLE_DEFAULTS = { ink: 'auto', tint: null, font: 'inherit', shadow: 'inherit' };
+  const STYLE_DEFAULTS = { ink: 'auto', tint: null, font: 'inherit', shadow: 'inherit', radius: null, blur: null, alpha: null, glassKind: 'inherit' };
   const STYLE_SETTINGS = [
     { key: 'ink', label: 'Цвет текста', type: 'select', options: [['auto', 'Авто'], ['light', 'Светлый'], ['dark', 'Тёмный']] },
     { key: 'font', label: 'Шрифт', type: 'select', options: [['inherit', 'Как везде'], ...FONTS] },
     { key: 'shadow', label: 'Тень текста', type: 'select', options: [['inherit', 'Как везде'], ...SHADOWS] },
     { key: 'tint', label: 'Цвет подложки', type: 'color', empty: 'Стекло' },
+    { key: 'glassKind', label: 'Подложка', type: 'select', options: [['inherit', 'Как везде'], ['glass', 'Стекло'], ['liquid', 'Жидкое стекло']] },
+    { key: 'radius', label: 'Скругление углов', type: 'range', min: 0, max: 48, step: 1, inheritFrom: 'radius', fmt: (v) => v + 'px' },
+    { key: 'blur', label: 'Размытие стекла', type: 'range', min: 0, max: 40, step: 1, inheritFrom: 'glassBlur', fmt: (v) => v + 'px' },
+    { key: 'alpha', label: 'Плотность стекла', type: 'range', min: 0, max: 0.4, step: 0.01, inheritFrom: 'glassAlpha', fmt: (v) => Math.round(v * 100) + '%' },
   ];
 
   const DEFAULT_LAYOUT = [
@@ -130,6 +135,8 @@
     // старый CSS-фон → та же палитра на меше
     const legacy = Mesh.PRESETS.find(p => p.id === LEGACY_BG[raw.bg]);
     if (legacy) s.mesh = fromPreset(legacy);
+    if (!['glass', 'liquid'].includes(s.glassKind)) s.glassKind = 'glass';
+    s.glassTone = Math.min(1, Math.max(0, s.glassTone));
     return s;
   }
 
@@ -245,6 +252,9 @@
     if (!/^#[0-9a-f]{6}$/i.test(item.data.tint)) item.data.tint = null;
     if (item.data.font !== 'inherit' && !FONT_STACK[item.data.font]) item.data.font = 'inherit';
     if (!['inherit', ...SHADOWS.map(([k]) => k)].includes(item.data.shadow)) item.data.shadow = 'inherit';
+    const num = (v, lo, hi) => Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : null;
+    item.data.radius = num(item.data.radius, 0, 48); item.data.blur = num(item.data.blur, 0, 40); item.data.alpha = num(item.data.alpha, 0, 0.4);
+    if (!['inherit', 'glass', 'liquid'].includes(item.data.glassKind)) item.data.glassKind = 'inherit';
   }
 
   // ---------- тема ----------
@@ -425,10 +435,25 @@
     rec.shell.style.setProperty('--tint', item.data.tint || '');
     // шрифт и тень: своё у блока или глобальное (тогда атрибута нет — работает body[data-ts] / --w-font)
     rec.shell.style.setProperty('--wf', item.data.font !== 'inherit' ? FONT_STACK[item.data.font] : '');
+    // свои углы и стекло у блока — перекрывают общие CSS-переменные; null — как везде
+    for (const [k, v, u] of [['--radius', item.data.radius, 'px'], ['--glass-blur', item.data.blur, 'px'], ['--glass-alpha', item.data.alpha, '']]) rec.shell.style.setProperty(k, v == null ? '' : v + u);
+    rec.shell.classList.toggle('liquid', (item.data.glassKind === 'inherit' ? settings.glassKind : item.data.glassKind) === 'liquid');
     if (item.data.shadow !== 'inherit') rec.shell.dataset.ts = item.data.shadow; else delete rec.shell.dataset.ts;
     rec.shell.dataset.type = item.type;
     rec.inst = Widgets[item.type].render(rec.body, item.data, ctxFor(item)) || null;
     applyInk(item);
+    applyLiquid(item);
+  }
+
+  // жидкое стекло: фильтр-линза на элементе со стеклом (у поиска — сама строка, у остальных — блок)
+  function applyLiquid(item) {
+    const rec = live.get(item.id);
+    if (!rec) return;
+    const on = rec.shell.classList.contains('liquid') && !!item.data.glass;
+    const target = item.type === 'search' ? rec.body.querySelector('.w-search') : rec.shell;
+    for (const el of [rec.shell, rec.body.querySelector('.w-search')]) if (el && el !== target) Liquid.detach(el);
+    if (on) requestAnimationFrame(() => Liquid.attach(target)); else Liquid.detach(target);
+    Liquid.gc();
   }
 
   // ---------- цвет текста в блоках ----------
@@ -582,6 +607,7 @@
     if (!mounting) commitPositions();
     placeInspector?.();
     refreshInk();
+    setTimeout(Liquid.refresh, 350); // после анимации перемещения блоков
   });
 
   function applyBucket() {
@@ -597,6 +623,7 @@
   window.addEventListener('resize', debounce(() => {
     grid.cellHeight(cellH());
     refreshInk();
+    Liquid.refresh();
     drawGuides();
   }, 80));
   // раскладку меняем, когда окно перестали тянуть, — чтобы блоки не прыгали на границе
@@ -690,7 +717,7 @@
     const rec = live.get(item.id);
     if (!rec) return;
     const fields = [...def.settings, { type: 'heading', label: 'Оформление' }, ...STYLE_SETTINGS]
-      .map(s => ({ ...s, value: structuredClone(item.data[s.key]) }));
+      .map(s => ({ ...s, value: structuredClone(item.data[s.key]), inherit: s.inheritFrom ? settings[s.inheritFrom] : undefined }));
 
     let getters = {};
     let t = null;
@@ -791,6 +818,24 @@
         }, dot, text);
         paint();
         control = h('div', { class: 'field field-row' }, h('span', {}, f.label), h('div', { class: 'row' }, reset, btn));
+        getters[f.key] = () => cur;
+      } else if (f.type === 'range') {
+        // ползунок с «как везде»: null — берётся общая настройка (f.inherit — её текущее значение для показа)
+        let cur = f.value ?? null;
+        const fmt = f.fmt || ((v) => v);
+        const out = h('output', {});
+        const inp = h('input', { type: 'range', min: f.min, max: f.max, step: f.step });
+        const reset = h('button', { type: 'button', class: 'mini-reset', title: 'Как везде' }, 'как везде');
+        const paint = () => {
+          inp.value = cur ?? f.inherit;
+          out.textContent = cur == null ? `как везде · ${fmt(f.inherit)}` : fmt(cur);
+          reset.hidden = cur == null;
+          inp.classList.toggle('inherit', cur == null);
+        };
+        inp.addEventListener('input', () => { cur = +inp.value; paint(); notify(); });
+        reset.addEventListener('click', () => { cur = null; paint(); notify(); });
+        paint();
+        control = h('div', { class: 'field field-range' }, h('span', {}, f.label, h('span', { class: 'rng-r' }, reset, out)), inp);
         getters[f.key] = () => cur;
       } else if (f.type === 'toggle') {
         const inp = h('input', { type: 'checkbox', id });
@@ -1384,6 +1429,8 @@
             h('div', { class: 'field' }, h('span', {}, 'Тень'), segmented(SHADOWS, settings.text.shadow, (v) => setSetting('text', { ...settings.text, shadow: v })).el),
             h('p', { class: 'field-hint' }, 'У каждого блока можно поставить своё — в его настройках, «Оформление».')),
           section('Стекло',
+            h('div', { class: 'field' }, h('span', {}, 'Подложка блоков'), segmented([['glass', 'Стекло'], ['liquid', 'Жидкое стекло']], settings.glassKind, (v) => setSetting('glassKind', v, true)).el),
+            settings.glassKind === 'liquid' ? h('p', { class: 'field-hint' }, 'Преломление по краям, как в iOS. Работает в Chrome, Edge и Яндекс Браузере. У каждого блока можно выбрать своё — в его «Оформлении».') : null,
             slider('Размытие', 'glassBlur', 0, 40, 1, v => v + 'px'),
             slider('Плотность', 'glassAlpha', 0, 0.3, 0.01, v => Math.round(v * 100) + '%'),
             slider('Читаемость', 'glassTone', 0, 1, 0.05, v => Math.round(v * 100) + '%'),
