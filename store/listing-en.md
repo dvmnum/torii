@@ -18,7 +18,7 @@ What sets Torii apart from other new tab pages: widgets aren't stuck in a single
 
 WIDGETS
 • Clock — digital or analog, with a greeting and the date
-• Search — Google, DuckDuckGo, Bing, Perplexity, ChatGPT, Claude, YouTube, Wikipedia, Yandex; bangs like "!yt lofi", a calculator right in the search bar, Shift+Enter to search in incognito
+• Search — 9 search engines and AI assistants to choose from, quick prefixes for a one-off search elsewhere, a calculator right in the search bar, Shift+Enter to search in incognito
 • Links and Top sites — as tiles or a list, with site icons
 • Bookmarks bar — your bookmarks right on the new tab
 • Weather — now, details, hourly or for the week

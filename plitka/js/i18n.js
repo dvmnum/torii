@@ -96,7 +96,7 @@ const I18N = (() => {
     'Слово дня': 'Word of the day', 'Картинка': 'Picture', 'Панель закладок': 'Bookmarks bar',
     'Цифровые или стрелочные, приветствие': 'Digital or analog, with greeting', 'Фокус и перерывы по таймеру': 'Focus and breaks on a timer',
     'Сколько осталось до события': 'Time left until an event', 'Список дел с галочками': 'Tasks with checkboxes', 'Быстрые заметки, сохраняются сами': 'Quick notes, saved automatically',
-    'Отмечай привычки каждый день': 'Track habits daily', 'Яндекс, Google, DuckDuckGo, Bing': 'Google, DuckDuckGo, AI search and more',
+    'Отмечай привычки каждый день': 'Track habits daily', 'Поисковики и ИИ на выбор, калькулятор': 'Search engines and AI, a calculator',
     'Свои закладки плитками': 'Your bookmarks as tiles', 'Сайты, куда ходишь чаще всего': 'Sites you visit most', 'Вернуть случайно закрытую вкладку': 'Bring back a closed tab',
     'Твоя строка закладок, папки списком': 'Your bookmarks bar, folders included', 'Сейчас или на неделю': 'Now or for the week',
     'Доллар, евро, юань по ЦБ': 'USD, EUR, CNY (Bank of Russia)', 'Цитата из аниме каждый день': 'An anime quote every day',
