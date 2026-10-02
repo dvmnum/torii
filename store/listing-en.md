@@ -59,7 +59,12 @@ Torii replaces the new tab page with a customizable dashboard of widgets (clock,
 
 **Remote code:** No. All scripts, fonts and libraries are bundled with the extension.
 
-**Data usage:** the extension does not collect or transmit user data. Mark "not collected" for every category and confirm all three compliance statements.
+**Data usage:** the Chrome Web Store requires disclosing data even if it's only handled locally. Check:
+- **Personally identifiable information** — the name for the greeting (stored only in the browser).
+- **Location** — the city for the weather (sent to Open-Meteo).
+- **Web history** — top sites, recently closed tabs, bookmarks (shown only on the new tab; site addresses go to icon services).
+
+Leave the rest unchecked. Confirm all three compliance statements: data isn't sold or transferred except to provide the features themselves.
 
 **Privacy policy:** text in `store/privacy-policy.md`; host it at a public URL (GitHub Pages, a gist, Telegraph) and paste the link.
 
