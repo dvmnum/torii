@@ -99,7 +99,7 @@ const ENGINES = {
 const engineIcon = (e) => {
   const k = Object.keys(ENGINES).find(x => ENGINES[x] === e);
   const i = ENGINE_ICONS[k];
-  return i ? `<svg viewBox="${i.vb}" class="brand-svg"><path d="${i.d}"/></svg>` : '';
+  return i ? `<svg viewBox="${i.vb}" class="brand-svg brand-${k}"><path d="${i.d}"/></svg>` : '';
 };
 
 // Калькулятор в строке поиска: + − × ÷ ^ % и скобки. Свой разбор — eval в расширениях запрещён (CSP), да и не нужен.
