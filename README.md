@@ -20,7 +20,7 @@
 
 ## Install
 
-Chrome Web Store, Edge Add-ons and Firefox Add-ons — coming soon. Links will be on the [website](https://dvmnum.github.io/torii).
+Chrome Web Store (also for Edge, Yandex Browser, Opera, Brave, Vivaldi) and Firefox Add-ons — coming soon. Links will be on the [website](https://dvmnum.github.io/torii).
 
 From source: `chrome://extensions` → Developer mode → **Load unpacked** → the `plitka/` folder.
 
