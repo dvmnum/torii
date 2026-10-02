@@ -12,7 +12,7 @@
     "perf": "node tests/perf.mjs",
     "test:firefox": "node tests/firefox.mjs",
     "build": "node scripts/build.mjs",
-    "store": "node scripts/store-shots.mjs",
+    "store": "node scripts/store-shots.mjs && node scripts/store-promo.mjs",
     "site": "node scripts/site-assets.mjs",
     "site:serve": "node scripts/serve-site.mjs"
   },

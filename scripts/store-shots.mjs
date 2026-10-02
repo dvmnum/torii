@@ -142,26 +142,6 @@ for (const lang of ['ru', 'en']) {
   await page.keyboard.press('Escape');
 }
 
-// промо-плитка 440×280: иконка, название, фраза — на фоне-градиенте в цветах заготовки (по-русски и по-английски)
-const icon = fs.readFileSync(path.join(ext, 'icons', 'icon.svg'), 'utf8');
-const font = (f) => fs.readFileSync(path.join(ext, 'fonts', f)).toString('base64');
-const promo = await ctx.newPage();
-await promo.setViewportSize({ width: 440, height: 280 });
-for (const [lang, line] of [['en', 'New tab with a free-form<br>layout of widgets'], ['ru', 'Новая вкладка со свободной<br>раскладкой виджетов']]) {
-await promo.setContent(`<style>
-  @font-face { font-family: M; src: url(data:font/woff2;base64,${font('manrope-latin-wght-normal.woff2')}) format('woff2'); font-weight: 200 800; unicode-range: U+0000-00FF, U+2000-206F; }
-  @font-face { font-family: M; src: url(data:font/woff2;base64,${font('manrope-cyrillic-wght-normal.woff2')}) format('woff2'); font-weight: 200 800; unicode-range: U+0400-045F; }
-  html, body { margin: 0; width: 440px; height: 280px; overflow: hidden; font-family: M, sans-serif; color: #fff; }
-  body { background: radial-gradient(120% 90% at 85% 10%, #19b4c4 0%, transparent 55%), radial-gradient(90% 90% at 10% 100%, #6a3df0 0%, transparent 60%), #0e1020;
-    display: flex; align-items: center; gap: 22px; padding: 0 36px; box-sizing: border-box; }
-  svg { width: 96px; height: 96px; flex: none; filter: drop-shadow(0 12px 24px rgba(0,0,0,.35)); }
-  h1 { margin: 0; font-size: 46px; font-weight: 800; letter-spacing: -.02em; }
-  p { margin: 6px 0 0; font-size: 17px; font-weight: 600; line-height: 1.3; color: rgba(255,255,255,.8); }
-</style>${icon}<div><h1>Torii</h1><p>${line}</p></div>`);
-await promo.waitForTimeout(300);
-await promo.screenshot({ path: path.join(OUT, `promo-440x280-${lang}.png`) });
-console.log(`promo-440x280-${lang}.png`);
-}
-
+// промо-картинки (плитка 440×280 и большая 1400×560) — отдельно: scripts/store-promo.mjs
 await ctx.close();
 fs.rmSync(userDir, { recursive: true, force: true });

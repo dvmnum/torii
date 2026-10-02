@@ -38,7 +38,8 @@ tests/perf.mjs         замер скорости (npm run perf; --profile — 
 tests/i18n-scan.mjs    русские строки без английского перевода (npm run i18n) — гонять после новых текстов
 tests/firefox.mjs      смоук в движке Firefox (npm run test:firefox): страница вкладки с локального сервера, API расширения — заглушка
 scripts/build.mjs      сборка под магазины (npm run build) → dist/torii-<версия>-chrome.zip и -firefox.zip (+ распакованные копии)
-scripts/store-shots.mjs скриншоты для магазинов (npm run store) → store/screenshots/{ru,en}/*.png 1280×800 + промо-плитки 440×280; нужна сеть (иконки сайтов)
+scripts/store-shots.mjs скриншоты для магазинов (npm run store) → store/screenshots/{ru,en}/*.png 1280×800; нужна сеть (иконки сайтов)
+scripts/store-promo.mjs промо-картинки (тоже npm run store, или отдельно): плитка 440×280 и большая 1400×560 на тёмном фоне, 24-битный PNG без альфы
 store/                 карточка магазина: listing-ru.md / listing-en.md (описание, обоснования разрешений, поля), privacy-policy.md
 site/                  сайт (GitHub Pages: dvmnum.github.io/torii) — index.html (ru), en/index.html, privacy.html, style.css, gallery.js (лайтбокс скриншотов: ссылки с data-gallery, стрелки/клавиши/свайп); без сборки.
                        Ссылки на магазины и Boosty — href="#" + data-soon («скоро»); после публикации вписать адрес и убрать data-soon.

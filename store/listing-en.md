@@ -4,7 +4,7 @@ The store takes the name and short description from the extension (`plitka/_loca
 - **Name:** Torii — New Tab
 - **Short description:** A new tab with a free-form layout: drag and resize widgets anywhere. Live backgrounds, glass, saved layouts.
 
-Screenshots — `store/screenshots/en/` (1280×800, in this order), promo tile — `store/promo-440x280-en.png`.
+Screenshots — `store/screenshots/en/` (1280×800, in this order), small promo tile — `store/promo-440x280-en.png`, marquee (1400×560) — `store/marquee-1400x560-en.png`.
 Rebuild: `npm run store`.
 
 ---
