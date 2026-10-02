@@ -2,6 +2,7 @@
   "name": "torii",
   "version": "0.11.1",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Новая вкладка со свободной раскладкой виджетов (Chrome, Edge, Яндекс, Firefox — MV3)",
   "scripts": {
@@ -11,7 +12,9 @@
     "perf": "node tests/perf.mjs",
     "test:firefox": "node tests/firefox.mjs",
     "build": "node scripts/build.mjs",
-    "store": "node scripts/store-shots.mjs"
+    "store": "node scripts/store-shots.mjs",
+    "site": "node scripts/site-assets.mjs",
+    "site:serve": "node scripts/serve-site.mjs"
   },
   "devDependencies": {
     "gridstack": "^14.0.0",

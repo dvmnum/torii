@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Torii: белые ворота-тории на киноварном скруглённом квадрате. PNG собирает scripts/make-icons.mjs -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2=".35" y2="1">
+      <stop offset="0" stop-color="#ff8350"/>
+      <stop offset=".55" stop-color="#f2453f"/>
+      <stop offset="1" stop-color="#d42a4e"/>
+    </linearGradient>
+    <radialGradient id="sun" cx=".5" cy=".42" r=".5">
+      <stop offset="0" stop-color="#fff" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".22"/>
+      <stop offset=".5" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="30" fill="url(#bg)"/>
+  <circle cx="64" cy="58" r="44" fill="url(#sun)"/>
+  <rect x="4" y="4" width="120" height="120" rx="30" fill="url(#gloss)"/>
+  <g fill="#fff">
+    <!-- касаги: верхняя балка с приподнятыми концами -->
+    <path d="M14 27 Q64 40 114 27 L112.5 38 Q64 49 15.5 38 Z"/>
+    <!-- симаки под ней -->
+    <rect x="27" y="42" width="74" height="7" rx="1.5"/>
+    <!-- гакудзука: стойка между балками -->
+    <rect x="59.5" y="47" width="9" height="14"/>
+    <!-- нуки: вторая балка -->
+    <rect x="22" y="59" width="84" height="9" rx="2"/>
+    <!-- столбы, чуть расходятся книзу -->
+    <path d="M36 47 H47 L48.5 106 H34.5 Z"/>
+    <path d="M81 47 H92 L93.5 106 H79.5 Z"/>
+  </g>
+</svg>
