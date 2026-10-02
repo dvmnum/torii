@@ -42,6 +42,10 @@ npm run site           # website images → site/img/  (then npm run site:serve)
 
 Project notes for contributors live in [`CLAUDE.md`](CLAUDE.md) (in Russian): data model, widget API, gotchas.
 
+## How it's made
+
+Torii is built with [Claude Code](https://claude.com/claude-code). The idea, design and every product decision are by [@dvmnum](https://github.com/dvmnum); most of the code was written by Claude.
+
 ## Support
 
 Torii is free and ad-free. If you like it, you can support it on Boosty — link on the [website](https://dvmnum.github.io/torii#support).
