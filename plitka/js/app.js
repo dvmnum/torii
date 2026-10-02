@@ -831,6 +831,9 @@
       const v = {};
       for (const k in getters) v[k] = getters[k]();
       if (v.look === 'inherit') for (const s of looks) v[s.key] = s.unset;
+      // «свой» стиль хранит только то, что правда отличается от общего: совпадающее продолжает следовать за общей настройкой
+      // (иначе, например, тень, скопированная при выборе «Свой», оставалась после выключения общей тени)
+      else for (const s of looks) if (v[s.key] === settings[s.global]) v[s.key] = s.unset;
       delete v.look;
       // ничего не поменялось — не перерисовываем (таймеры и фокус виджета не сбиваем)
       if (Object.keys(v).every(k => JSON.stringify(v[k]) === JSON.stringify(item.data[k]))) return;
