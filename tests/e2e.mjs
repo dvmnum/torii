@@ -1218,13 +1218,23 @@ await page.hover('.grid-stack-item[gs-id="w-search"]');
 await page.click('.grid-stack-item[gs-id="w-search"] .tool.danger');
 await page.waitForTimeout(400);
 await page.keyboard.press('Escape'); // выйти из редактора
+// во второй раскладке — свой акцент: настройки тоже у каждой раскладки свои
+await page.click('#btn-settings');
+await ptab('blocks');
+await page.click('.accent-swatch >> nth=3');
+await page.click('.panel [data-close]');
+await page.waitForTimeout(300);
+const accent = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
+const acc2 = await accent();
 await page.keyboard.press('Alt+Digit1');
 await page.waitForTimeout(500);
 const n1 = await page.locator('.grid-stack-item').count();
+const acc1 = await accent();
 await page.keyboard.press('Alt+Digit2');
 await page.waitForTimeout(500);
 const n2 = await page.locator('.grid-stack-item').count();
 check(n1 === 2 && n2 === 1, `раскладки: Alt+1 / Alt+2 переключают набор блоков (${n1} и ${n2})`);
+check(acc1 !== acc2 && (await accent()) === acc2, `раскладки: у каждой свои настройки (акцент ${acc1} ↔ ${acc2})`);
 await page.reload();
 await page.waitForTimeout(1000);
 check(await page.locator('.grid-stack-item').count() === 1 && await page.locator('#btn-scenes').isVisible(), 'раскладки: активная пережила перезагрузку, в доке есть кнопка');

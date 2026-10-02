@@ -1998,8 +1998,29 @@
   }
   const sceneName = (id) => scenes.list.find(s => s.id === id)?.name || '';
   const saveScenes = () => Store.set('scenes', scenes);
-  // текущие блоки — в ключ своей раскладки (перед переключением, созданием новой, бэкапом)
-  const stashScene = () => Store.set('scene:' + scenes.active, { widgets: stripGeom(layout), layouts: structuredClone(layouts) });
+  // Раскладка — всё целиком: блоки, их позиции и настройки (фон, эффекты, стекло, шрифты, вкладка, слайд-шоу).
+  // Общее для всех — только личное: язык интерфейса и имя.
+  const SHARED_SETTINGS = ['lang', 'name'];
+  // текущую раскладку — в её ключи: блоки и настройки в scene:<id>, картинка-фон (мегабайты) отдельно в sceneimg:<id>
+  // (картинку пишем, только если она поменялась с прошлого раза — stashScene.img)
+  async function stashScene() {
+    const { bgImage, ...rest } = settings;
+    await Store.set('scene:' + scenes.active, { widgets: stripGeom(layout), layouts: structuredClone(layouts), settings: { ...rest, bgImage: null } });
+    stashScene.img ??= {};
+    if (stashScene.img[scenes.active] === bgImage) return;
+    stashScene.img[scenes.active] = bgImage;
+    await (bgImage ? Store.set('sceneimg:' + scenes.active, bgImage) : Store.remove('sceneimg:' + scenes.active));
+  }
+
+  // применить настройки другой раскладки (личное — язык и имя — остаётся своим)
+  function applySettings(next) {
+    for (const k of SHARED_SETTINGS) next[k] = settings[k];
+    settings = next;
+    applyTheme();
+    sampleImage();
+    saveSettings();
+    if (panel.classList.contains('open')) renderSettings();
+  }
 
   function applyState(st) {
     closeInspector?.();
@@ -2015,6 +2036,14 @@
     if (id === scenes.active || !scenes.list.some(s => s.id === id)) return;
     await stashScene();
     const raw = await Store.get('scene:' + id, null);
+    // раскладки до 0.9.3 хранили только блоки — у них остаются текущие настройки (пока их не поменяют)
+    if (raw?.settings) {
+      const next = cleanSettings(raw.settings);
+      const img = await Store.get('sceneimg:' + id, null);
+      next.bgImage = typeof img === 'string' && img.startsWith('data:image/') ? img : null;
+      (stashScene.img ??= {})[id] = next.bgImage;
+      applySettings(next);
+    }
     applyState(cleanState(raw?.widgets, raw?.layouts) || defaultState());
     scenes.active = id;
     saveScenes();
@@ -2022,7 +2051,7 @@
     toast(`Раскладка «${sceneName(id)}»`);
   }
 
-  // новая раскладка: копия текущей (дальше правишь как хочешь) или стандартная
+  // новая раскладка: копия текущей (блоки и оформление — дальше правишь как хочешь) или стандартная (блоки и оформление по умолчанию)
   async function addScene(kind) {
     if (scenes.list.length >= 9) { toast('Больше девяти раскладок не помещается'); return; }
     await stashScene();
@@ -2030,6 +2059,7 @@
     while (scenes.list.some(s => s.name === `${I18N.t('Раскладка')} ${n}`)) n++;
     const id = 's' + Math.random().toString(36).slice(2, 9);
     scenes.list.push({ id, name: `${I18N.t('Раскладка')} ${n}` });
+    if (kind !== 'copy') applySettings(cleanSettings({}));
     applyState(kind === 'copy' ? { widgets: structuredClone(stripGeom(layout)), layouts: structuredClone(layouts) } : defaultState());
     scenes.active = id;
     saveScenes();
@@ -2050,6 +2080,7 @@
     if (id === scenes.active) await switchScene(scenes.list.find(s => s.id !== id).id);
     scenes.list = scenes.list.filter(s => s.id !== id);
     Store.remove('scene:' + id);
+    Store.remove('sceneimg:' + id);
     saveScenes();
     paintSceneButtons();
   }
@@ -2131,8 +2162,14 @@
 
   async function exportAll() {
     // все раскладки: активная — из памяти, остальные — из своих ключей
+    // (у каждой — блоки, настройки и своя картинка-фон)
     const states = {};
-    for (const s of scenes.list) states[s.id] = s.id === scenes.active ? { widgets: stripGeom(layout), layouts } : await Store.get('scene:' + s.id, null);
+    for (const s of scenes.list) {
+      if (s.id === scenes.active) { states[s.id] = { widgets: stripGeom(layout), layouts }; continue; }
+      const raw = await Store.get('scene:' + s.id, null);
+      if (raw?.settings) raw.settings = { ...raw.settings, bgImage: await Store.get('sceneimg:' + s.id, null) };
+      states[s.id] = raw;
+    }
     const data = { app: 'torii', v: 3, settings, widgets: stripGeom(layout), layouts, scenes: { ...scenes, states } };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = h('a', { href: URL.createObjectURL(blob), download: 'torii-backup.json' });
@@ -2154,12 +2191,19 @@
       await Store.set('layouts', st.layouts);
       await Store.remove('layout');
       // v3: все сохранённые раскладки (старые бэкапы — одна раскладка, список сбрасываем)
-      for (const s of scenes.list) await Store.remove('scene:' + s.id);
+      for (const s of scenes.list) { await Store.remove('scene:' + s.id); await Store.remove('sceneimg:' + s.id); }
       const sc = cleanScenes(d.scenes);
       for (const s of sc.list) {
         const raw = d.scenes?.states?.[s.id];
         const one = s.id !== sc.active && raw && cleanState(raw.widgets, raw.layouts);
-        if (one) await Store.set('scene:' + s.id, { widgets: stripGeom(one.widgets), layouts: one.layouts });
+        if (!one) continue;
+        const st = { widgets: stripGeom(one.widgets), layouts: one.layouts };
+        if (raw.settings) {
+          const { bgImage, ...rest } = cleanSettings(raw.settings);
+          st.settings = { ...rest, bgImage: null };
+          if (bgImage) await Store.set('sceneimg:' + s.id, bgImage);
+        }
+        await Store.set('scene:' + s.id, st);
       }
       await Store.set('scenes', sc);
       location.reload();
