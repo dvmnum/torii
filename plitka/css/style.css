@@ -289,6 +289,12 @@ body.no-motion .clock-time .colon { animation: none; }
 /* стрелочные */
 .clock-face { flex: none; width: min(88cqh, 90cqw); height: auto; aspect-ratio: 1; overflow: visible; }
 .w-clock.is-analog:has(.clock-sub:not([hidden])) .clock-face { width: min(72cqh, 90cqw); }
+/* низкие стрелочные: под циферблатом одна строка — приветствие убираем, остаётся дата (иначе переносилось и вылезало вниз) */
+@container (max-height: 180px) {
+  .w-clock.is-analog .clock-sub :is(.greet, .dot) { display: none; }
+  .w-clock.is-analog .clock-sub { white-space: nowrap; }
+  .w-clock.is-analog:has(.clock-sub:not([hidden])) .clock-face { width: min(66cqh, 90cqw); }
+}
 .clock-face .face { fill: rgba(var(--fg), .04); stroke: rgba(var(--fg), .16); stroke-width: .6; }
 .clock-face .mk-h { stroke: rgba(var(--fg), .75); stroke-width: 1.4; }
 .clock-face .mk-m { stroke: rgba(var(--fg), .25); stroke-width: .6; }
@@ -474,6 +480,12 @@ body.no-motion .clock-time .colon { animation: none; }
   /* иконка — всё, что осталось от высоты после подписи (13px), зазора и отступов */
   .w-body .w-links:not(.style-list) .link-ico { width: min(40px, calc(100cqh - 24px)); height: min(40px, calc(100cqh - 24px)); } /* сильнее стилей иконок ниже */
   .w-body .w-links.style-icons .link-ico { width: min(44px, 68cqh); height: min(44px, 68cqh); } /* без подписей — крупнее */
+  /* один ряд: не влезают — иконки ужимаются, а не уходят во второй (невидимый) ряд */
+  .w-body .w-links.w-links:not(.style-list) { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  .w-body .w-links.w-links:not(.gap-auto):not(.style-list) { grid-auto-columns: minmax(0, var(--tile)); }
+  /* ужатая иконка остаётся квадратной: ширина не больше колонки, высота — по ширине */
+  .w-body .w-links.w-links:not(.style-list) .link-ico { width: min(40px, calc(100cqh - 24px), 100%); height: auto; aspect-ratio: 1; }
+  .w-body .w-links.w-links.style-icons .link-ico { width: min(44px, 68cqh, 100%); }
 }
 @container (max-height: 52px) {
   .w-links:not(.style-list) .link-title { display: none; }
@@ -536,7 +548,9 @@ body.no-motion .clock-time .colon { animation: none; }
 .bm-sub[hidden] { display: none; }
 .bm-empty { padding: 8px; }
 
-.w-links.style-list { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); align-content: start; }
+/* список: строки по центру по высоте, как плитки (в низком блоке они прилипали к верху); safe — не уезжать за верх, если не влезли */
+.w-links.style-list { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); align-content: safe center; }
+@container (max-height: 96px) { .w-links.style-list .link { padding-block: 4px; } .w-links.style-list .link-ico { width: 26px; height: 26px; } }
 .w-links.style-list .link { flex-direction: row; justify-content: flex-start; padding: 8px 10px; }
 .w-links.style-list .link-ico { width: 30px; height: 30px; }
 .w-links.style-icons .link-title { display: none; }
@@ -583,7 +597,10 @@ body.no-motion .clock-time .colon { animation: none; }
 .wx-dt { font-size: clamp(11px, 13cqh, 16px); font-weight: 600; white-space: nowrap; }
 .wx-dt span { color: var(--ink-3); font-weight: 500; margin-left: 4px; }
 @container (max-width: 380px) { .wx-day:nth-child(n+6) { display: none; } }
-@container (max-height: 110px) { .wx-dname { display: none; } }
+@container (max-height: 110px) { .w-weather:not(.is-hours) .wx-dname { display: none; } }
+/* по часам время — главное, его не прячем: в низком блоке мельчает иконка, в узком — меньше точек */
+@container (max-height: 110px) { .is-hours .wx-day { gap: 2px; } .is-hours .wx-dico { font-size: clamp(14px, 20cqh, 22px); } .is-hours .wx-dname { font-size: 10px; } }
+@container (max-width: 300px) { .is-hours .wx-day:nth-child(n+5) { display: none; } }
 /* по часам: под градусами — вероятность осадков, если заметная */
 .wx-pop { font-size: clamp(9px, 9cqh, 12px); font-weight: 700; color: color-mix(in srgb, #6cb8ff 80%, rgb(var(--fg))); min-height: 1.2em; }
 @container (max-height: 130px) { .wx-pop { display: none; } }
@@ -602,8 +619,28 @@ body.no-motion .clock-time .colon { animation: none; }
 .wx-stat b { font-size: clamp(12px, 9cqh, 16px); font-weight: 700; white-space: nowrap; font-feature-settings: 'tnum' 1; }
 .wx-stat span { font-size: clamp(10px, 6.5cqh, 12px); color: var(--ink-3); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* низкий блок — показатели прячем, остаётся верхняя строка; узкий — показываем только первые три */
-@container (max-height: 130px) { .wx-stats { display: none; } }
+/* низкий блок «Подробно»: в одну строку — слева иконка и градусы, справа показатели сеткой 2×2 (описание прячем),
+   иначе на минимальном размере он выглядел как «Сейчас» */
+@container (max-height: 130px) {
+  .w-weather.is-details { flex-direction: row; align-items: center; gap: clamp(8px, 4cqw, 16px); padding-block: 6px; }
+  .is-details .wx-top { flex: none; gap: 8px; }
+  .is-details .wx-meta { display: none; }
+  .w-weather.is-details .wx-ico { font-size: min(44cqh, 12cqw); }
+  .w-weather.is-details .wx-temp { font-size: min(44cqh, 12cqw); }
+  .wx-stats { flex: 1; grid-template-columns: repeat(2, minmax(0, max-content)); gap: 3px 16px; padding: 0 0 0 clamp(10px, 4cqw, 16px); border-top: 0; border-left: 1px solid var(--line); justify-content: start; }
+  .wx-stat { flex-direction: row; align-items: baseline; gap: 5px; }
+  .wx-stat:nth-child(n+5) { display: none; }
+  .wx-stat b { font-size: 13px; }
+  .wx-stat span { font-size: 10.5px; }
+}
 @container (max-width: 300px) { .wx-stat:nth-child(n+4) { display: none; } }
+/* узко и низко: два показателя, значение над подписью (без подписи «10° 71%» было непонятно) */
+@container (max-width: 300px) and (max-height: 130px) {
+  .wx-stats { grid-template-columns: repeat(2, minmax(0, max-content)); gap: 0 12px; }
+  .wx-stat { flex-direction: column; gap: 0; }
+  .wx-stat:nth-child(n+3) { display: none; }
+}
+@container (max-height: 70px) { .wx-stat span { display: none; } }
 
 /* ================= ОБЩЕЕ ДЛЯ НОВЫХ ВИДЖЕТОВ ================= */
 .w-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }

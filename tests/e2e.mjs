@@ -1028,7 +1028,7 @@ const mins = [
   ['rates', 15, 0, 3, 2], ['countdown', 18, 0, 3, 2], ['word', 21, 0, 3, 2],
   ['links', 0, 3, 8, 1], ['search', 8, 3, 6, 1], ['weather', 14, 3, 4, 1],
   ['habits', 0, 5, 4, 2], ['quote', 4, 5, 4, 2], ['pic', 8, 5, 2, 2],
-  ['greeting', 18, 3, 3, 1], ['weather', 21, 3, 2, 1, { view: 'mini', side: 'center' }], ['greeting', 10, 5, 10, 2, { font: 'lobster', sub: 'date' }], ['quote', 20, 5, 4, 2, { align: 'bottom-right' }],
+  ['greeting', 18, 3, 3, 1], ['weather', 21, 3, 2, 1, { view: 'mini', side: 'center' }], ['greeting', 10, 5, 10, 2, { font: 'lobster', sub: 'date' }], ['quote', 20, 5, 4, 2, { align: 'bottom-right' }], ['links', 0, 8, 20, 1, { style: 'list' }],
 ];
 await page.evaluate((list) => chrome.storage.local.set({
   settings: {},
@@ -1042,6 +1042,12 @@ const miniW = await page.evaluate(() => { const r = document.querySelector('.gri
 check(miniW && miniW.w === 2 && miniW.minW === 2, `погода «Мини»: ужимается до 2 клеток (${JSON.stringify(miniW)})`);
 const qa = await page.$eval('.grid-stack-item[gs-id="m-17"] .w-quote', el => getComputedStyle(el).textAlign + ' ' + getComputedStyle(el).justifyContent);
 check(qa === 'right flex-end', `цитата: выравнивание снизу справа (${qa})`);
+const listC = await page.evaluate(() => {
+  const w = document.querySelector('.grid-stack-item[gs-id="m-18"] .w').getBoundingClientRect();
+  const l = document.querySelector('.grid-stack-item[gs-id="m-18"] .link').getBoundingClientRect();
+  return Math.abs((l.top + l.bottom) / 2 - (w.top + w.bottom) / 2);
+});
+check(listC < 3, `ссылки списком в низком блоке — по центру (сдвиг ${listC.toFixed(1)} px)`);
 const linkC = await page.evaluate(() => {
   const w = document.querySelector('.grid-stack-item[gs-id="m-8"] .w').getBoundingClientRect();
   // иконка с подписью — одной парой по центру, подпись видна и не вылезает за блок
@@ -1050,6 +1056,35 @@ const linkC = await page.evaluate(() => {
   return { dc: Math.max(...pair.map(p => Math.abs((p.top + p.bottom) / 2 - (w.top + w.bottom) / 2))), inside: pair.every(p => p.top >= w.top && p.bottom <= w.bottom), titles: pair.every(p => p.titleH > 8) };
 });
 check(linkC.dc < 3 && linkC.inside && linkC.titles, `ссылки: в блоке высотой 1 подписи видны, иконки с подписями по центру (сдвиг ${linkC.dc.toFixed(1)} px)`);
+
+// вторая галерея: другие виды тех же виджетов в минимальном размере (скрин 51b — смотреть глазами)
+const mins2 = [
+  ['weather', 0, 0, 4, 2, { view: 'details' }], ['weather', 4, 0, 4, 2, { view: 'hours' }], ['weather', 8, 0, 3, 1, { view: 'week' }],
+  ['clock', 11, 0, 3, 2, { style: 'analog' }], ['links', 14, 0, 4, 1, { style: 'icons' }], ['links', 18, 0, 6, 1, { style: 'list' }],
+  ['bookmarks', 8, 1, 3, 1], ['topsites', 0, 2, 4, 1], ['recent', 4, 2, 3, 2], ['countdown', 7, 2, 3, 2, { align: 'top-left' }],
+  ['clock', 10, 2, 3, 2, { seconds: true }], ['search', 13, 2, 6, 1, { height: 'large' }], ['habits', 19, 2, 5, 2],
+  ['greeting', 0, 4, 3, 1, { sub: 'date' }], ['weather', 3, 4, 3, 1, { view: 'details' }],
+];
+await page.evaluate((list) => chrome.storage.local.set({
+  settings: {},
+  widgets: list.map(([type, , , , , data], i) => ({ id: 'v-' + i, type, data: data || {} })),
+  layouts: { lg: Object.fromEntries(list.map(([, x, y, w, h], i) => ['v-' + i, { x, y, w, h }])) },
+}), mins2);
+await page.reload();
+await page.waitForTimeout(1500);
+await page.screenshot({ path: `${out}/51b-min-variants.png` });
+// ничего не вылезает за свой блок (подписи, иконки, кнопки)
+const spill = await page.evaluate(() => [...document.querySelectorAll('.grid-stack-item')].flatMap((it) => {
+  const w = it.querySelector('.w-body').getBoundingClientRect();
+  return [...it.querySelectorAll('.w-body *')].filter((el) => {
+    const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+    if (!r.width || !r.height || cs.visibility === 'hidden' || el.closest('[hidden]')) return false;
+    // внутри прокручиваемого списка (дела, ссылки списком) — уходить за край можно, туда долистывают
+    for (let p = el.parentElement; p && p !== it; p = p.parentElement) if (/auto|scroll/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight) return false;
+    return r.left < w.left - 1 || r.right > w.right + 1 || r.top < w.top - 1 || r.bottom > w.bottom + 1;
+  }).map(el => `${it.getAttribute('gs-id')}:${el.className || el.tagName}`);
+}));
+check(!spill.length, `другие виды в минимальном размере: ничего не вылезает (${spill.slice(0, 6).join(', ') || 'чисто'})`);
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
 // ---------- пёстрый фон: стекло выравнивает яркость под собой ----------
