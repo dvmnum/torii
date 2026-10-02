@@ -551,7 +551,8 @@ body.no-motion .clock-time .colon { animation: none; }
 /* список: строки по центру по высоте, как плитки (в низком блоке они прилипали к верху); safe — не уезжать за верх, если не влезли */
 .w-links.style-list { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); align-content: safe center; }
 @container (max-height: 96px) { .w-links.style-list .link { padding-block: 4px; } .w-links.style-list .link-ico { width: 26px; height: 26px; } }
-.w-links.style-list .link { flex-direction: row; justify-content: flex-start; padding: 8px 10px; }
+/* строка списка облегает иконку с названием (justify-self: start) — подсветка при наведении не тянется на всю колонку */
+.w-links.style-list .link { flex-direction: row; justify-content: flex-start; justify-self: start; max-width: 100%; padding: 6px 12px 6px 6px; border-radius: 12px; }
 .w-links.style-list .link-ico { width: 30px; height: 30px; }
 .w-links.style-icons .link-title { display: none; }
 .w-links.style-icons { grid-template-columns: repeat(auto-fit, minmax(clamp(44px, 20cqh, 64px), 1fr)); }
@@ -1384,7 +1385,9 @@ kbd {
 .w-links.gap-tight { column-gap: 0; }
 .w-links.gap-normal { column-gap: clamp(8px, 2cqw, 16px); }
 .w-links.gap-wide { column-gap: clamp(20px, 5cqw, 44px); }
-.w-links.style-list .link:hover { background: rgba(var(--fg), .07); }
+.w-links.style-list .link:hover { background: rgba(var(--fg), .08); }
+/* в списке иконка не подпрыгивает — подсвечивается вся строка */
+.w-links.style-list .link:hover .link-ico { transform: none; box-shadow: 0 1px 0 rgba(var(--fg), .1) inset; }
 
 /* кнопка «Чистая область» — на самом превью, в правом верхнем углу */
 .prev-btn {
