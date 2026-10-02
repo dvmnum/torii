@@ -173,8 +173,10 @@ body.narrow #btn-edit, body.narrow #guides { display: none; }
 }
 
 /* инструменты виджета — только в редакторе */
+/* тулбар блока — плашкой НАД блоком, а не поверх содержимого (на поиске он налезал на кнопки справа);
+   у блоков в самом верху экрана места сверху нет — там он внутри, как раньше */
 .w-tools {
-  position: absolute; top: 8px; right: 8px; z-index: 5;
+  position: absolute; bottom: calc(100% + 6px); right: 6px; z-index: 5;
   display: flex; align-items: center; gap: 4px;
   padding: 4px 4px 4px 10px; border-radius: 999px;
   background: rgba(16, 16, 17, .78); border: 1px solid var(--line);
@@ -201,6 +203,13 @@ body.editing .w:not(.glass) { background: rgba(255,255,255,.035); }
 body.editing .w-body { pointer-events: none; }
 body.editing .grid-stack-item:hover .w-tools,
 body.editing .grid-stack-item.ui-draggable-dragging .w-tools { opacity: 1; transform: none; pointer-events: auto; }
+/* невидимый мостик между блоком и плашкой — пока ведёшь мышь вверх, плашка не пропадает */
+.w-tools::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 8px; }
+.grid-stack-item[gs-y="0"] .w-tools { bottom: auto; top: 8px; }
+.grid-stack-item[gs-y="0"] .w-tools::after { display: none; }
+body.editing .grid-stack-item:hover { z-index: 6; } /* плашка над соседним блоком сверху */
+/* в редакторе кнопки внутри поиска не нажимаются — приглушаем, чтобы справа не было нагромождения */
+body.editing .w-search :is(.search-ghost, .search-go, .engine) { opacity: .35; }
 body.editing .grid-stack-item:hover .w { outline-color: color-mix(in srgb, var(--accent) 70%, transparent); }
 .grid-stack-item.ui-draggable-dragging .w { cursor: grabbing; transform: scale(1.015); box-shadow: 0 30px 70px -20px rgba(0,0,0,.7); }
 .grid-stack-item.just-added .w { animation: pop .6s var(--ease); }
@@ -410,15 +419,17 @@ body.no-motion .clock-time .colon { animation: none; }
 .search-recent.on { opacity: 1; transform: none; }
 .sr-label { width: 100%; padding: 0 4px 2px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: rgba(244,244,245,.4); }
 .sr-row {
+  /* высота задана точно: крестик — кружок 20px с отступом 4px и сверху, и снизу, и справа */
+  --pad: 4px; height: 30px; box-sizing: border-box; padding-right: var(--pad);
   display: inline-flex; align-items: center; max-width: 100%; min-width: 0; border-radius: 999px;
   background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.08); transition: background .15s, border-color .15s;
 }
 .sr-row:hover { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.16); }
-.sr-q { min-width: 0; display: flex; align-items: center; gap: 7px; padding: 6px 4px 6px 11px; border: 0; background: none; color: rgba(244,244,245,.85); font-size: 13px; font-weight: 500; text-align: left; }
+.sr-q { min-width: 0; height: 100%; display: flex; align-items: center; gap: 7px; padding: 0 6px 0 11px; border: 0; background: none; color: rgba(244,244,245,.85); font-size: 13px; font-weight: 500; text-align: left; }
 .sr-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sr-row:hover .sr-q { color: #fff; }
 .sr-ico { display: grid; font-size: 13px; color: rgba(244,244,245,.4); flex: none; }
-.sr-del { flex: none; width: 20px; height: 20px; margin-right: 5px; border: 0; border-radius: 50%; background: none; color: rgba(244,244,245,.45); display: grid; place-items: center; font-size: 11px; opacity: .35; transition: opacity .15s, background .15s, color .15s; }
+.sr-del { flex: none; width: calc(30px - 2px - var(--pad) * 2); height: calc(30px - 2px - var(--pad) * 2); margin: 0; padding: 0; border: 0; border-radius: 50%; background: none; color: rgba(244,244,245,.45); display: grid; place-items: center; font-size: 11px; opacity: .35; transition: opacity .15s, background .15s, color .15s; }
 .sr-row:hover .sr-del { opacity: 1; }
 .sr-del:hover { color: #fff; background: rgba(255, 90, 110, .55); }
 
@@ -453,13 +464,20 @@ body.no-motion .clock-time .colon { animation: none; }
 .mono { font-weight: 700; font-size: .9em; color: var(--ink); }
 .link-ico .mono { font-size: clamp(14px, 11cqh, 20px); }
 .link-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* низкий блок: сначала ужимаем отступы, потом прячем подписи — иконки остаются ровно по центру */
+/* низкий блок: сначала ужимаем отступы, потом иконку и подпись — подпись прячем, только когда места нет совсем
+   (раньше пропадала уже в блоке высотой в одну клетку, и включённые подписи было не увидеть) */
 @container (max-height: 130px) { .w-links:not(.style-list) .link { padding: 4px 6px; gap: 4px; } .w-links { padding-block: 4px; } }
 @container (max-height: 96px) {
-  .w-links { padding-block: 0; grid-template-columns: repeat(auto-fit, minmax(min(56px, 82cqh), 1fr)); }
+  .w-links { padding-block: 0; }
+  .w-links:not(.style-list) .link { padding: 2px; gap: 3px; }
+  .w-links:not(.style-list) .link-title { font-size: 11px; line-height: 1.2; }
+  /* иконка — всё, что осталось от высоты после подписи (13px), зазора и отступов */
+  .w-body .w-links:not(.style-list) .link-ico { width: min(40px, calc(100cqh - 24px)); height: min(40px, calc(100cqh - 24px)); } /* сильнее стилей иконок ниже */
+  .w-body .w-links.style-icons .link-ico { width: min(44px, 68cqh); height: min(44px, 68cqh); } /* без подписей — крупнее */
+}
+@container (max-height: 52px) {
   .w-links:not(.style-list) .link-title { display: none; }
-  .w-links:not(.style-list) .link { padding: 2px; }
-  .w-body .w-links:not(.style-list) .link-ico { width: min(44px, 68cqh); height: min(44px, 68cqh); } /* сильнее стилей иконок ниже */
+  .w-body .w-links:not(.style-list) .link-ico { width: min(44px, 68cqh); height: min(44px, 68cqh); }
 }
 /* «+» в углу «Ссылок»: появляется при наведении, места в сетке не занимает */
 .w-add {

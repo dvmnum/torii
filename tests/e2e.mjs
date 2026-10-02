@@ -1031,10 +1031,12 @@ const miniW = await page.evaluate(() => { const r = document.querySelector('.gri
 check(miniW && miniW.w === 2 && miniW.minW === 2, `погода «Мини»: ужимается до 2 клеток (${JSON.stringify(miniW)})`);
 const linkC = await page.evaluate(() => {
   const w = document.querySelector('.grid-stack-item[gs-id="m-8"] .w').getBoundingClientRect();
-  const icons = [...document.querySelectorAll('.grid-stack-item[gs-id="m-8"] .link-ico')].map(e => e.getBoundingClientRect());
-  return { dc: Math.max(...icons.map(i => Math.abs((i.top + i.bottom) / 2 - (w.top + w.bottom) / 2))), inside: icons.every(i => i.top >= w.top && i.bottom <= w.bottom) };
+  // иконка с подписью — одной парой по центру, подпись видна и не вылезает за блок
+  const links = [...document.querySelectorAll('.grid-stack-item[gs-id="m-8"] .link')];
+  const pair = links.map(l => { const a = l.querySelector('.link-ico').getBoundingClientRect(), t = l.querySelector('.link-title').getBoundingClientRect(); return { top: a.top, bottom: t.height ? t.bottom : a.bottom, titleH: t.height }; });
+  return { dc: Math.max(...pair.map(p => Math.abs((p.top + p.bottom) / 2 - (w.top + w.bottom) / 2))), inside: pair.every(p => p.top >= w.top && p.bottom <= w.bottom), titles: pair.every(p => p.titleH > 8) };
 });
-check(linkC.dc < 3 && linkC.inside, `ссылки: в блоке высотой 1 иконки по центру (сдвиг ${linkC.dc.toFixed(1)} px)`);
+check(linkC.dc < 3 && linkC.inside && linkC.titles, `ссылки: в блоке высотой 1 подписи видны, иконки с подписями по центру (сдвиг ${linkC.dc.toFixed(1)} px)`);
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
 // ---------- пёстрый фон: стекло выравнивает яркость под собой ----------
