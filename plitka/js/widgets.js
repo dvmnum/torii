@@ -337,7 +337,9 @@ const Widgets = {
       // куда открывать: модификаторы важнее настройки
       const open = (url, how) => {
         if (how === 'incognito' && chrome.windows?.create) {
-          chrome.windows.create({ url, incognito: true }, () => { if (chrome.runtime.lastError) ctx.toast('Инкогнито недоступно — открыл в новой вкладке'); });
+          // браузер не дал открыть приватное окно (в Firefox — пока расширению не разрешили приватные окна) —
+          // объясняем, где включить, и предлагаем открыть в обычной вкладке
+          chrome.windows.create({ url, incognito: true }, () => { if (chrome.runtime.lastError) incognitoHelp(url); });
           return;
         }
         if (how === 'tab') { if (chrome.tabs?.create) chrome.tabs.create({ url }); else window.open(url, '_blank', 'noopener'); return; }
@@ -791,6 +793,28 @@ function pickGreeting(s, d = new Date()) {
   }
   greetPick = { key, text: text.trim() };
   return greetPick.text;
+}
+
+// Карточка «разреши приватные окна»: включить это за пользователя расширение не может — только подвести к переключателю.
+// Chromium (Chrome, Edge, Яндекс…) — кнопка открывает страницу настроек Torii; Firefox свои служебные страницы
+// расширениям открывать не даёт — там подсказываем путь словами. url — что искали: можно открыть в обычной вкладке.
+const IS_FIREFOX = /Firefox\//.test(navigator.userAgent);
+function incognitoHelp(url) {
+  document.querySelector('.incog-help')?.remove();
+  const close = () => { card.classList.remove('on'); setTimeout(() => card.remove(), 250); };
+  const card = h('div', { class: 'incog-help', role: 'dialog' },
+    h('span', { class: 'ih-ico', html: '<svg viewBox="0 0 24 24"><path d="M5 20V11a7 7 0 0 1 14 0v9l-2.5-2-2.3 2-2.2-2-2.2 2-2.3-2z"/><circle cx="9.5" cy="11" r="1" fill="currentColor"/><circle cx="14.5" cy="11" r="1" fill="currentColor"/></svg>' }),
+    h('div', { class: 'ih-text' },
+      h('b', {}, 'Разреши Torii приватные окна'),
+      IS_FIREFOX
+        ? h('span', {}, 'Дополнения → Torii → «Запуск в приватных окнах» → Разрешить. Потом нажми поиск ещё раз.')
+        : h('span', {}, 'Открою настройки расширения — там включи «Разрешить в режиме инкогнито». Потом нажми поиск ещё раз.')),
+    h('div', { class: 'ih-actions' },
+      IS_FIREFOX ? null : h('button', { type: 'button', class: 'pill small pill-accent', onclick: () => { chrome.tabs?.create({ url: `chrome://extensions/?id=${chrome.runtime.id}` }); close(); } }, 'Открыть настройки'),
+      url ? h('button', { type: 'button', class: 'pill small', onclick: () => { chrome.tabs?.create ? chrome.tabs.create({ url }) : window.open(url, '_blank', 'noopener'); close(); } }, 'Открыть в обычной вкладке') : null,
+      h('button', { type: 'button', class: 'icon-btn ih-close', title: 'Закрыть', onclick: close }, '✕')));
+  document.body.append(card);
+  requestAnimationFrame(() => card.classList.add('on'));
 }
 
 // поповер под кнопкой не влезает вниз (блок внизу экрана) — открываем над ней

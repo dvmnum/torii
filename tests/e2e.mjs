@@ -1246,6 +1246,15 @@ check(await page.locator('.grid-stack-item').count() === 2, 'раскладки:
 await page.keyboard.press('Escape');
 await page.evaluate(() => chrome.storage.local.remove(['scenes', 'scene:main']));
 
+// ---------- карточка «разреши приватные окна» (показывается, если браузер не дал открыть инкогнито) ----------
+await page.evaluate(() => incognitoHelp('https://example.com/?q=test'));
+await page.waitForTimeout(400);
+check(await page.locator('.incog-help.on button:has-text("Открыть настройки")').count() === 1 && await page.locator('.incog-help button:has-text("Открыть в обычной вкладке")').count() === 1, 'инкогнито: карточка с кнопками «Открыть настройки» и «в обычной вкладке»');
+await page.screenshot({ path: `${out}/67-incognito-help.png`, clip: { x: 500, y: 0, width: 600, height: 160 } });
+await page.click('.incog-help .ih-close');
+await page.waitForTimeout(400);
+check(await page.locator('.incog-help').count() === 0, 'инкогнито: карточка закрывается');
+
 // ---------- свои приветствия, «Ещё», картинка во «Фоне» ----------
 await page.evaluate(() => chrome.storage.local.set({
   settings: { name: 'Вова' },

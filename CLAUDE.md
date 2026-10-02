@@ -36,6 +36,8 @@ plitka/
 tests/e2e.mjs          Playwright-смоук (npm test)
 tests/perf.mjs         замер скорости (npm run perf; --profile — топ функций): открытие с тяжёлой картинкой, долгие задачи, цена ползунка
 tests/i18n-scan.mjs    русские строки без английского перевода (npm run i18n) — гонять после новых текстов
+tests/firefox.mjs      смоук в движке Firefox (npm run test:firefox): страница вкладки с локального сервера, API расширения — заглушка
+scripts/build.mjs      сборка под магазины (npm run build) → dist/torii-<версия>-chrome.zip и -firefox.zip (+ распакованные копии)
 scripts/make-icons.mjs PNG-иконки 16/32/48/128 из plitka/icons/icon.svg (ворота-тории) — после правки svg
 tests/debug.mjs        открыть вкладку расширения и вывести ошибки консоли (npm run debug) — когда e2e падает на старте
 ```
@@ -143,7 +145,12 @@ myWidget: {
 - Иконки сайтов: Google s2 → favicon.yandex.net → буква-монограмма. Внутренний `_favicon` Chrome отдаёт серый глобус для непосещённых сайтов — поэтому не используется.
 - `chrome.storage.local` без `unlimitedStorage` — 10 МБ; фон-картинка ужимается до 2560px JPEG.
 - Если нужен `chrome.storage.sync`: лимит ~100 КБ всего и 8 КБ на ключ — картинки туда нельзя.
-- Firefox: `chrome.*` работает через совместимость, но `unlimitedStorage` и часть CSS (`backdrop-filter` ок, `color-mix` ок с 113+) проверять отдельно.
+## Браузеры
+- Код один на все. Chromium (Chrome, Edge, Яндекс, Opera, Brave, Vivaldi) — архив `-chrome.zip` (Chrome Web Store, Edge Add-ons). Firefox — `-firefox.zip` (addons.mozilla.org): `scripts/build.mjs` дописывает в манифест `browser_specific_settings.gecko` (id `torii@torii.newtab`, Firefox ≥ 140, `data_collection_permissions: none`). Сам `plitka/manifest.json` — для Chromium, Firefox-ключи руками туда не добавлять.
+- Проверка Firefox: `npm run build` → `npx web-ext lint --source-dir dist/firefox` (ошибок 0; предупреждения про `innerHTML` — наши собственные SVG/разметка, публикацию не блокируют) → `npm run test:firefox` (смоук в Gecko) → по-настоящему: about:debugging → «Загрузить временное дополнение» → `dist/firefox/manifest.json`.
+- В Firefox нет жидкого стекла (проверка `Liquid.supported`) — остаётся обычное. Шрифты — `format('woff2')`, не `woff2-variations` (его Firefox может не понять).
+- Инкогнито: включить «работу в приватных окнах» за пользователя нельзя. Если `windows.create({ incognito })` не сработал — карточка `incognitoHelp(url)` (widgets.js): в Chromium кнопка открывает `chrome://extensions/?id=…`, в Firefox (служебные страницы расширениям закрыты) — путь словами; плюс «Открыть в обычной вкладке».
+- Safari — отдельная история (Xcode, обёртка-приложение, аккаунт Apple $99/год); пока не делаем.
 
 ## Скорость (вкладка должна «летать»)
 - Замер — `npm run perf` (+ `--profile`). Ориентиры: вкладка готова ≲100 мс, долгих задач при открытии — 0, шаг ползунка — доли мс.

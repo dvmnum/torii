@@ -77,6 +77,10 @@ const I18N = (() => {
     'Ветер': 'Wind', 'Влажность': 'Humidity', 'Восход': 'Sunrise', 'Закат': 'Sunset', 'Осадки': 'Rain', 'Ощущается': 'Feels like',
     'Основная': 'Main', 'Раскладка': 'Layout', 'Раскладки': 'Layouts', 'Раскладки (Alt+1…9)': 'Layouts (Alt+1…9)', 'Переименовать': 'Rename',
     'Переключить раскладку': 'Switch layout', 'По часам': 'Hourly', 'Подробно': 'Details', 'Удалить?': 'Delete?',
+    'Разреши Torii приватные окна': 'Allow Torii in private windows',
+    'Дополнения → Torii → «Запуск в приватных окнах» → Разрешить. Потом нажми поиск ещё раз.': 'Add-ons → Torii → “Run in Private Windows” → Allow. Then search again.',
+    'Открою настройки расширения — там включи «Разрешить в режиме инкогнито». Потом нажми поиск ещё раз.': 'I’ll open the extension settings — turn on “Allow in Incognito” there. Then search again.',
+    'Открыть в обычной вкладке': 'Open in a normal tab', 'Открыть настройки': 'Open settings',
     'Свой': 'Custom', 'Стиль': 'Style','Недавние': 'Recent', 'Загружаю картинку…': 'Loading image…', 'Слабая': 'Soft', 'Слева': 'Left', 'Справа': 'Right', 'Тень блока': 'Block shadow', 'Тень блоков': 'Block shadow',
     'Прямоугольник, где узора нет — тащи на превью': 'A rectangle without the pattern — drag it on the preview',
     // редактор и меню
@@ -170,7 +174,14 @@ const I18N = (() => {
   const skip = (el) => el && el.closest?.('[translate="no"], script, style, textarea');
   function walk(root) {
     if (root.nodeType === 3) { if (!skip(root.parentElement)) { const v = tr(root.nodeValue); if (v !== root.nodeValue) root.nodeValue = v; } return; }
-    if (root.nodeType !== 1 || skip(root)) return;
+    if (root.nodeType !== 1) return;
+    // у textarea переводим подсказку (placeholder), но не содержимое — это текст пользователя (заметки)
+    if (root.tagName === 'TEXTAREA' && !root.closest('[translate="no"]')) {
+      const v = root.getAttribute('placeholder'), n = v && tr(v);
+      if (n && n !== v) root.setAttribute('placeholder', n);
+      return;
+    }
+    if (skip(root)) return;
     for (const a of ATTRS) if (root.hasAttribute(a)) { const v = root.getAttribute(a), n = tr(v); if (n !== v) root.setAttribute(a, n); }
     for (let c = root.firstChild; c; c = c.nextSibling) walk(c);
   }
