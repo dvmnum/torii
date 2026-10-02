@@ -10,7 +10,15 @@ const Tab = {
 };
 
 const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const dayIndex = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
+// первый день недели: по-русски понедельник (1), по-английски воскресенье (0)
+const weekStart = () => (I18N.lang() === 'ru' ? 1 : 0);
+// семь дней текущей календарной недели
+const weekDays = (from = new Date()) => {
+  const d0 = new Date(from);
+  d0.setDate(d0.getDate() - ((d0.getDay() - weekStart() + 7) % 7));
+  return [...Array(7)].map((_, i) => { const d = new Date(d0); d.setDate(d0.getDate() + i); return d; });
+};
+const dayIndex = () =>Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
 const plural = (n, [one, few, many]) => {
   const a = Math.abs(n) % 100, b = a % 10;
   return a > 10 && a < 20 ? many : b === 1 ? one : b >= 2 && b <= 4 ? few : many;
@@ -410,10 +418,11 @@ Object.assign(Widgets, {
   countdown: {
     title: 'Обратный отсчёт',
     size: { w: 5, h: 3 }, min: { w: 3, h: 2 },
-    defaults: { glass: false, title: 'Новый год', date: '' },
+    defaults: { glass: false, title: 'Новый год', date: '', align: 'middle-center' },
     settings: [
       { key: 'title', label: 'Событие', type: 'text' },
       { key: 'date', label: 'Дата', type: 'text', placeholder: 'ДД.ММ.ГГГГ, пусто — Новый год' },
+      ALIGN_SETTING,
       GLASS_SETTING,
     ],
     render(body, data) {
@@ -437,7 +446,7 @@ Object.assign(Widgets, {
       };
       tick();
       const t = setInterval(tick, 1000);
-      body.append(h('div', { class: 'w-countdown' }, h('div', { class: 'cd-row' }, big, unit), sub));
+      body.append(h('div', { class: 'w-countdown aligned ' + alignClass(data.align) }, h('div', { class: 'cd-row' }, big, unit), sub));
       return { destroy: () => clearInterval(t) };
     },
   },
@@ -451,7 +460,9 @@ Object.assign(Widgets, {
     },
     settings: [GLASS_SETTING],
     render(body, data, ctx) {
-      const days = [...Array(7)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - 6 + i); return d; });
+      // календарная неделя: по-русски с понедельника, по-английски с воскресенья; будущие дни — блёклые и не нажимаются
+      const today = dayKey();
+      const days = weekDays();
       const streak = (hb) => { let n = 0; const d = new Date(); if (!hb.days[dayKey(d)]) d.setDate(d.getDate() - 1); while (hb.days[dayKey(d)]) { n++; d.setDate(d.getDate() - 1); } return n; };
       const grid = h('div', { class: 'hb-grid' });
       const input = h('input', { type: 'text', class: 'todo-new', placeholder: 'Новая привычка — Enter', spellcheck: 'false' });
@@ -464,13 +475,14 @@ Object.assign(Widgets, {
       };
       function paint() {
         grid.replaceChildren(
-          h('span'), ...days.map((d, i) => h('span', { class: 'hb-dn' + (i === 6 ? ' today' : '') }, d.toLocaleDateString(I18N.locale(), { weekday: 'short' }).slice(0, 2))), h('span'),
+          h('span'), ...days.map((d) => h('span', { class: 'hb-dn' + (dayKey(d) === today ? ' today' : '') }, d.toLocaleDateString(I18N.locale(), { weekday: 'short' }).slice(0, 2))), h('span'),
           ...data.habits.flatMap(hb => [
             h('span', { class: 'hb-name', title: hb.name, translate: 'no' }, hb.name,
               h('button', { type: 'button', class: 'todo-del', title: 'Удалить', html: SVG.x, onclick: () => { data.habits = data.habits.filter(x => x !== hb); save(); } })),
             ...days.map(d => {
               const k = dayKey(d);
-              return h('button', { type: 'button', class: 'hb-dot' + (hb.days[k] ? ' on' : ''), title: d.toLocaleDateString(I18N.locale()), onclick: () => { if (hb.days[k]) delete hb.days[k]; else hb.days[k] = true; save(); } });
+              if (k > today) return h('span', { class: 'hb-dot future', title: d.toLocaleDateString(I18N.locale()) });
+              return h('button', { type: 'button', class: 'hb-dot' + (hb.days[k] ? ' on' : '') + (k === today ? ' today' : ''), title: d.toLocaleDateString(I18N.locale()), onclick: () => { if (hb.days[k]) delete hb.days[k]; else hb.days[k] = true; save(); } });
             }),
             h('span', { class: 'hb-streak', title: 'Дней подряд' }, streak(hb) ? `${streak(hb)}🔥` : ''),
           ]));
@@ -489,13 +501,13 @@ Object.assign(Widgets, {
   quote: {
     title: 'Цитата',
     size: { w: 8, h: 2 }, min: { w: 4, h: 2 },
-    defaults: { glass: false, shift: 0 },
-    settings: [GLASS_SETTING],
+    defaults: { glass: false, shift: 0, align: 'middle-left' },
+    settings: [ALIGN_SETTING, GLASS_SETTING],
     render(body, data, ctx) {
       // цитата дня; «ещё» листает дальше, на следующий день сдвиг сбрасывается
       if (data.shiftDay !== dayIndex()) { data.shift = 0; data.shiftDay = dayIndex(); }
       const [text, who, from] = QUOTES[(dayIndex() + data.shift) % QUOTES.length];
-      body.append(h('figure', { class: 'w-quote', translate: 'no' },
+      body.append(h('figure', { class: 'w-quote aligned ' + alignClass(data.align), translate: 'no' },
         h('blockquote', {}, `«${text}»`),
         h('figcaption', {}, [who, from].filter(Boolean).join(', ')),
         h('button', { type: 'button', class: 'w-more', title: 'Другая цитата', html: SVG.more, onclick: () => { data.shift++; ctx.save(); ctx.rerender(); } })));
@@ -505,12 +517,12 @@ Object.assign(Widgets, {
   word: {
     title: 'Слово дня',
     size: { w: 5, h: 2 }, min: { w: 3, h: 2 },
-    defaults: { glass: true, shift: 0 },
-    settings: [GLASS_SETTING],
+    defaults: { glass: true, shift: 0, align: 'middle-left' },
+    settings: [ALIGN_SETTING, GLASS_SETTING],
     render(body, data, ctx) {
       if (data.shiftDay !== dayIndex()) { data.shift = 0; data.shiftDay = dayIndex(); }
       const [word, meaning] = WORDS[(dayIndex() + data.shift) % WORDS.length];
-      body.append(h('div', { class: 'w-word' },
+      body.append(h('div', { class: 'w-word aligned ' + alignClass(data.align) },
         h('div', { class: 'w-label' }, 'Слово дня'),
         h('div', { class: 'word-w', translate: 'no' }, word),
         h('div', { class: 'word-m', translate: 'no' }, meaning),

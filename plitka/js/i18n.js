@@ -73,7 +73,11 @@ const I18N = (() => {
     'Обнови расширение в chrome://extensions (↻) и попробуй ещё раз': 'Reload the extension in chrome://extensions (↻) and try again',
     'Доброе утро — крупно и своим шрифтом': 'Good morning — big, in your font',
     'Жидкое': 'Liquid', 'Жирный': 'Bold', 'Мини': 'Mini', 'Обычный': 'Regular', 'Тонкий': 'Thin', 'Толщина': 'Weight', 'Подпись': 'Caption',
-    'Свой': 'Custom', 'Стиль': 'Style', 'Недавние': 'Recent', 'Загружаю картинку…': 'Loading image…', 'Слабая': 'Soft', 'Слева': 'Left', 'Справа': 'Right', 'Тень блока': 'Block shadow', 'Тень блоков': 'Block shadow',
+    ' м/с': ' m/s', '+ Копия текущей': '+ Copy current', '+ Стандартная': '+ Default', 'Больше девяти раскладок не помещается': 'Nine layouts is the limit',
+    'Ветер': 'Wind', 'Влажность': 'Humidity', 'Восход': 'Sunrise', 'Закат': 'Sunset', 'Осадки': 'Rain', 'Ощущается': 'Feels like',
+    'Основная': 'Main', 'Раскладка': 'Layout', 'Раскладки': 'Layouts', 'Раскладки (Alt+1…9)': 'Layouts (Alt+1…9)', 'Переименовать': 'Rename',
+    'Переключить раскладку': 'Switch layout', 'По часам': 'Hourly', 'Подробно': 'Details', 'Точно удалить? Нажми ещё раз': 'Sure? Click again to delete',
+    'Свой': 'Custom', 'Стиль': 'Style','Недавние': 'Recent', 'Загружаю картинку…': 'Loading image…', 'Слабая': 'Soft', 'Слева': 'Left', 'Справа': 'Right', 'Тень блока': 'Block shadow', 'Тень блоков': 'Block shadow',
     'Прямоугольник, где узора нет — тащи на превью': 'A rectangle without the pattern — drag it on the preview',
     // редактор и меню
     'Тащи блоки, тяни за углы и края': 'Drag blocks, pull corners and edges', '+ Виджет': '+ Widget', 'Редактировать раскладку (E)': 'Edit layout (E)',
@@ -129,6 +133,8 @@ const I18N = (() => {
 
   // строки с подстановками
   const PATTERNS = [
+    [/^(-?\d+) м\/с$/, (m) => `${m[1]} m/s`],
+    [/^Раскладка «(.+)»$/, (m) => `Layout “${m[1]}”`],
     [/^Загружаю картинки: (\d+)$/, (m) => `Loading images: ${m[1]}`],
     [/^Искать в (.+)$/, (m) => `Search ${tr(m[1])}`],
     [/^«(.+)» удалён$/, (m) => `“${tr(m[1])}” removed`],

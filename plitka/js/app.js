@@ -103,7 +103,7 @@
 
   // всё для первого кадра — одним запросом. Картинка-фон лежит отдельным ключом bgImage (мегабайты):
   // иначе её перечитывали бы и перезаписывали вместе с настройками на каждый шаг любого ползунка
-  const boot = await Store.getMany({ settings: {}, bgImage: null, widgets: null, layouts: null });
+  const boot = await Store.getMany({ settings: {}, bgImage: null, widgets: null, layouts: null, scenes: null });
   let settings = cleanSettings(boot.settings);
   persistSettings.img = boot.bgImage;
   if (!settings.bgImage && typeof boot.bgImage === 'string' && boot.bgImage.startsWith('data:image/')) settings.bgImage = boot.bgImage;
@@ -113,6 +113,8 @@
   // layouts — { md?, lg? }: позиции { [id]: { x, y, w, h } }
   let { widgets: layout, layouts } = await loadState();
   layout.forEach(fillDefaults);
+  // сохранённые раскладки: список и какая сейчас на экране (сами блоки активной — в widgets/layouts, остальных — scene:<id>)
+  let scenes = cleanScenes(boot.scenes);
   let bucket = bucketOf(window.innerWidth);
 
   async function loadState() {
@@ -1623,7 +1625,7 @@
           section('Клавиши',
             h('dl', { class: 'hotkeys' },
               ...[[kbd('E'), 'Изменить раскладку'], [kbd('/'), 'Перейти к поиску'], [kbd('Esc'), 'Закрыть панель, выйти из редактора'],
-                [kbd('Ctrl', 'Enter'), 'Поиск в новой вкладке'], [kbd('Shift', 'Enter'), 'Поиск в инкогнито']]
+                [kbd('Ctrl', 'Enter'), 'Поиск в новой вкладке'], [kbd('Shift', 'Enter'), 'Поиск в инкогнито'], [kbd('Alt', '1…9'), 'Переключить раскладку']]
                 .flatMap(([k, t]) => [h('dt', {}, k), h('dd', {}, t)]))),
         ];
       },
@@ -1984,8 +1986,154 @@
     toast('Раскладка сброшена на всех экранах');
   }
 
-  function exportAll() {
-    const data = { app: 'torii', v: 2, settings, widgets: stripGeom(layout), layouts };
+  // ---------- сохранённые раскладки ----------
+  // Раскладка = свой набор блоков и их позиции на всех экранах. Переключение — на месте, без перезагрузки вкладки.
+  // scenes = { active, list: [{ id, name }] } (до 9 — по Alt+1…9); активная живёт в ключах widgets/layouts, остальные — scene:<id>
+  function cleanScenes(raw) {
+    const list = (Array.isArray(raw?.list) ? raw.list : [])
+      .filter(s => s && typeof s.id === 'string' && /^[\w-]{1,24}$/.test(s.id) && typeof s.name === 'string')
+      .slice(0, 9).map(s => ({ id: s.id, name: s.name.trim().slice(0, 40) || '…' }));
+    if (!list.length) list.push({ id: 'main', name: I18N.t('Основная') });
+    return { active: list.some(s => s.id === raw?.active) ? raw.active : list[0].id, list };
+  }
+  const sceneName = (id) => scenes.list.find(s => s.id === id)?.name || '';
+  const saveScenes = () => Store.set('scenes', scenes);
+  // текущие блоки — в ключ своей раскладки (перед переключением, созданием новой, бэкапом)
+  const stashScene = () => Store.set('scene:' + scenes.active, { widgets: stripGeom(layout), layouts: structuredClone(layouts) });
+
+  function applyState(st) {
+    closeInspector?.();
+    unmountAll();
+    layout = st.widgets;
+    layouts = st.layouts;
+    layout.forEach(fillDefaults);
+    mountAll();
+    saveLayout();
+  }
+
+  async function switchScene(id) {
+    if (id === scenes.active || !scenes.list.some(s => s.id === id)) return;
+    await stashScene();
+    const raw = await Store.get('scene:' + id, null);
+    applyState(cleanState(raw?.widgets, raw?.layouts) || defaultState());
+    scenes.active = id;
+    saveScenes();
+    paintSceneButtons();
+    toast(`Раскладка «${sceneName(id)}»`);
+  }
+
+  // новая раскладка: копия текущей (дальше правишь как хочешь) или стандартная
+  async function addScene(kind) {
+    if (scenes.list.length >= 9) { toast('Больше девяти раскладок не помещается'); return; }
+    await stashScene();
+    let n = scenes.list.length + 1;
+    while (scenes.list.some(s => s.name === `${I18N.t('Раскладка')} ${n}`)) n++;
+    const id = 's' + Math.random().toString(36).slice(2, 9);
+    scenes.list.push({ id, name: `${I18N.t('Раскладка')} ${n}` });
+    applyState(kind === 'copy' ? { widgets: structuredClone(stripGeom(layout)), layouts: structuredClone(layouts) } : defaultState());
+    scenes.active = id;
+    saveScenes();
+    paintSceneButtons();
+    return id;
+  }
+
+  function renameScene(id, name) {
+    const s = scenes.list.find(x => x.id === id);
+    if (!s || !name.trim()) return;
+    s.name = name.trim().slice(0, 40);
+    saveScenes();
+    paintSceneButtons();
+  }
+
+  async function removeScene(id) {
+    if (scenes.list.length < 2) return;
+    if (id === scenes.active) await switchScene(scenes.list.find(s => s.id !== id).id);
+    scenes.list = scenes.list.filter(s => s.id !== id);
+    Store.remove('scene:' + id);
+    saveScenes();
+    paintSceneButtons();
+  }
+
+  // кнопки: в полосе редактора — всегда (с названием), в доке — когда раскладок больше одной
+  const SCENES_SVG = '<svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>';
+  const sceneBtn = h('button', { type: 'button', class: 'pill scene-btn', title: 'Раскладки (Alt+1…9)', onclick: (e) => { e.stopPropagation(); openScenes(sceneBtn); } },
+    h('span', { class: 'sb-ico', html: SCENES_SVG }), h('span', { class: 'sb-name', translate: 'no' }), h('span', { class: 'sb-chev', html: '<svg viewBox="0 0 24 24"><path d="M7 14l5-5 5 5"/></svg>' }));
+  document.getElementById('editbar').insertBefore(sceneBtn, document.querySelector('#editbar .add-wrap'));
+  const dockSceneBtn = h('button', { class: 'dock-btn', id: 'btn-scenes', title: 'Раскладки (Alt+1…9)', html: SCENES_SVG, onclick: (e) => { e.stopPropagation(); openScenes(dockSceneBtn); } });
+  document.getElementById('dock').prepend(dockSceneBtn);
+  function paintSceneButtons() {
+    sceneBtn.querySelector('.sb-name').textContent = sceneName(scenes.active);
+    dockSceneBtn.hidden = scenes.list.length < 2;
+  }
+  paintSceneButtons();
+
+  // список раскладок — поповер над кнопкой: выбрать, переименовать (двойной клик или ✎), удалить, добавить
+  let closeScenes = null;
+  function openScenes(anchor) {
+    if (closeScenes) return closeScenes();
+    const pop = h('div', { class: 'scene-menu', role: 'menu' });
+    const paint = () => {
+      pop.replaceChildren(
+        h('div', { class: 'sm-title' }, 'Раскладки'),
+        ...scenes.list.map((s, i) => {
+          const name = h('span', { class: 'sm-name', translate: 'no' }, s.name);
+          const rename = () => {
+            const inp = h('input', { type: 'text', class: 'sm-input', value: s.name, maxlength: 40 });
+            const done = (ok) => { if (ok) renameScene(s.id, inp.value); paint(); };
+            inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); });
+            inp.addEventListener('blur', () => done(true));
+            name.replaceWith(inp);
+            inp.focus();
+            inp.select();
+          };
+          // удалить — вторым кликом, это необратимо
+          let armed = false;
+          const del = h('button', { type: 'button', class: 'tool danger', title: 'Удалить', disabled: scenes.list.length < 2, html: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+            onclick: async (e) => {
+              e.stopPropagation();
+              if (!armed) { armed = true; del.classList.add('armed'); del.title = 'Точно удалить? Нажми ещё раз'; setTimeout(() => { armed = false; del.classList.remove('armed'); }, 2500); return; }
+              await removeScene(s.id);
+              paint();
+            } });
+          return h('div', { class: 'sm-item' + (s.id === scenes.active ? ' active' : ''), role: 'menuitem',
+            onclick: async () => { await switchScene(s.id); paint(); }, ondblclick: rename },
+            h('span', { class: 'sm-dot' }), name,
+            h('kbd', {}, `Alt+${i + 1}`),
+            h('button', { type: 'button', class: 'tool', title: 'Переименовать', html: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>', onclick: (e) => { e.stopPropagation(); rename(); } }),
+            del);
+        }),
+        h('div', { class: 'sm-actions' },
+          h('button', { type: 'button', class: 'pill small', onclick: async () => { await addScene('copy'); paint(); } }, '+ Копия текущей'),
+          h('button', { type: 'button', class: 'pill small', onclick: async () => { await addScene('default'); paint(); } }, '+ Стандартная')));
+      place();
+    };
+    // над кнопкой (полоса редактора и док — внизу экрана), прижато к её краю и в пределах экрана
+    const place = () => {
+      const r = anchor.getBoundingClientRect();
+      pop.style.left = Math.min(Math.max(8, r.left + r.width / 2 - pop.offsetWidth / 2), innerWidth - pop.offsetWidth - 8) + 'px';
+      pop.style.top = Math.max(8, r.top - pop.offsetHeight - 10) + 'px';
+    };
+    document.body.append(pop);
+    paint();
+    requestAnimationFrame(() => pop.classList.add('open'));
+    const onDown = (e) => { if (!pop.contains(e.target) && !anchor.contains(e.target)) close(); };
+    const onKey = (e) => { if (e.key === 'Escape' && !e.target.matches?.('.sm-input')) { e.stopImmediatePropagation(); close(); } };
+    document.addEventListener('mousedown', onDown, true);
+    window.addEventListener('keydown', onKey, true);
+    function close() {
+      pop.remove();
+      document.removeEventListener('mousedown', onDown, true);
+      window.removeEventListener('keydown', onKey, true);
+      closeScenes = null;
+    }
+    closeScenes = close;
+  }
+
+  async function exportAll() {
+    // все раскладки: активная — из памяти, остальные — из своих ключей
+    const states = {};
+    for (const s of scenes.list) states[s.id] = s.id === scenes.active ? { widgets: stripGeom(layout), layouts } : await Store.get('scene:' + s.id, null);
+    const data = { app: 'torii', v: 3, settings, widgets: stripGeom(layout), layouts, scenes: { ...scenes, states } };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = h('a', { href: URL.createObjectURL(blob), download: 'torii-backup.json' });
     a.click();
@@ -2005,6 +2153,15 @@
       await Store.set('widgets', stripGeom(st.widgets));
       await Store.set('layouts', st.layouts);
       await Store.remove('layout');
+      // v3: все сохранённые раскладки (старые бэкапы — одна раскладка, список сбрасываем)
+      for (const s of scenes.list) await Store.remove('scene:' + s.id);
+      const sc = cleanScenes(d.scenes);
+      for (const s of sc.list) {
+        const raw = d.scenes?.states?.[s.id];
+        const one = s.id !== sc.active && raw && cleanState(raw.widgets, raw.layouts);
+        if (one) await Store.set('scene:' + s.id, { widgets: stripGeom(one.widgets), layouts: one.layouts });
+      }
+      await Store.set('scenes', sc);
       location.reload();
     } catch (e) {
       console.info('[import]', e.message);
@@ -2029,6 +2186,12 @@
       if (panel.classList.contains('open')) return closeSettings();
       if (editing) return setEditing(false);
       if (typing) e.target.blur();
+      return;
+    }
+    // Alt+1…9 — переключить раскладку (по физической клавише: в любой раскладке клавиатуры)
+    if (e.altKey && !e.ctrlKey && !e.metaKey && !typing && /^Digit[1-9]$/.test(e.code)) {
+      const s = scenes.list[+e.code.slice(5) - 1];
+      if (s) { e.preventDefault(); switchScene(s.id); }
       return;
     }
     if (typing || e.ctrlKey || e.metaKey || e.altKey || modal.classList.contains('open') || closeInspector) return;

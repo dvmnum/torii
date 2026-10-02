@@ -132,6 +132,9 @@ function calc(src) {
 }
 
 const GLASS_SETTING = { key: 'glass', label: 'Стеклянная подложка', type: 'toggle' };
+// выравнивание содержимого по схеме 3×3 — общее для блоков с текстом (класс .aligned + v-*/h-*, CSS в разделе виджетов)
+const ALIGN_SETTING = { key: 'align', label: 'Выравнивание', type: 'align' };
+const alignClass = (a) => { const [v, hz] = normAlign(a).split('-'); return `v-${v} h-${hz}`; };
 
 // ---------- ссылки: общий вид для «Ссылок», «Частых сайтов» и «Панели закладок» ----------
 // Фирменные цвета популярных сайтов. Остальным — цвет из самой иконки (Brands ниже), а пока он не известен или иконка
@@ -567,10 +570,11 @@ const Widgets = {
     title: 'Погода',
     size: { w: 6, h: 2 }, min: { w: 3, h: 1 },
     defaults: { glass: true, city: 'Москва', view: 'now', side: 'left' },
-    minFor: (d) => d.view === 'mini' ? { w: 2, h: 1 } : null, // иконка и градусы влезают и в 2×1
+    // иконка и градусы влезают и в 2×1; «Подробно» и «По часам» без высоты теряют смысл
+    minFor: (d) => d.view === 'mini' ? { w: 2, h: 1 } : ['details', 'hours'].includes(d.view) ? { w: 4, h: 2 } : null,
     settings: [
       { key: 'city', label: 'Город', type: 'text' },
-      { key: 'view', label: 'Вид', type: 'select', options: [['now', 'Сейчас'], ['mini', 'Мини'], ['week', 'Неделя']] },
+      { key: 'view', label: 'Вид', type: 'select', options: [['now', 'Сейчас'], ['mini', 'Мини'], ['details', 'Подробно'], ['hours', 'По часам'], ['week', 'Неделя']] },
       { key: 'side', label: 'Выравнивание', type: 'select', options: [['left', 'Слева'], ['center', 'По центру'], ['right', 'Справа']] },
       GLASS_SETTING,
     ],
@@ -595,8 +599,48 @@ const Widgets = {
         )));
       };
 
+      // по часам: «Сейчас» и дальше каждые 2 часа — время, иконка, градусы, вероятность осадков (если заметная)
+      const paintHours = (w, stale) => {
+        const hm = (iso) => new Date(iso).toLocaleTimeString(I18N.locale(), { hour: '2-digit', minute: '2-digit' });
+        box.classList.remove('is-loading', 'is-error');
+        box.classList.toggle('is-stale', stale);
+        box.classList.add('is-week', 'is-hours');
+        box.replaceChildren(...w.hours.filter((_, i) => i % 2 === 0).slice(0, 8).map((x, i) => h('div', { class: 'wx-day' + (i === 0 ? ' today' : '') },
+          h('div', { class: 'wx-dname' }, i === 0 ? 'Сейчас' : hm(x.time)),
+          h('div', { class: 'wx-dico', html: ICONS[weatherInfo(x.code)[1]], title: weatherInfo(x.code)[0] }),
+          h('div', { class: 'wx-dt' }, `${Math.round(x.temp)}°`),
+          h('div', { class: 'wx-pop' }, x.pop >= 20 ? `${x.pop}%` : ''),
+        )));
+      };
+
+      // подробно: сверху как «Сейчас», снизу строка показателей
+      const paintDetails = (w, stale) => {
+        const [desc, ico] = weatherInfo(w.code);
+        const num = (v, unit) => (Number.isFinite(v) ? Math.round(v) + unit : '—');
+        const hm = (iso) => (iso ? new Date(iso).toLocaleTimeString(I18N.locale(), { hour: '2-digit', minute: '2-digit' }) : '—');
+        // до заката — показываем закат, после — восход
+        const sun = w.sunset && Date.now() < new Date(w.sunset) ? ['Закат', hm(w.sunset)] : ['Восход', hm(w.sunrise)];
+        box.classList.remove('is-loading', 'is-error', 'is-week');
+        box.classList.toggle('is-stale', stale);
+        box.classList.add('is-details');
+        box.replaceChildren(
+          h('div', { class: 'wx-top' },
+            h('div', { class: 'wx-ico', html: ICONS[ico] }),
+            h('div', { class: 'wx-temp' }, `${Math.round(w.temp)}°`),
+            h('div', { class: 'wx-meta' },
+              h('div', { class: 'wx-desc' }, desc),
+              h('div', { class: 'w-muted' }, stale ? `${w.place} · нет сети` : `${w.place} · ${Math.round(w.max)}° / ${Math.round(w.min)}°`))),
+          h('div', { class: 'wx-stats' }, ...[
+            ['Ощущается', num(w.feels, '°')], ['Влажность', num(w.humidity, '%')],
+            ['Ветер', num(w.wind, ' м/с')], ['Осадки', num(w.rain, '%')], sun,
+          ].map(([k, v]) => h('div', { class: 'wx-stat' }, h('b', {}, v), h('span', {}, k)))),
+        );
+      };
+
       const paint = (w, stale) => {
         if (data.view === 'week' && w.days?.length > 1) return paintWeek(w, stale);
+        if (data.view === 'hours' && w.hours?.length > 1) return paintHours(w, stale);
+        if (data.view === 'details') return paintDetails(w, stale);
         const [desc, ico] = weatherInfo(w.code);
         box.classList.remove('is-loading', 'is-error', 'is-week');
         box.classList.toggle('is-stale', stale);
@@ -647,7 +691,7 @@ const Widgets = {
 // → { w, stale }. Без сети отдаёт старый кэш (не старше суток) со stale: true.
 // Ошибка с code 'notfound' — город не найден, повторять бессмысленно; остальные — сеть.
 async function loadWeather(city) {
-  const key = 'wx2:' + city.toLowerCase(); // wx2 — с прогнозом на неделю
+  const key = 'wx3:' + city.toLowerCase(); // wx3 — с прогнозом на неделю, по часам и подробностями
   const cached = await Store.get(key, null);
   if (cached && Date.now() - cached.at < 30 * 60 * 1000) return { w: cached.w, stale: false };
 
@@ -659,15 +703,24 @@ async function loadWeather(city) {
     const geo = await get(`https://geocoding-api.open-meteo.com/v1/search?count=1&language=ru&name=${encodeURIComponent(city)}`);
     const p = geo.results && geo.results[0];
     if (!p) throw Object.assign(new Error('city not found'), { code: 'notfound' });
-    const f = await get(`https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=7`);
-    const dl = f.daily;
+    const f = await get(`https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
+      '&current=temperature_2m,weather_code,apparent_temperature,relative_humidity_2m,wind_speed_10m' +
+      '&hourly=temperature_2m,weather_code,precipitation_probability&forecast_hours=24' +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max' +
+      '&wind_speed_unit=ms&timezone=auto&forecast_days=7');
+    const dl = f.daily, cur = f.current, hr = f.hourly || {};
     const w = {
       place: p.name,
-      temp: f.current.temperature_2m,
-      code: f.current.weather_code,
+      temp: cur.temperature_2m,
+      code: cur.weather_code,
       max: dl.temperature_2m_max[0],
       min: dl.temperature_2m_min[0],
+      // подробности — для вида «Подробно» (могут отсутствовать: старый ответ, сбой — тогда прочерк)
+      feels: cur.apparent_temperature, humidity: cur.relative_humidity_2m, wind: cur.wind_speed_10m,
+      rain: dl.precipitation_probability_max?.[0], sunrise: dl.sunrise?.[0], sunset: dl.sunset?.[0],
       days: (dl.time || []).map((date, i) => ({ date, code: dl.weather_code?.[i] ?? 0, max: dl.temperature_2m_max[i], min: dl.temperature_2m_min[i] })),
+      // ближайшие часы — для вида «По часам»
+      hours: (hr.time || []).map((time, i) => ({ time, code: hr.weather_code?.[i] ?? 0, temp: hr.temperature_2m?.[i], pop: hr.precipitation_probability?.[i] })),
     };
     Store.set(key, { at: Date.now(), w });
     return { w, stale: false };

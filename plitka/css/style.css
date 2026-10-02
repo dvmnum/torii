@@ -584,6 +584,26 @@ body.no-motion .clock-time .colon { animation: none; }
 .wx-dt span { color: var(--ink-3); font-weight: 500; margin-left: 4px; }
 @container (max-width: 380px) { .wx-day:nth-child(n+6) { display: none; } }
 @container (max-height: 110px) { .wx-dname { display: none; } }
+/* по часам: под градусами — вероятность осадков, если заметная */
+.wx-pop { font-size: clamp(9px, 9cqh, 12px); font-weight: 700; color: color-mix(in srgb, #6cb8ff 80%, rgb(var(--fg))); min-height: 1.2em; }
+@container (max-height: 130px) { .wx-pop { display: none; } }
+/* подробно: сверху как «Сейчас», снизу строка показателей (значение крупно, подпись мелко) */
+.w-weather.is-details { flex-direction: column; align-items: stretch; justify-content: center; gap: clamp(8px, 7cqh, 18px); padding: clamp(10px, 6cqh, 20px) clamp(14px, 6cqw, 26px); }
+.w-weather.is-details.side-center .wx-top { justify-content: center; }
+.w-weather.is-details.side-right .wx-top { justify-content: flex-end; }
+.wx-top { display: flex; align-items: center; gap: clamp(8px, 4cqw, 16px); min-width: 0; }
+.w-weather.is-details .wx-ico { font-size: min(30cqh, 16cqw); }
+.w-weather.is-details .wx-temp { font-size: min(30cqh, 16cqw); }
+.wx-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); gap: 6px;
+  padding-top: clamp(8px, 5cqh, 14px); border-top: 1px solid var(--line);
+}
+.wx-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wx-stat b { font-size: clamp(12px, 9cqh, 16px); font-weight: 700; white-space: nowrap; font-feature-settings: 'tnum' 1; }
+.wx-stat span { font-size: clamp(10px, 6.5cqh, 12px); color: var(--ink-3); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* низкий блок — показатели прячем, остаётся верхняя строка; узкий — показываем только первые три */
+@container (max-height: 130px) { .wx-stats { display: none; } }
+@container (max-width: 300px) { .wx-stat:nth-child(n+4) { display: none; } }
 
 /* ================= ОБЩЕЕ ДЛЯ НОВЫХ ВИДЖЕТОВ ================= */
 .w-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
@@ -685,6 +705,9 @@ body.no-motion .clock-time .colon { animation: none; }
 .hb-dot { aspect-ratio: 1; width: 100%; border-radius: 50%; border: 1.5px solid rgba(var(--fg), .25); background: none; padding: 0; transition: background .2s, border-color .2s, transform .2s var(--ease); }
 .hb-dot:hover { border-color: var(--accent); transform: scale(1.1); }
 .hb-dot.on { background: var(--accent); border-color: var(--accent); }
+.hb-dot.today:not(.on) { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+/* будущие дни недели — ещё не наступили, отметить нельзя */
+.hb-dot.future { border-style: dashed; border-color: rgba(var(--fg), .12); }
 .hb-streak { font-size: 12px; font-weight: 700; color: var(--ink-2); text-align: right; white-space: nowrap; }
 
 /* цитата и слово */
@@ -694,6 +717,13 @@ body.no-motion .clock-time .colon { animation: none; }
 .w-quote figcaption::before { content: '— '; }
 .w-word { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: clamp(12px, 5cqw, 20px); }
 .w-word .w-label { margin-bottom: 4px; }
+/* выравнивание 3×3 у текстовых блоков (ALIGN_SETTING): цитата, слово дня, отсчёт */
+.aligned.v-top { justify-content: flex-start; }
+.aligned.v-middle { justify-content: center; }
+.aligned.v-bottom { justify-content: flex-end; }
+.aligned.h-left { align-items: flex-start; text-align: left; }
+.aligned.h-center { align-items: center; text-align: center; }
+.aligned.h-right { align-items: flex-end; text-align: right; }
 .word-w { font-size: clamp(18px, min(22cqh, 11cqw), 40px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
 .word-m { font-size: clamp(12px, 8cqh, 16px); color: var(--ink-2); font-weight: 500; margin-top: 4px; line-height: 1.35; }
 
@@ -757,6 +787,37 @@ body.no-motion .clock-time .colon { animation: none; }
 .dock:hover .dock-btn { background: rgba(24,24,25,.55); border-color: var(--line); filter: none; }
 .dock-btn:hover { background: rgba(46,46,48,.8) !important; transform: translateY(-2px); }
 body.editing #btn-edit { background: var(--accent); color: #0c0c0d; border-color: transparent; filter: none; }
+
+/* ================= СОХРАНЁННЫЕ РАСКЛАДКИ ================= */
+.dock-btn[hidden] { display: none; }
+.scene-btn { display: inline-flex; align-items: center; gap: 7px; max-width: 200px; }
+.scene-btn .sb-ico { display: grid; font-size: 15px; color: var(--ink-2); }
+.scene-btn .sb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scene-btn .sb-chev { display: grid; font-size: 13px; color: var(--ink-3); }
+.scene-menu {
+  position: fixed; z-index: 70; width: 290px; padding: 6px; border-radius: 16px;
+  background: rgba(26, 26, 27, .97); border: 1px solid var(--line-2); box-shadow: 0 24px 60px -12px rgba(0,0,0,.7);
+  display: flex; flex-direction: column; gap: 1px;
+  opacity: 0; transform: translateY(6px); transition: opacity .15s, transform .2s var(--ease);
+}
+.scene-menu.open { opacity: 1; transform: none; }
+.sm-title { padding: 8px 10px 6px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.sm-item {
+  display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 10px; min-height: 38px; border-radius: 10px; cursor: pointer;
+  color: var(--ink-2); font-size: 13.5px; font-weight: 600;
+}
+.sm-item:hover { background: rgba(255,255,255,.06); color: var(--ink); }
+.sm-item.active { color: var(--ink); background: rgba(255,255,255,.08); }
+.sm-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; border: 1.5px solid rgba(255,255,255,.3); }
+.sm-item.active .sm-dot { background: var(--accent); border-color: var(--accent); }
+.sm-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-input { flex: 1; min-width: 0; height: 28px; box-sizing: border-box; padding: 0 8px; border-radius: 7px; border: 1px solid var(--accent); background: rgba(255,255,255,.06); color: var(--ink); font: 600 13.5px 'Manrope', sans-serif; outline: 0; }
+.sm-item kbd { font: 600 10.5px/1 'Manrope', sans-serif; color: var(--ink-3); padding: 3px 5px; border-radius: 5px; background: rgba(255,255,255,.06); }
+/* переименовать / удалить — видны при наведении на строку */
+.sm-item .tool { opacity: 0; transition: opacity .15s; }
+.sm-item:hover .tool, .sm-item .tool.armed { opacity: 1; }
+.sm-item .tool.armed { color: #ff8a9a; background: rgba(255, 90, 110, .2); }
+.sm-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 6px 4px; margin-top: 4px; border-top: 1px solid var(--line); }
 
 .editbar {
   position: fixed; left: 50%; bottom: 20px; z-index: 21;

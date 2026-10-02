@@ -19,7 +19,13 @@ const ctx = await chromium.launchPersistentContext(userDir, {
 
 // подсовываем ответы Open-Meteo, чтобы тест не зависел от сети
 await ctx.route('https://geocoding-api.open-meteo.com/**', r => r.fulfill({ json: { results: [{ name: 'Москва', latitude: 55.75, longitude: 37.62 }] } }));
-await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ json: { current: { temperature_2m: 11.4, weather_code: 2 }, daily: { temperature_2m_max: [14.2], temperature_2m_min: [7.8] } } }));
+// часы прогноза — от текущего часа, как отдаёт Open-Meteo с forecast_hours
+const hourIso = (i) => { const d = new Date(Date.now() + i * 3600000); d.setMinutes(0, 0, 0); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
+await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ json: {
+  current: { temperature_2m: 11.4, weather_code: 2, apparent_temperature: 9.6, relative_humidity_2m: 71, wind_speed_10m: 4.2 },
+  daily: { temperature_2m_max: [14.2], temperature_2m_min: [7.8], sunrise: [hourIso(-6)], sunset: [hourIso(5)], precipitation_probability_max: [40] },
+  hourly: { time: [...Array(24)].map((_, i) => hourIso(i)), temperature_2m: [...Array(24)].map((_, i) => 11 - i / 3), weather_code: [...Array(24)].map((_, i) => [2, 3, 61, 0][i % 4]), precipitation_probability: [...Array(24)].map((_, i) => (i * 7) % 60) },
+} }));
 // тест подкладывает настройки целиком ({ settings: {...} }); картинка-фон теперь живёт отдельным ключом bgImage —
 // если в подложенных настройках картинки нет, убираем и её ключ (как было бы при «settings целиком»)
 await ctx.addInitScript(() => {
@@ -119,14 +125,18 @@ const check = (ok, what) => { console.log((ok ? 'ok   ' : 'FAIL ') + what); if (
 // погода без сети: заглушка, потом сама подтягивается, когда сеть вернулась
 await ctx.unroute('https://api.open-meteo.com/**');
 await ctx.route('https://api.open-meteo.com/**', r => r.abort('internetdisconnected'));
-await page.evaluate(() => chrome.storage.local.remove('wx2:москва'));
+await page.evaluate(() => chrome.storage.local.remove('wx3:москва'));
 await page.reload();
 await page.waitForTimeout(1200);
 check(await page.locator('.w-weather.is-error:has-text("Нет связи")').count() === 1, 'погода: заглушка без сети');
 await page.screenshot({ path: `${out}/08-weather-offline.png` });
 await ctx.unroute('https://api.open-meteo.com/**');
 const week = (t) => ({ time: [...Array(7)].map((_, i) => new Date(Date.now() + i * 864e5).toISOString().slice(0, 10)), weather_code: [61, 3, 2, 0, 71, 95, 45], temperature_2m_max: [t + 2, 7, 9, 12, 1, 8, 6], temperature_2m_min: [t - 2, 2, 3, 5, -3, 4, 2] });
-await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ json: { current: { temperature_2m: 3, weather_code: 61 }, daily: week(3) } }));
+await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ json: {
+  current: { temperature_2m: 3, weather_code: 61, apparent_temperature: 9.6, relative_humidity_2m: 71, wind_speed_10m: 4.2 },
+  daily: { ...week(3), sunrise: [hourIso(-6)], sunset: [hourIso(5)], precipitation_probability_max: [40] },
+  hourly: { time: [...Array(24)].map((_, i) => hourIso(i)), temperature_2m: [...Array(24)].map((_, i) => 3 - i / 3), weather_code: [...Array(24)].map((_, i) => [2, 3, 61, 0][i % 4]), precipitation_probability: [...Array(24)].map((_, i) => (i * 7) % 60) },
+} }));
 await page.evaluate(() => window.dispatchEvent(new Event('online')));
 await page.waitForTimeout(800);
 check(await page.locator('.w-weather .wx-temp:has-text("3°")').count() === 1, 'погода: восстановилась после online');
@@ -623,7 +633,7 @@ check(!(await page.textContent('.w-rates')).includes('null'), 'курсы: бе�
 check(await page.locator('.rate:has-text("USD"):has-text("81,72")').count() === 1 && await page.locator('.rate-d.up').count() === 1 && await page.locator('.rate-d.down').count() === 1, 'курсы: USD 81,72 ₽, рост и падение');
 check(/^\d+$/.test((await page.textContent('.cd-big')).trim()) && /дн|день/.test(await page.textContent('.cd-unit')), 'отсчёт: дни до Нового года');
 const hbSel = `.grid-stack-item[gs-id="${await idOf('habits')}"]`;
-await page.click(`${hbSel} .hb-dot >> nth=6`);
+await page.click(`${hbSel} .hb-dot.today >> nth=0`);
 await page.waitForTimeout(200);
 check(await page.locator(`${hbSel} .hb-dot.on`).count() === 1 && (await page.textContent(`${hbSel} .hb-streak >> nth=0`)).startsWith('1'), 'привычки: отметка за сегодня и серия 1');
 const q0 = await page.textContent('.w-quote blockquote');
@@ -664,7 +674,8 @@ check((await page.textContent('.word-w')).length > 2 && (await page.textContent(
 check(await page.evaluate(() => { const i = document.querySelector('.w-pic img'); return !!i && i.src.includes('cataas.com') && i.naturalWidth > 0; }), 'картинка: котик загрузился');
 // погода — режим «неделя»
 await openSettings(await idOf('weather'));
-await page.click('.inspector .seg-btn:has-text("Неделя")');
+await page.click('.inspector .field:has-text("Вид") .dd-btn'); // видов пять — это список, а не сегменты
+await page.click('body > .dd-list .dd-item:has-text("Неделя")');
 await page.keyboard.press('Escape'); // закрыть инспектор — всё уже применилось
 await page.keyboard.press('Escape');
 await page.waitForTimeout(600);
@@ -1017,7 +1028,7 @@ const mins = [
   ['rates', 15, 0, 3, 2], ['countdown', 18, 0, 3, 2], ['word', 21, 0, 3, 2],
   ['links', 0, 3, 8, 1], ['search', 8, 3, 6, 1], ['weather', 14, 3, 4, 1],
   ['habits', 0, 5, 4, 2], ['quote', 4, 5, 4, 2], ['pic', 8, 5, 2, 2],
-  ['greeting', 18, 3, 3, 1], ['weather', 21, 3, 2, 1, { view: 'mini', side: 'center' }], ['greeting', 10, 5, 10, 2, { font: 'lobster', sub: 'date' }],
+  ['greeting', 18, 3, 3, 1], ['weather', 21, 3, 2, 1, { view: 'mini', side: 'center' }], ['greeting', 10, 5, 10, 2, { font: 'lobster', sub: 'date' }], ['quote', 20, 5, 4, 2, { align: 'bottom-right' }],
 ];
 await page.evaluate((list) => chrome.storage.local.set({
   settings: {},
@@ -1029,6 +1040,8 @@ await page.waitForTimeout(1500);
 await page.screenshot({ path: `${out}/51-min-sizes.png` });
 const miniW = await page.evaluate(() => { const r = document.querySelector('.grid-stack-item[gs-id="m-15"]'); return r && { w: r.gridstackNode.w, minW: r.gridstackNode.minW }; });
 check(miniW && miniW.w === 2 && miniW.minW === 2, `погода «Мини»: ужимается до 2 клеток (${JSON.stringify(miniW)})`);
+const qa = await page.$eval('.grid-stack-item[gs-id="m-17"] .w-quote', el => getComputedStyle(el).textAlign + ' ' + getComputedStyle(el).justifyContent);
+check(qa === 'right flex-end', `цитата: выравнивание снизу справа (${qa})`);
 const linkC = await page.evaluate(() => {
   const w = document.querySelector('.grid-stack-item[gs-id="m-8"] .w').getBoundingClientRect();
   // иконка с подписью — одной парой по центру, подпись видна и не вылезает за блок
@@ -1124,6 +1137,69 @@ await page.evaluate(() => document.querySelector("filter[id^=lq] feImage").getAt
 console.log("lq filters:", await page.evaluate(() => [...document.querySelectorAll("filter[id^=lq]")].map(f => f.id + " " + f.getAttribute("width") + "x" + f.getAttribute("height") + " img=" + (f.querySelector("feImage")?.getAttribute("href") || "").length + " scale=" + f.querySelector("feDisplacementMap")?.getAttribute("scale") + " ns=" + f.querySelector("feImage")?.namespaceURI).join(" | ")));
 await page.screenshot({ path: `${out}/55-liquid-edge.png`, clip: { x: 440, y: 70, width: 260, height: 320 } });
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
+
+// ---------- неделя с понедельника, погода подробно и по часам ----------
+await page.evaluate(() => chrome.storage.local.set({
+  settings: {},
+  widgets: [{ id: 'hb', type: 'habits', data: {} }, { id: 'wd', type: 'weather', data: { view: 'details' } }, { id: 'wh', type: 'weather', data: { view: 'hours' } }],
+  layouts: { lg: { hb: { x: 0, y: 0, w: 7, h: 4 }, wd: { x: 8, y: 0, w: 7, h: 4 }, wh: { x: 0, y: 5, w: 12, h: 3 } } },
+}));
+await page.reload();
+await page.waitForTimeout(1500);
+const wk = await page.evaluate(() => ({
+  first: document.querySelector('.hb-dn')?.textContent,
+  expectFuture: (() => { const g = new Date().getDay(); return 6 - ((g + 6) % 7); })(),
+  futureRow: [...document.querySelectorAll('[gs-id="hb"] .hb-dot')].slice(0, 7).filter(d => d.classList.contains('future')).length,
+}));
+check(/^пн$/i.test(wk.first) && wk.futureRow === wk.expectFuture, `привычки: неделя с понедельника, будущие дни не нажимаются (${wk.first}, будущих ${wk.futureRow}/${wk.expectFuture})`);
+const wxv = await page.evaluate(() => ({
+  stats: [...document.querySelectorAll('[gs-id="wd"] .wx-stat')].map(s => s.textContent),
+  hours: [...document.querySelectorAll('[gs-id="wh"] .wx-day .wx-dname')].map(s => s.textContent),
+}));
+check(wxv.stats.length === 5 && wxv.stats[0].includes('10°') && wxv.stats.some(s => s.includes('4 м/с')), `погода «Подробно»: показатели (${wxv.stats.join(' | ')})`);
+check(wxv.hours.length === 8 && wxv.hours[0] === 'Сейчас' && /^\d\d:00$/.test(wxv.hours[1]), `погода «По часам»: 8 точек через 2 часа (${wxv.hours.join(', ')})`);
+await page.screenshot({ path: `${out}/65-week-weather.png` });
+
+// ---------- сохранённые раскладки ----------
+await page.evaluate(() => chrome.storage.local.set({
+  settings: {}, scenes: null,
+  widgets: [{ id: 'w-clock', type: 'clock', data: {} }, { id: 'w-search', type: 'search', data: {} }],
+  layouts: { lg: { 'w-clock': { x: 6, y: 2, w: 12, h: 4 }, 'w-search': { x: 6, y: 7, w: 12, h: 1 } } },
+}));
+await page.evaluate(() => chrome.storage.local.remove(['scenes', 'scene:main']));
+await page.reload();
+await page.waitForTimeout(1000);
+check(await page.locator('#btn-scenes').isHidden(), 'раскладки: пока одна — кнопки в доке нет');
+await page.keyboard.press('e');
+await page.waitForTimeout(300);
+await page.click('.scene-btn');
+await page.waitForTimeout(250);
+await page.click('.scene-menu button:has-text("Копия текущей")');
+await page.waitForTimeout(400);
+check((await page.textContent('.scene-btn .sb-name')) === 'Раскладка 2', 'раскладки: копия текущей стала активной');
+await page.screenshot({ path: `${out}/66-scenes.png` });
+await page.keyboard.press('Escape'); // закрыть список
+await page.hover('.grid-stack-item[gs-id="w-search"]');
+await page.click('.grid-stack-item[gs-id="w-search"] .tool.danger');
+await page.waitForTimeout(400);
+await page.keyboard.press('Escape'); // выйти из редактора
+await page.keyboard.press('Alt+Digit1');
+await page.waitForTimeout(500);
+const n1 = await page.locator('.grid-stack-item').count();
+await page.keyboard.press('Alt+Digit2');
+await page.waitForTimeout(500);
+const n2 = await page.locator('.grid-stack-item').count();
+check(n1 === 2 && n2 === 1, `раскладки: Alt+1 / Alt+2 переключают набор блоков (${n1} и ${n2})`);
+await page.reload();
+await page.waitForTimeout(1000);
+check(await page.locator('.grid-stack-item').count() === 1 && await page.locator('#btn-scenes').isVisible(), 'раскладки: активная пережила перезагрузку, в доке есть кнопка');
+await page.click('#btn-scenes');
+await page.waitForTimeout(250);
+await page.click('.scene-menu .sm-item:has-text("Основная")');
+await page.waitForTimeout(500);
+check(await page.locator('.grid-stack-item').count() === 2, 'раскладки: переключение из дока');
+await page.keyboard.press('Escape');
+await page.evaluate(() => chrome.storage.local.remove(['scenes', 'scene:main']));
 
 // ---------- свои приветствия, «Ещё», картинка во «Фоне» ----------
 await page.evaluate(() => chrome.storage.local.set({
