@@ -38,6 +38,9 @@ tests/perf.mjs         замер скорости (npm run perf; --profile — 
 tests/i18n-scan.mjs    русские строки без английского перевода (npm run i18n) — гонять после новых текстов
 tests/firefox.mjs      смоук в движке Firefox (npm run test:firefox): страница вкладки с локального сервера, API расширения — заглушка
 scripts/build.mjs      сборка под магазины (npm run build) → dist/torii-<версия>-chrome.zip и -firefox.zip (+ распакованные копии)
+scripts/store-shots.mjs скриншоты для магазинов (npm run store) → store/screenshots/{ru,en}/*.png 1280×800 + промо-плитки 440×280; нужна сеть (иконки сайтов)
+store/                 карточка магазина: listing-ru.md / listing-en.md (описание, обоснования разрешений, поля), privacy-policy.md
+plitka/_locales/       название и краткое описание расширения для магазина (ru, en; default_locale — en): manifest берёт __MSG_appName__/__MSG_appDesc__
 scripts/make-icons.mjs PNG-иконки 16/32/48/128 из plitka/icons/icon.svg (ворота-тории) — после правки svg
 tests/debug.mjs        открыть вкладку расширения и вывести ошибки консоли (npm run debug) — когда e2e падает на старте
 ```
