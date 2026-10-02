@@ -1417,6 +1417,9 @@ kbd {
 .panel-footer img { width: 16px; height: 16px; border-radius: 4px; }
 .panel-footer b { color: var(--ink-2); }
 .pf-note { margin-left: auto; }
+.pf-links { margin-left: auto; display: flex; gap: 14px; }
+.pf-links a { color: var(--ink-3); text-decoration: none; transition: color .15s; }
+.pf-links a:hover { color: var(--ink); }
 .panel.peek .panel-footer { opacity: 0; }
 /* приветствия */
 .greets { display: flex; flex-direction: column; gap: 6px; }

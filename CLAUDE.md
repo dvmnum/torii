@@ -156,7 +156,7 @@ myWidget: {
 - Проверка Firefox: `npm run build` → `npx web-ext lint --source-dir dist/firefox` (ошибок 0; предупреждения про `innerHTML` — наши собственные SVG/разметка, публикацию не блокируют) → `npm run test:firefox` (смоук в Gecko) → по-настоящему: about:debugging → «Загрузить временное дополнение» → `dist/firefox/manifest.json`.
 - В Firefox нет жидкого стекла (проверка `Liquid.supported`) — остаётся обычное. Шрифты — `format('woff2')`, не `woff2-variations` (его Firefox может не понять).
 - Инкогнито: включить «работу в приватных окнах» за пользователя нельзя. Если `windows.create({ incognito })` не сработал — карточка `incognitoHelp(url)` (widgets.js): в Chromium кнопка открывает `chrome://extensions/?id=…`, в Firefox (служебные страницы расширениям закрыты) — путь словами; плюс «Открыть в обычной вкладке».
-- Донат автору (`DONATE_URL` в app.js, boosty.to/dvmnum/donate): раздел «Поддержать» последним в «Ещё» и одно предложение `askDonateOnce()` на третьем открытии вкладки (ключи `opens`, `donateAsked`; после показа счётчик не пишется). В автотестах (`navigator.webdriver`) не показывается; `newtab.html?donate` — показать для проверки.
+- Донат автору (`DONATE_URL` в app.js, boosty.to/dvmnum/donate): раздел «Поддержать» последним в «Ещё», ссылки «Сайт · GitHub» в подвале панели (`SITE_URL`, `REPO_URL`) и карточка `askDonateOnce()`: с третьего открытия вкладки — каждый раз, пока человек не нажмёт любую кнопку, потом никогда (ключи `opens` — пишется, только пока < 3, и `donateAsked`). В автотестах (`navigator.webdriver`) не показывается; `newtab.html?donate` — показать для проверки.
 - Safari — отдельная история (Xcode, обёртка-приложение, аккаунт Apple $99/год); пока не делаем.
 
 ## Скорость (вкладка должна «летать»)

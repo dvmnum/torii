@@ -7,6 +7,8 @@
   const ACCENTS = ['#9b8cff', '#5cc8ff', '#b4f05a', '#ff7a9c', '#ffc35c', '#f2f2f2'];
   // донат автору: раздел в «Ещё» и одно предложение на третьем открытии вкладки (askDonateOnce)
   const DONATE_URL = 'https://boosty.to/dvmnum/donate';
+  const SITE_URL = 'https://dvmnum.github.io/torii/';
+  const REPO_URL = 'https://github.com/dvmnum/torii';
   const HEART_SVG = '<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>';
 
   // иконка вкладки: часы и помодоро — «живые», перерисовываются
@@ -1546,7 +1548,11 @@
   // подвал панели — название и версия, без маркетинга
   panel.append(h('footer', { class: 'panel-footer' },
     h('img', { src: 'icons/icon32.png', alt: '' }),
-    h('span', {}, h('b', {}, 'Torii'), ' ', chrome.runtime?.getManifest?.().version || '')));
+    h('span', {}, h('b', {}, 'Torii'), ' ', chrome.runtime?.getManifest?.().version || ''),
+    // справа — сайт и код, мелко
+    h('span', { class: 'pf-links' },
+      h('a', { href: SITE_URL + (I18N.lang() === 'en' ? 'en/' : ''), target: '_blank', rel: 'noopener' }, 'Сайт'),
+      h('a', { href: REPO_URL, target: '_blank', rel: 'noopener' }, 'GitHub'))));
 
   function renderSettings() {
     meshPreview?.destroy();
@@ -2272,20 +2278,23 @@
   slideshowOnLoad(); // после всего: слайд-шоу само решит, пора ли сменить фон
   askDonateOnce();
 
-  // Предложение поддержать автора — один раз за всё время, на третьем открытии вкладки (как у Bonjourr):
-  // карточка в левом нижнем углу, «Поддержать» / «Не сейчас», больше не появляется. Счётчик открытий пишем,
-  // только пока не спросили. В автотестах (navigator.webdriver) не показываем; newtab.html?donate — показать для проверки.
+  // Предложение поддержать автора: с третьего открытия вкладки — каждый раз, пока человек не ответит.
+  // Любая кнопка («Не сейчас» или «Поддержать») — больше никогда (donateAsked). Счётчик открытий пишем,
+  // только пока он меньше трёх. В автотестах (navigator.webdriver) не показываем; newtab.html?donate — показать для проверки.
   function askDonateOnce() {
     const force = location.search.includes('donate');
     if (!force) {
       if (boot.donateAsked || navigator.webdriver) return;
-      const opens = (Number(boot.opens) || 0) + 1;
-      if (opens < 3) { Store.set('opens', opens); return; }
-      Store.set('donateAsked', true);
-      Store.remove('opens');
+      const opens = Number(boot.opens) || 0;
+      if (opens < 2) { Store.set('opens', opens + 1); return; } // первое и второе открытие — тишина
     }
     setTimeout(() => {
-      const close = () => { card.classList.remove('on'); setTimeout(() => card.remove(), 300); };
+      const close = () => {
+        Store.set('donateAsked', true); // ответил — больше не спрашиваем
+        Store.remove('opens');
+        card.classList.remove('on');
+        setTimeout(() => card.remove(), 300);
+      };
       const card = h('div', { class: 'donate-ask', role: 'dialog' },
         h('span', { class: 'da-ico', html: HEART_SVG }),
         h('div', { class: 'da-text' },
