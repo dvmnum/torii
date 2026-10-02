@@ -81,6 +81,9 @@ const I18N = (() => {
     'Дополнения → Torii → «Запуск в приватных окнах» → Разрешить. Потом нажми поиск ещё раз.': 'Add-ons → Torii → “Run in Private Windows” → Allow. Then search again.',
     'Открою настройки расширения — там включи «Разрешить в режиме инкогнито». Потом нажми поиск ещё раз.': 'I’ll open the extension settings — turn on “Allow in Incognito” there. Then search again.',
     'Открыть в обычной вкладке': 'Open in a normal tab', 'Открыть настройки': 'Open settings',
+    'Поддержать': 'Support', 'Не сейчас': 'Not now', 'Нравится Torii?': 'Enjoying Torii?', 'Поддержать на Boosty': 'Support on Boosty',
+    'Он бесплатный и без рекламы. Если хочется — можно поддержать автора на Boosty.': 'It’s free and ad-free. If you’d like, you can support the author on Boosty.',
+    'Torii бесплатный и без рекламы. Если пригодился — можно поддержать автора.': 'Torii is free and ad-free. If it’s useful to you, you can support the author.',
     'Свой': 'Custom', 'Стиль': 'Style','Недавние': 'Recent', 'Загружаю картинку…': 'Loading image…', 'Слабая': 'Soft', 'Слева': 'Left', 'Справа': 'Right', 'Тень блока': 'Block shadow', 'Тень блоков': 'Block shadow',
     'Прямоугольник, где узора нет — тащи на превью': 'A rectangle without the pattern — drag it on the preview',
     // редактор и меню

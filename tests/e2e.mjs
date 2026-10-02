@@ -1255,6 +1255,18 @@ await page.click('.incog-help .ih-close');
 await page.waitForTimeout(400);
 check(await page.locator('.incog-help').count() === 0, 'инкогнито: карточка закрывается');
 
+// ---------- поддержать автора: разовая карточка (в тестах сама не появляется — navigator.webdriver; ?donate — показать) ----------
+check(await page.locator('.donate-ask').count() === 0, 'донат: в автотесте карточка сама не появляется');
+await page.goto(url + '?donate');
+await page.waitForTimeout(3200);
+check(await page.locator('.donate-ask.on a[href="https://boosty.to/dvmnum/donate"]').count() === 1, 'донат: карточка «Нравится Torii?» со ссылкой на Boosty');
+await page.screenshot({ path: `${out}/68-donate-ask.png`, clip: { x: 0, y: 620, width: 520, height: 280 } });
+await page.click('.donate-ask button:has-text("Не сейчас")');
+await page.waitForTimeout(400);
+check(await page.locator('.donate-ask').count() === 0, 'донат: «Не сейчас» закрывает');
+await page.goto(url);
+await page.waitForTimeout(800);
+
 // ---------- свои приветствия, «Ещё», картинка во «Фоне» ----------
 await page.evaluate(() => chrome.storage.local.set({
   settings: { name: 'Вова' },
@@ -1283,6 +1295,7 @@ check(tip && tip.l >= 0 && tip.r <= 1600 && tip.t >= 0 && tip.b <= 900, `под�
 await page.screenshot({ path: `${out}/63-info-tip.png` });
 await ptab('more');
 check(await page.locator('.action-card:has-text("Изменить раскладку")').count() === 1 && await page.locator('.hotkeys kbd').count() >= 6 && await page.locator('.panel-footer:has-text("Torii")').count() === 1, 'ещё: карточка раскладки, клавиши, подвал с названием');
+check(await page.locator('.panel a.donate-link[href="https://boosty.to/dvmnum/donate"]').count() === 1, 'ещё: раздел «Поддержать» со ссылкой на Boosty');
 await page.screenshot({ path: `${out}/58-more.png` });
 await page.click('.panel [data-close]');
 await page.evaluate((u) => chrome.storage.local.set({ settings: { bgImage: u } }), photoUrl);

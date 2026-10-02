@@ -5,6 +5,9 @@
   const PAD = 14; // отступ сетки от краёв экрана
 
   const ACCENTS = ['#9b8cff', '#5cc8ff', '#b4f05a', '#ff7a9c', '#ffc35c', '#f2f2f2'];
+  // донат автору: раздел в «Ещё» и одно предложение на третьем открытии вкладки (askDonateOnce)
+  const DONATE_URL = 'https://boosty.to/dvmnum/donate';
+  const HEART_SVG = '<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>';
 
   // иконка вкладки: часы и помодоро — «живые», перерисовываются
   const TAB_ICONS = [['logo', 'Torii'], ['emoji', 'Эмодзи'], ['letter', 'Буква'], ['clock', 'Часы'], ['pomodoro', 'Помодоро'], ['image', 'Своя']];
@@ -103,7 +106,7 @@
 
   // всё для первого кадра — одним запросом. Картинка-фон лежит отдельным ключом bgImage (мегабайты):
   // иначе её перечитывали бы и перезаписывали вместе с настройками на каждый шаг любого ползунка
-  const boot = await Store.getMany({ settings: {}, bgImage: null, widgets: null, layouts: null, scenes: null });
+  const boot = await Store.getMany({ settings: {}, bgImage: null, widgets: null, layouts: null, scenes: null, opens: 0, donateAsked: false });
   let settings = cleanSettings(boot.settings);
   persistSettings.img = boot.bgImage;
   if (!settings.bgImage && typeof boot.bgImage === 'string' && boot.bgImage.startsWith('data:image/')) settings.bgImage = boot.bgImage;
@@ -1629,6 +1632,10 @@
               ...[[kbd('E'), 'Изменить раскладку'], [kbd('/'), 'Перейти к поиску'], [kbd('Esc'), 'Закрыть панель, выйти из редактора'],
                 [kbd('Ctrl', 'Enter'), 'Поиск в новой вкладке'], [kbd('Shift', 'Enter'), 'Поиск в инкогнито'], [kbd('Alt', '1…9'), 'Переключить раскладку']]
                 .flatMap(([k, t]) => [h('dt', {}, k), h('dd', {}, t)]))),
+          // тихо и последним: ссылка на донат автору, без напоминаний
+          section('Поддержать',
+            h('p', { class: 'field-hint' }, 'Torii бесплатный и без рекламы. Если пригодился — можно поддержать автора.'),
+            h('a', { class: 'pill small donate-link', href: DONATE_URL, target: '_blank', rel: 'noopener' }, h('span', { class: 'btn-ico', html: HEART_SVG }), 'Поддержать на Boosty')),
         ];
       },
     };
@@ -2263,6 +2270,34 @@
   }
 
   slideshowOnLoad(); // после всего: слайд-шоу само решит, пора ли сменить фон
+  askDonateOnce();
+
+  // Предложение поддержать автора — один раз за всё время, на третьем открытии вкладки (как у Bonjourr):
+  // карточка в левом нижнем углу, «Поддержать» / «Не сейчас», больше не появляется. Счётчик открытий пишем,
+  // только пока не спросили. В автотестах (navigator.webdriver) не показываем; newtab.html?donate — показать для проверки.
+  function askDonateOnce() {
+    const force = location.search.includes('donate');
+    if (!force) {
+      if (boot.donateAsked || navigator.webdriver) return;
+      const opens = (Number(boot.opens) || 0) + 1;
+      if (opens < 3) { Store.set('opens', opens); return; }
+      Store.set('donateAsked', true);
+      Store.remove('opens');
+    }
+    setTimeout(() => {
+      const close = () => { card.classList.remove('on'); setTimeout(() => card.remove(), 300); };
+      const card = h('div', { class: 'donate-ask', role: 'dialog' },
+        h('span', { class: 'da-ico', html: HEART_SVG }),
+        h('div', { class: 'da-text' },
+          h('b', {}, 'Нравится Torii?'),
+          h('span', {}, 'Он бесплатный и без рекламы. Если хочется — можно поддержать автора на Boosty.')),
+        h('div', { class: 'da-actions' },
+          h('a', { class: 'pill small pill-accent', href: DONATE_URL, target: '_blank', rel: 'noopener', onclick: close }, 'Поддержать'),
+          h('button', { type: 'button', class: 'pill small', onclick: close }, 'Не сейчас')));
+      document.body.append(card);
+      requestAnimationFrame(() => card.classList.add('on'));
+    }, 2500); // не в момент открытия — сначала вкладка, потом просьба
+  }
   requestAnimationFrame(() => document.body.classList.remove('is-loading'));
   console.info(`[plitka] вкладка готова через ${Math.round(performance.now())} мс`);
   window.__plitka = { grid, get layout() { return layout; }, get layouts() { return layouts; }, get bucket() { return bucket; }, settings: () => settings, setEditing };
