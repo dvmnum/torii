@@ -1264,6 +1264,26 @@ await page.screenshot({ path: `${out}/68-donate-ask.png`, clip: { x: 0, y: 620, 
 await page.click('.donate-ask button:has-text("Не сейчас")');
 await page.waitForTimeout(400);
 check(await page.locator('.donate-ask').count() === 0, 'донат: «Не сейчас» закрывает');
+// настоящий сценарий (?donate-test — обычная логика под автотестом): 1-е и 2-е открытие — тишина, 3-е — карточка,
+// в тот же день снова — нет; старый флаг donateAsked из 0.12.0 не мешает; ответил — больше никогда
+await page.evaluate(() => chrome.storage.local.remove(['opens', 'donateDone', 'donateDay']).then(() => chrome.storage.local.set({ donateAsked: true })));
+const donateSeen = [];
+for (let i = 0; i < 4; i++) {
+  await page.goto(url + '?donate-test');
+  await page.waitForTimeout(3000);
+  donateSeen.push(await page.locator('.donate-ask').count());
+}
+check(donateSeen.join('') === '0010', `донат: с 3-го открытия, не чаще раза в день, старый флаг не мешает (${donateSeen.join(' ')})`);
+await page.evaluate(() => chrome.storage.local.set({ donateDay: 'вчера' }));
+await page.goto(url + '?donate-test');
+await page.waitForTimeout(3000);
+const nextDay = await page.locator('.donate-ask').count();
+await page.click('.donate-ask button:has-text("Не сейчас")');
+await page.waitForTimeout(300);
+await page.evaluate(() => chrome.storage.local.set({ donateDay: 'вчера' }));
+await page.goto(url + '?donate-test');
+await page.waitForTimeout(3000);
+check(nextDay === 1 && await page.locator('.donate-ask').count() === 0, 'донат: на следующий день снова, после «Не сейчас» — никогда');
 await page.goto(url);
 await page.waitForTimeout(800);
 

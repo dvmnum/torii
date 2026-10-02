@@ -108,7 +108,7 @@
 
   // всё для первого кадра — одним запросом. Картинка-фон лежит отдельным ключом bgImage (мегабайты):
   // иначе её перечитывали бы и перезаписывали вместе с настройками на каждый шаг любого ползунка
-  const boot = await Store.getMany({ settings: {}, bgImage: null, widgets: null, layouts: null, scenes: null, opens: 0, donateAsked: false });
+  const boot = await Store.getMany({ settings: {}, bgImage: null, widgets: null, layouts: null, scenes: null, opens: 0, donateDone: false, donateDay: null });
   let settings = cleanSettings(boot.settings);
   persistSettings.img = boot.bgImage;
   if (!settings.bgImage && typeof boot.bgImage === 'string' && boot.bgImage.startsWith('data:image/')) settings.bgImage = boot.bgImage;
@@ -2278,20 +2278,25 @@
   slideshowOnLoad(); // после всего: слайд-шоу само решит, пора ли сменить фон
   askDonateOnce();
 
-  // Предложение поддержать автора: с третьего открытия вкладки — каждый раз, пока человек не ответит.
-  // Любая кнопка («Не сейчас» или «Поддержать») — больше никогда (donateAsked). Счётчик открытий пишем,
-  // только пока он меньше трёх. В автотестах (navigator.webdriver) не показываем; newtab.html?donate — показать для проверки.
+  // Предложение поддержать автора: с третьего открытия вкладки, не чаще раза в день, пока человек не ответит.
+  // Любая кнопка («Не сейчас» или «Поддержать») — больше никогда (donateDone). Счётчик открытий пишем, только пока
+  // он меньше трёх; день показа — donateDay. Старый donateAsked (0.12.0 ставил его уже при показе) не учитываем.
+  // В автотестах (navigator.webdriver) не показываем; newtab.html?donate — показать сразу, ?donate-test — обычная логика и в тесте.
   function askDonateOnce() {
-    const force = location.search.includes('donate');
+    const q = location.search;
+    const force = /[?&]donate(&|$)/.test(q);
     if (!force) {
-      if (boot.donateAsked || navigator.webdriver) return;
+      if (boot.donateDone || (navigator.webdriver && !q.includes('donate-test'))) return;
       const opens = Number(boot.opens) || 0;
       if (opens < 2) { Store.set('opens', opens + 1); return; } // первое и второе открытие — тишина
+      const today = new Date().toDateString();
+      if (boot.donateDay === today) return; // сегодня уже показывали
+      Store.set('donateDay', today);
     }
     setTimeout(() => {
       const close = () => {
-        Store.set('donateAsked', true); // ответил — больше не спрашиваем
-        Store.remove('opens');
+        Store.set('donateDone', true); // ответил — больше не спрашиваем
+        for (const k of ['opens', 'donateDay', 'donateAsked']) Store.remove(k);
         card.classList.remove('on');
         setTimeout(() => card.remove(), 300);
       };
