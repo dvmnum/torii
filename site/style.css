@@ -88,6 +88,48 @@ section { padding: 72px 0 0; }
 .gallery figcaption { margin-top: 10px; font-size: 14px; color: var(--ink-2); }
 .gallery figcaption b { color: var(--ink); }
 
+/* главный скриншот — тоже вход в галерею */
+.shot-link { display: block; cursor: zoom-in; }
+.gallery a { cursor: zoom-in; }
+
+/* галерея на весь экран (gallery.js) */
+html.lb-open { overflow: hidden; }
+.lb {
+  position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 56px 72px;
+  background: rgba(8, 8, 11, .92); backdrop-filter: blur(8px);
+  opacity: 0; transition: opacity .2s;
+}
+.lb.show { opacity: 1; }
+.lb[hidden] { display: none; }
+.lb-fig { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 14px; max-width: 100%; max-height: 100%; }
+.lb-img {
+  max-width: min(1280px, 100%); max-height: calc(100vh - 150px); width: auto; height: auto;
+  border-radius: 14px; border: 1px solid var(--line); box-shadow: 0 30px 90px -20px rgba(0,0,0,.8);
+  opacity: 0; transform: scale(.985); transition: opacity .2s, transform .25s;
+}
+.lb-img.on { opacity: 1; transform: none; }
+.lb-cap { font-size: 14.5px; color: var(--ink-2); text-align: center; }
+.lb-count { position: absolute; top: 20px; left: 24px; font-size: 13px; font-weight: 700; color: var(--ink-3); }
+.lb-btn {
+  position: absolute; width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line);
+  background: rgba(255,255,255,.06); color: var(--ink); display: grid; place-items: center; cursor: pointer;
+  transition: background .2s, transform .2s;
+}
+.lb-btn:hover { background: rgba(255,255,255,.14); }
+.lb-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.lb-close { top: 12px; right: 16px; }
+.lb-prev { left: 16px; top: 50%; transform: translateY(-50%); }
+.lb-next { right: 16px; top: 50%; transform: translateY(-50%); }
+.lb-prev:active, .lb-next:active { transform: translateY(-50%) scale(.94); }
+/* телефон: стрелки внизу, картинка во всю ширину */
+@media (max-width: 640px) {
+  .lb { padding: 56px 12px 84px; }
+  .lb-prev, .lb-next { top: auto; bottom: 18px; transform: none; }
+  .lb-prev { left: calc(50% - 58px); }
+  .lb-next { right: calc(50% - 58px); }
+  .lb-prev:active, .lb-next:active { transform: scale(.94); }
+}
+
 /* где установить */
 .stores { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 12px; }
 .store { display: flex; align-items: center; gap: 14px; padding: 18px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); text-decoration: none; transition: background .2s, border-color .2s; }

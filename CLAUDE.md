@@ -40,7 +40,7 @@ tests/firefox.mjs      смоук в движке Firefox (npm run test:firefox)
 scripts/build.mjs      сборка под магазины (npm run build) → dist/torii-<версия>-chrome.zip и -firefox.zip (+ распакованные копии)
 scripts/store-shots.mjs скриншоты для магазинов (npm run store) → store/screenshots/{ru,en}/*.png 1280×800 + промо-плитки 440×280; нужна сеть (иконки сайтов)
 store/                 карточка магазина: listing-ru.md / listing-en.md (описание, обоснования разрешений, поля), privacy-policy.md
-site/                  сайт (GitHub Pages: dvmnum.github.io/torii) — index.html (ru), en/index.html, privacy.html, style.css; без скриптов и сборки.
+site/                  сайт (GitHub Pages: dvmnum.github.io/torii) — index.html (ru), en/index.html, privacy.html, style.css, gallery.js (лайтбокс скриншотов: ссылки с data-gallery, стрелки/клавиши/свайп); без сборки.
                        Ссылки на магазины и Boosty — href="#" + data-soon («скоро»); после публикации вписать адрес и убрать data-soon.
                        Картинки — npm run site (scripts/site-assets.mjs: store/ → site/img/*.webp), посмотреть — npm run site:serve (localhost:4173)
 plitka/_locales/       название и краткое описание расширения для магазина (ru, en; default_locale — en): manifest берёт __MSG_appName__/__MSG_appDesc__
