@@ -76,7 +76,7 @@ const I18N = (() => {
     ' м/с': ' m/s', '+ Копия текущей': '+ Copy current', '+ Стандартная': '+ Default', 'Больше девяти раскладок не помещается': 'Nine layouts is the limit',
     'Ветер': 'Wind', 'Влажность': 'Humidity', 'Восход': 'Sunrise', 'Закат': 'Sunset', 'Осадки': 'Rain', 'Ощущается': 'Feels like',
     'Основная': 'Main', 'Раскладка': 'Layout', 'Раскладки': 'Layouts', 'Раскладки (Alt+1…9)': 'Layouts (Alt+1…9)', 'Переименовать': 'Rename',
-    'Переключить раскладку': 'Switch layout', 'По часам': 'Hourly', 'Подробно': 'Details', 'Точно удалить? Нажми ещё раз': 'Sure? Click again to delete',
+    'Переключить раскладку': 'Switch layout', 'По часам': 'Hourly', 'Подробно': 'Details', 'Удалить?': 'Delete?',
     'Свой': 'Custom', 'Стиль': 'Style','Недавние': 'Recent', 'Загружаю картинку…': 'Loading image…', 'Слабая': 'Soft', 'Слева': 'Left', 'Справа': 'Right', 'Тень блока': 'Block shadow', 'Тень блоков': 'Block shadow',
     'Прямоугольник, где узора нет — тащи на превью': 'A rectangle without the pattern — drag it on the preview',
     // редактор и меню

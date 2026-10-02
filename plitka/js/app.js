@@ -1603,10 +1603,12 @@
         // «Сбросить» — с подтверждением вторым кликом, это необратимо для всех экранов
         let armed = 0;
         const resetBtn = h('button', { type: 'button', class: 'text-btn danger', onclick: () => {
-          if (Date.now() - armed < 3000) { resetLayout(); armed = 0; resetBtn.textContent = 'Сбросить раскладку'; return; }
+          const disarm = () => { armed = 0; resetBtn.textContent = 'Сбросить раскладку'; resetBtn.classList.remove('armed'); };
+          if (Date.now() - armed < 3000) { resetLayout(); disarm(); return; }
           armed = Date.now();
           resetBtn.textContent = 'Точно? Нажми ещё раз';
-          setTimeout(() => { if (armed && Date.now() - armed >= 3000) resetBtn.textContent = 'Сбросить раскладку'; }, 3100);
+          resetBtn.classList.add('armed'); // красная плашка с покачиванием — видно, что ждём второй клик
+          setTimeout(() => { if (armed && Date.now() - armed >= 3000) disarm(); }, 3100);
         } }, 'Сбросить раскладку');
         return [
           section('Раскладка',
@@ -2118,11 +2120,20 @@
             inp.select();
           };
           // удалить — вторым кликом, это необратимо
-          let armed = false;
-          const del = h('button', { type: 'button', class: 'tool danger', title: 'Удалить', disabled: scenes.list.length < 2, html: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+          // первый клик — крестик разворачивается в красную плашку «Удалить?» (видно сразу, без всплывашки), второй — удаляет
+          let armed = 0;
+          const X = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+          const disarm = () => { armed = 0; del.classList.remove('armed'); del.innerHTML = X; };
+          const del = h('button', { type: 'button', class: 'tool danger sm-del', title: 'Удалить', disabled: scenes.list.length < 2, html: X,
             onclick: async (e) => {
               e.stopPropagation();
-              if (!armed) { armed = true; del.classList.add('armed'); del.title = 'Точно удалить? Нажми ещё раз'; setTimeout(() => { armed = false; del.classList.remove('armed'); }, 2500); return; }
+              if (!armed) {
+                del.replaceChildren(h('span', {}, 'Удалить?'));
+                del.classList.add('armed');
+                armed = setTimeout(disarm, 3000);
+                return;
+              }
+              clearTimeout(armed);
               await removeScene(s.id);
               paint();
             } });
