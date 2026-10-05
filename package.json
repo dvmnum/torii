@@ -2,7 +2,7 @@
   "name": "torii",
   "version": "0.12.4",
   "private": true,
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "type": "module",
   "description": "Новая вкладка со свободной раскладкой виджетов (Chrome, Edge, Яндекс, Firefox — MV3)",
   "scripts": {
