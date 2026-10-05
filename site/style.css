@@ -138,7 +138,8 @@ html.lb-open { overflow: hidden; }
 .store b { display: block; font-size: 15.5px; }
 .store span { display: block; font-size: 13px; color: var(--ink-3); }
 .store[data-soon] { pointer-events: none; }
-.store[data-soon] span::after { content: ' · ' attr(data-soon); color: var(--accent); font-weight: 700; }
+/* ещё не опубликован: пометка под названием магазина (attr() у ::after берёт атрибут своего элемента, а data-soon висит на ссылке, поэтому пометка — в разметке) */
+.store .soon { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 999px; background: rgba(155,140,255,.14); color: var(--accent); font-size: 11.5px; font-weight: 700; font-style: normal; }
 .also { margin-top: 14px; font-size: 14px; color: var(--ink-3); }
 
 /* поддержка */
