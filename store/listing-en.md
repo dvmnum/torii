@@ -18,7 +18,7 @@ What sets Torii apart from other new tab pages: widgets aren't stuck in a single
 
 WIDGETS
 • Clock — digital or analog, with a greeting and the date
-• Search — 9 search engines and AI assistants to choose from, quick prefixes for a one-off search elsewhere, a calculator right in the search bar, Shift+Enter to search in incognito
+• Search — uses your browser's default search engine (or another one you pick), quick prefixes for a one-off search elsewhere, a calculator right in the search bar, Shift+Enter to search in incognito
 • Links and Top sites — as tiles or a list, with site icons
 • Bookmarks bar — your bookmarks right on the new tab
 • Weather — now, details, hourly or for the week
@@ -51,6 +51,7 @@ Torii replaces the new tab page with a customizable dashboard of widgets (clock,
 
 **Permission justifications:**
 - `storage` — stores settings, widgets and their layout in the user's browser.
+- `search` — the search bar on the new tab searches with the user's default search engine via the Chrome Search API (`chrome.search.query`); the extension does not change the browser's search settings.
 - `unlimitedStorage` — a custom background image and slideshow images take several megabytes and don't fit the default storage quota.
 - `topSites` (optional) — the "Top sites" widget shows the user's most visited sites. Requested only when this widget is added.
 - `sessions` (optional) — the "Recently closed" widget lists and restores recently closed tabs. Requested only when this widget is added.

@@ -41,7 +41,6 @@ async function scene({ preset, lang = 'ru', widgets, extra = {}, scenes = null }
       settings: { lang, mesh: { ...mesh, preset }, ...extra },
       widgets: widgets.map(([type, , , , , data], i) => ({ id: 's' + i, type, data: {
         ...(type === 'weather' ? { city: lang === 'en' ? 'London' : 'Москва' } : {}),
-        ...(type === 'search' && lang === 'en' ? { engine: 'google' } : {}),
         ...data,
       } })),
       layouts: { lg: Object.fromEntries(widgets.map(([, x, y, w, h], i) => ['s' + i, { x, y, w, h }])) },

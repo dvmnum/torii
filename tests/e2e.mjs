@@ -316,22 +316,35 @@ await page.reload();
 await page.waitForTimeout(1000);
 check(await page.locator('.w-clock.v-middle.h-right').count() === 1, 'часы: старое align "right" → середина справа');
 
+// поиск по умолчанию — поисковиком браузера через chrome.search.query (требование Chrome Web Store)
+const sq = await page.evaluate(() => {
+  const engine = window.__plitka.layout.find(i => i.id === 'w-search').data.engine;
+  let call = null;
+  try { Object.defineProperty(chrome.search, 'query', { value: (o) => { call = o; }, configurable: true }); } catch (e) { return { engine, err: String(e) }; }
+  const inp = document.querySelector('[data-search]');
+  inp.value = 'котики'; inp.dispatchEvent(new Event('input'));
+  inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+  inp.value = ''; inp.dispatchEvent(new Event('input'));
+  return { engine, ph: inp.placeholder, call };
+});
+check(sq.engine === 'browser' && sq.call?.text === 'котики' && sq.call?.disposition === 'NEW_TAB', `поиск: по умолчанию — поисковик браузера (chrome.search.query: ${JSON.stringify(sq)})`);
+
 // поиск: выпадающий список с клавиатуры
 await openSettings('w-search');
 await page.click('.inspector .dd-btn');
 await page.waitForTimeout(250);
-check(await page.locator('body > .dd-list .dd-item').count() === 9, 'поиск: список поисковиков открыт');
+check(await page.locator('body > .dd-list .dd-item').count() === 10, 'поиск: список поисковиков открыт');
 await page.screenshot({ path: `${out}/18-dropdown.png` });
 await page.keyboard.press('ArrowDown');
 await page.keyboard.press('Enter');
-check(await page.locator('.dd-list').count() === 0 && (await page.textContent('.inspector .dd-label')) === 'Google', 'поиск: выбор стрелкой + Enter');
+check(await page.locator('.dd-list').count() === 0 && (await page.textContent('.inspector .dd-label')) === 'Яндекс', 'поиск: выбор стрелкой + Enter');
 await page.click('.inspector .dd-btn');
 await page.keyboard.press('Escape');
 check(await page.locator('.dd-list').count() === 0 && await page.locator('.inspector').count() === 1, 'поиск: Esc закрывает список, а не инспектор');
 await page.keyboard.press('Escape'); // закрыть инспектор — всё уже применилось
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
-check(await page.evaluate(() => window.__plitka.layout.find(i => i.id === 'w-search').data.engine) === 'google', 'поиск: поисковик сохранён');
+check(await page.evaluate(() => window.__plitka.layout.find(i => i.id === 'w-search').data.engine) === 'yandex', 'поиск: поисковик сохранён');
 await page.fill('[data-search]', 'котики');
 await page.waitForTimeout(400);
 check(await page.locator('.w-search.has-text .search-go').count() === 1, 'поиск: кнопка Enter подсвечена, когда есть текст');
@@ -995,7 +1008,7 @@ await page.keyboard.up('Shift');
 await page.fill('[data-search]', '');
 await page.click('.engine');
 await page.waitForTimeout(200);
-check(await page.locator('.engine-menu .em-item').count() === 9, 'поиск: меню из 9 поисковиков');
+check(await page.locator('.engine-menu .em-item').count() === 10, 'поиск: меню из 10 вариантов');
 await page.screenshot({ path: `${out}/50-engine-menu.png` });
 await page.click('.engine-menu .em-item:has-text("Perplexity")');
 check(await page.evaluate(() => window.__plitka.layout[0].data.engine) === 'perplexity', 'поиск: поисковик выбран из меню');
@@ -1365,7 +1378,7 @@ await page.evaluate(() => chrome.storage.local.set({
 await page.reload();
 await page.waitForTimeout(1500);
 const en = await page.evaluate(() => ({ greet: document.querySelector('.greet').textContent, ph: document.querySelector('[data-search]').placeholder, lang: document.documentElement.lang, title: document.title }));
-check(en.lang === 'en' && /^Good (morning|afternoon|evening|night), Vova$/.test(en.greet) && /^Search [A-Za-z]/.test(en.ph) && en.title === 'Torii', `english: приветствие, поиск, заголовок («${en.greet}», «${en.ph}», «${en.title}»)`);
+check(en.lang === 'en' && /^Good (morning|afternoon|evening|night), Vova$/.test(en.greet) && /^Search( [A-Za-z]|$)/.test(en.ph) && en.title === 'Torii', `english: приветствие, поиск, заголовок («${en.greet}», «${en.ph}», «${en.title}»)`);
 await page.click('#btn-settings');
 await page.waitForTimeout(400);
 const cyr = await page.evaluate(() => {

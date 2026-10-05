@@ -91,7 +91,7 @@ const I18N = (() => {
     'Места нет — освободи немного': 'No room — free up some space', 'Окно слишком узкое — растяни его, чтобы двигать блоки': 'Window is too narrow — widen it to move blocks',
     'Время': 'Time', 'Дела': 'Tasks', 'Навигация': 'Navigation', 'Информация': 'Info', 'Настроение': 'Mood',
     // виджеты: названия и описания
-    'Поиск': 'Search', 'Ссылки': 'Links', 'Заметки': 'Notes', 'Погода': 'Weather', 'Список дел': 'To-do', 'Частые сайты': 'Top sites',
+    'Поиск': 'Search', 'Как в браузере': 'Browser default', 'Ссылки': 'Links', 'Заметки': 'Notes', 'Погода': 'Weather', 'Список дел': 'To-do', 'Частые сайты': 'Top sites',
     'Недавно закрытые': 'Recently closed', 'Курсы ЦБ': 'Exchange rates', 'Обратный отсчёт': 'Countdown', 'Привычки': 'Habits', 'Цитата': 'Quote',
     'Слово дня': 'Word of the day', 'Картинка': 'Picture', 'Панель закладок': 'Bookmarks bar',
     'Цифровые или стрелочные, приветствие': 'Digital or analog, with greeting', 'Фокус и перерывы по таймеру': 'Focus and breaks on a timer',

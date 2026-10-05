@@ -83,8 +83,10 @@ function weatherInfo(code) {
   return ['Гроза', 'storm'];
 }
 
-// Поисковики; bang — префикс «!x запрос»
+// Поисковики; bang — префикс «!x запрос».
+// browser — поисковик, выбранный в самом браузере (chrome.search.query): по умолчанию, этого требует Chrome Web Store
 const ENGINES = {
+  browser: { name: 'Как в браузере', url: null },
   yandex: { name: 'Яндекс', in: 'Яндексе', bang: 'y', url: 'https://yandex.ru/search/?text=' },
   google: { name: 'Google', bang: 'g', url: 'https://www.google.com/search?q=' },
   duck: { name: 'DuckDuckGo', bang: 'd', url: 'https://duckduckgo.com/?q=' },
@@ -98,6 +100,7 @@ const ENGINES = {
 // иконки — из готовых паков (js/engine-icons.js), заливка currentColor
 const engineIcon = (e) => {
   const k = Object.keys(ENGINES).find(x => ENGINES[x] === e);
+  if (k === 'browser') return '<svg viewBox="0 0 24 24" class="brand-svg brand-browser"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5L20.5 20.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
   const i = ENGINE_ICONS[k];
   return i ? `<svg viewBox="${i.vb}" class="brand-svg brand-${k}"><path d="${i.d}"/></svg>` : '';
 };
@@ -285,7 +288,7 @@ const Widgets = {
   search: {
     title: 'Поиск',
     size: { w: 10, h: 1 }, min: { w: 4, h: 1 },
-    defaults: { glass: true, engine: 'yandex', height: 'normal', newTab: false, recent: true, showEngine: true, showGhost: true, history: [] },
+    defaults: { glass: true, engine: 'browser', height: 'normal', newTab: false, recent: true, showEngine: true, showGhost: true, history: [] },
     settings: [
       { key: 'engine', label: 'Поисковик', type: 'select', options: Object.entries(ENGINES).map(([k, v]) => [k, v.name]) },
       { key: 'height', label: 'Высота строки', type: 'select', options: [['compact', 'Тонкая'], ['normal', 'Обычная'], ['large', 'Крупная']] },
@@ -296,7 +299,8 @@ const Widgets = {
       GLASS_SETTING,
     ],
     render(body, data, ctx) {
-      const eng = () => ENGINES[data.engine] || ENGINES.yandex;
+      const eng = () => ENGINES[data.engine] || ENGINES.browser;
+      const placeholder = () => eng() === ENGINES.browser ? 'Поиск' : `Искать в ${eng().in || eng().name}`;
       const engineBtn = h('button', { type: 'button', class: 'engine', title: 'Выбрать поисковик' });
       const input = h('input', { type: 'text', class: 'search-input', autocomplete: 'off', spellcheck: 'false', 'data-search': '' });
       const result = h('button', { type: 'button', class: 'search-calc', title: 'Скопировать', hidden: true });
@@ -321,7 +325,7 @@ const Widgets = {
 
       const paint = () => {
         engIco.innerHTML = engineIcon(eng());
-        input.placeholder = `Искать в ${eng().in || eng().name}`;
+        input.placeholder = placeholder();
       };
       paint();
 
@@ -345,6 +349,20 @@ const Widgets = {
         if (how === 'tab') { if (chrome.tabs?.create) chrome.tabs.create({ url }); else window.open(url, '_blank', 'noopener'); return; }
         location.href = url;
       };
+      // поиск поисковиком браузера: через chrome.search.query, адрес поиска знает только браузер.
+      // Инкогнито — пустое приватное окно, и уже в его вкладке поиск (нужно разрешение на приватные окна)
+      const openSearch = (text, how) => {
+        if (!chrome.search?.query) return open(ENGINES.google.url + encodeURIComponent(text), how); // страница открыта не как расширение
+        if (how === 'incognito') {
+          chrome.windows.create({ incognito: true }, (win) => {
+            const tab = !chrome.runtime.lastError && win?.tabs?.[0];
+            if (!tab) return incognitoHelp(() => chrome.search.query({ text, disposition: 'NEW_TAB' }));
+            chrome.search.query({ text, tabId: tab.id }, () => void chrome.runtime.lastError);
+          });
+          return;
+        }
+        chrome.search.query({ text, disposition: how === 'tab' ? 'NEW_TAB' : 'CURRENT_TAB' });
+      };
       let ghost = false; // режим «следующий поиск — в инкогнито» (кнопка-призрак), не сохраняется
       const how = (e) => (e.shiftKey || ghost) ? 'incognito' : (e.ctrlKey || e.metaKey || data.newTab) ? 'tab' : 'here';
       const search = (q, mode) => {
@@ -352,15 +370,16 @@ const Widgets = {
         if (!q) return;
         const asUrl = /^(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(q) && !q.includes(' ');
         const { e, text } = parse(q);
-        const target = asUrl ? normalizeUrl(q) : e.url + encodeURIComponent(text);
+        const target = asUrl ? normalizeUrl(q) : e.url ? e.url + encodeURIComponent(text) : null;
+        const run = () => target ? open(target, mode) : openSearch(text, mode);
         closeRecent();
         if (data.recent && mode !== 'incognito') { // инкогнито-запросы не запоминаем
           data.history = [q, ...(data.history || []).filter(x => x !== q)].slice(0, 6);
           // уходим со страницы только после записи — иначе отложенное сохранение не успеет
-          if (mode === 'here') { ctx.saveNow().finally(() => open(target, mode)); return; }
+          if (mode === 'here') { ctx.saveNow().finally(run); return; }
           ctx.save();
         }
-        open(target, mode);
+        run();
         if (mode !== 'here') { input.value = ''; onInput(); }
       };
 
@@ -384,7 +403,7 @@ const Widgets = {
         ghost = !ghost;
         ghostBtn.classList.toggle('on', ghost);
         form.classList.toggle('ghost', ghost);
-        input.placeholder = ghost ? 'Инкогнито — следующий поиск' : `Искать в ${eng().in || eng().name}`;
+        input.placeholder = ghost ? 'Инкогнито — следующий поиск' : placeholder();
         input.focus();
       });
 
@@ -440,7 +459,7 @@ const Widgets = {
           Object.entries(ENGINES).map(([k, e]) => h('button', {
             type: 'button', class: 'em-item' + (k === data.engine ? ' active' : ''),
             onclick: () => { data.engine = k; ctx.save(); paint(); onInput(); menu.remove(); input.focus(); },
-          }, h('span', { class: 'em-ico', html: engineIcon(e) }), h('span', { class: 'em-name' }, e.name), h('kbd', {}, '!' + e.bang))),
+          }, h('span', { class: 'em-ico', html: engineIcon(e) }), h('span', { class: 'em-name' }, e.name), ...(e.bang ? [h('kbd', {}, '!' + e.bang)] : []))),
           h('div', { class: 'em-hint' }, 'Префикс — разовый поиск: «!yt котики»'));
         document.body.append(menu);
         flipUp(menu, engineBtn);
@@ -797,7 +816,7 @@ function pickGreeting(s, d = new Date()) {
 
 // Карточка «разреши приватные окна»: включить это за пользователя расширение не может — только подвести к переключателю.
 // Chromium (Chrome, Edge, Яндекс…) — кнопка открывает страницу настроек Torii; Firefox свои служебные страницы
-// расширениям открывать не даёт — там подсказываем путь словами. url — что искали: можно открыть в обычной вкладке.
+// расширениям открывать не даёт — там подсказываем путь словами. url — что искали (или функция, которая откроет): можно открыть в обычной вкладке.
 const IS_FIREFOX = /Firefox\//.test(navigator.userAgent);
 function incognitoHelp(url) {
   document.querySelector('.incog-help')?.remove();
@@ -811,7 +830,7 @@ function incognitoHelp(url) {
         : h('span', {}, 'Открою настройки расширения — там включи «Разрешить в режиме инкогнито». Потом нажми поиск ещё раз.')),
     h('div', { class: 'ih-actions' },
       IS_FIREFOX ? null : h('button', { type: 'button', class: 'pill small pill-accent', onclick: () => { chrome.tabs?.create({ url: `chrome://extensions/?id=${chrome.runtime.id}` }); close(); } }, 'Открыть настройки'),
-      url ? h('button', { type: 'button', class: 'pill small', onclick: () => { chrome.tabs?.create ? chrome.tabs.create({ url }) : window.open(url, '_blank', 'noopener'); close(); } }, 'Открыть в обычной вкладке') : null,
+      url ? h('button', { type: 'button', class: 'pill small', onclick: () => { typeof url === 'function' ? url() : chrome.tabs?.create ? chrome.tabs.create({ url }) : window.open(url, '_blank', 'noopener'); close(); } }, 'Открыть в обычной вкладке') : null,
       h('button', { type: 'button', class: 'icon-btn ih-close', title: 'Закрыть', onclick: close }, '✕')));
   document.body.append(card);
   requestAnimationFrame(() => card.classList.add('on'));
