@@ -48,7 +48,7 @@ Torii is built with [Claude Code](https://claude.com/claude-code). The idea, des
 
 ## Support
 
-Torii is free and ad-free. If you like it, you can support the author on [Boosty](https://boosty.to/dvmnum/donate) or in Telegram via [Tribute](https://web.tribute.tg/d/RJo).
+Torii is free and ad-free. If you like it, you can support the author via Telegram on [Tribute](https://web.tribute.tg/d/RJo) (from Russia — on [Boosty](https://boosty.to/dvmnum/donate)).
 
 ## License
 
