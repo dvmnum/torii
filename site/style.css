@@ -150,6 +150,7 @@ html.lb-open { overflow: hidden; }
 .btn.boosty:hover { background: #ff6d39; }
 .btn.tribute { background: #2aabee; color: #fff; border-color: transparent; }
 .btn.tribute:hover { background: #3cb9f7; }
+.support.tg { background: linear-gradient(120deg, rgba(42,171,238,.16), rgba(155,140,255,.14)); }
 .support-btns { display: flex; gap: 10px; flex-wrap: wrap; }
 
 /* подвал */
