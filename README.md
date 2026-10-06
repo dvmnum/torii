@@ -52,4 +52,8 @@ Torii is free and ad-free. If you like it, you can [support the author on Boosty
 
 ## License
 
-Copyright © 2026 dvmnum. [GPL-3.0](LICENSE): you can use, change and share Torii, but forks and modified versions must stay open source under the same license. Versions up to 0.12.4 were also released under MIT. Bundled fonts (Manrope, Unbounded, Playfair Display, Oswald, Comfortaa, Caveat, Lobster) are under the SIL Open Font License; search engine and browser logos are from Simple Icons (CC0) and Font Awesome (CC BY 4.0); outline icons in the widget catalog are from Lucide (ISC); the grid is [gridstack.js](https://github.com/gridstack/gridstack.js) (MIT).
+Copyright © 2026 dvmnum. The code is under the [GNU General Public License v3.0](LICENSE): you can use, study, change and share it, and anything you distribute that's built on it must stay open under the same license. Versions up to 0.12.4 were also released under MIT.
+
+The name Torii and the icon (`plitka/icons/`, `site/img/icon.svg`) are not covered by the code license and remain © dvmnum. Forks must use their own name and artwork.
+
+Bundled fonts (Manrope, Unbounded, Playfair Display, Oswald, Comfortaa, Caveat, Lobster) are under the SIL Open Font License; search engine and browser logos are from Simple Icons (CC0) and Font Awesome (CC BY 4.0); outline icons in the widget catalog are from Lucide (ISC); the grid is [gridstack.js](https://github.com/gridstack/gridstack.js) (MIT).
