@@ -1328,7 +1328,7 @@ check(tip && tip.l >= 0 && tip.r <= 1600 && tip.t >= 0 && tip.b <= 900, `под�
 await page.screenshot({ path: `${out}/63-info-tip.png` });
 await ptab('more');
 check(await page.locator('.action-card:has-text("Изменить раскладку")').count() === 1 && await page.locator('.hotkeys kbd').count() >= 6 && await page.locator('.panel-footer:has-text("Torii")').count() === 1, 'ещё: карточка раскладки, клавиши, подвал с названием');
-check(await page.locator('.panel a.donate-link[href="https://boosty.to/dvmnum/donate"]').count() === 1, 'ещё: раздел «Поддержать» со ссылкой на Boosty');
+check(await page.locator('.panel a.donate-link[href="https://boosty.to/dvmnum/donate"]').count() === 1 && await page.locator('.panel a.donate-link[href="https://web.tribute.tg/d/RJo"]').count() === 1, 'ещё: раздел «Поддержать» со ссылками на Boosty и Tribute');
 check(await page.locator('.panel-footer .pf-links a[href="https://dvmnum.github.io/torii/"]').count() === 1 && await page.locator('.panel-footer .pf-links a[href="https://github.com/dvmnum/torii"]').count() === 1, 'подвал панели: ссылки на сайт и GitHub');
 await page.screenshot({ path: `${out}/69-panel-footer.png`, clip: { x: 1240, y: 830, width: 360, height: 70 } });
 await page.screenshot({ path: `${out}/58-more.png` });

@@ -7,6 +7,7 @@
   const ACCENTS = ['#9b8cff', '#5cc8ff', '#b4f05a', '#ff7a9c', '#ffc35c', '#f2f2f2'];
   // донат автору: раздел в «Ещё» и одно предложение на третьем открытии вкладки (askDonateOnce)
   const DONATE_URL = 'https://boosty.to/dvmnum/donate';
+  const TRIBUTE_URL = 'https://web.tribute.tg/d/RJo'; // донат через Telegram
   const SITE_URL = 'https://dvmnum.github.io/torii/';
   const REPO_URL = 'https://github.com/dvmnum/torii';
   const HEART_SVG = '<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>';
@@ -1641,7 +1642,9 @@
           // тихо и последним: ссылка на донат автору, без напоминаний
           section('Поддержать',
             h('p', { class: 'field-hint' }, 'Torii бесплатный и без рекламы. Если пригодился — можно поддержать автора.'),
-            h('a', { class: 'pill small donate-link', href: DONATE_URL, target: '_blank', rel: 'noopener' }, h('span', { class: 'btn-ico', html: HEART_SVG }), 'Поддержать на Boosty')),
+            h('div', { class: 'donate-row' },
+              h('a', { class: 'pill small donate-link', href: DONATE_URL, target: '_blank', rel: 'noopener' }, h('span', { class: 'btn-ico', html: HEART_SVG }), 'Поддержать на Boosty'),
+              h('a', { class: 'pill small donate-link', href: TRIBUTE_URL, target: '_blank', rel: 'noopener' }, 'Через Telegram'))),
         ];
       },
     };

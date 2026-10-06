@@ -57,7 +57,7 @@ img { display: block; max-width: 100%; height: auto; }
 .btn.primary:hover { background: #fff; }
 .btn svg { width: 20px; height: 20px; flex: none; }
 /* узкий телефон: кнопки во всю ширину, текст может переноситься — без горизонтальной прокрутки */
-@media (max-width: 420px) { .cta .btn { width: 100%; justify-content: center; white-space: normal; } .support { padding: 24px 20px; } .support .btn { width: 100%; justify-content: center; } }
+@media (max-width: 420px) { .cta .btn { width: 100%; justify-content: center; white-space: normal; } .support { padding: 24px 20px; } .support .btn, .support-btns { width: 100%; justify-content: center; } }
 /* магазин ещё не опубликован: ссылка-заглушка (href="#"), подписываем «скоро» и не даём нажать */
 .btn[data-soon] { pointer-events: none; opacity: .55; }
 .btn[data-soon]::after { content: attr(data-soon); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.1); color: var(--ink-2); }
@@ -148,6 +148,9 @@ html.lb-open { overflow: hidden; }
 .support p { margin: 0; color: var(--ink-2); max-width: 560px; }
 .btn.boosty { background: #f15f2c; color: #fff; border-color: transparent; }
 .btn.boosty:hover { background: #ff6d39; }
+.btn.tribute { background: #2aabee; color: #fff; border-color: transparent; }
+.btn.tribute:hover { background: #3cb9f7; }
+.support-btns { display: flex; gap: 10px; flex-wrap: wrap; }
 
 /* подвал */
 footer { margin-top: 88px; padding: 28px 0 40px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; font-size: 14px; color: var(--ink-3); }

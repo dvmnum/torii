@@ -1296,6 +1296,7 @@ body.bg-fade #bg-mesh, body.bg-fade #bg .bg-image { opacity: 0 !important; }
 .da-text span { font-size: 12.5px; line-height: 1.45; color: rgba(244,244,245,.62); }
 .da-actions { display: flex; gap: 8px; margin-top: 6px; }
 .da-actions a { text-decoration: none; }
+.donate-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .donate-link { text-decoration: none; display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; }
 .donate-link .btn-ico svg { fill: rgba(255,122,156,.3); stroke: #ff7a9c; }
 
