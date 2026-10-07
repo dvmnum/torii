@@ -87,10 +87,9 @@ section { padding: 72px 0 0; }
 .card .demo { position: relative; flex: 1; min-height: 120px; }
 .c-layout { grid-column: span 4; }
 .c-bg, .c-widgets, .c-glass, .c-scenes { grid-column: span 2; }
-.c-private { grid-column: span 6; min-height: 0; }
 @media (max-width: 900px) {
   .bento { grid-template-columns: repeat(2, 1fr); }
-  .c-layout, .c-private { grid-column: span 2; }
+  .c-layout { grid-column: span 2; }
   .c-bg, .c-widgets, .c-glass, .c-scenes { grid-column: span 1; }
   .c-bg { min-height: 300px; }
 }
@@ -162,14 +161,6 @@ section { padding: 72px 0 0; }
 .tabs span:nth-child(3) { animation-delay: 4s; }
 @keyframes pick { 0%, 30% { color: var(--ink); background: rgba(155,140,255,.18); border-color: rgba(155,140,255,.5); } 34%, 100% { color: var(--ink-3); background: transparent; border-color: var(--line); } }
 
-/* приватность: широкая полоса с цифрами */
-.c-private { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 40px; padding: 26px 28px;
-  background: linear-gradient(110deg, rgba(106,61,240,.14), rgba(25,180,196,.08) 60%, rgba(255,255,255,.02)); }
-.c-private .txt { padding: 0; margin: 0; flex: 1 1 280px; }
-.stats { display: grid; grid-template-columns: repeat(3, auto); gap: 16px 36px; }
-@media (max-width: 600px) { .c-private .stats { width: 100%; grid-template-columns: repeat(3, 1fr); gap: 12px; } .c-private .stats b { font-size: 24px; } }
-.stats b { display: block; font-size: 34px; font-weight: 800; letter-spacing: -.03em; line-height: 1.1; }
-.stats span { font-size: 13px; color: var(--ink-3); }
 
 @media (prefers-reduced-motion: reduce) {
   .b-drag, .c-bg .demo::before, .pane, .tabs span { animation: none; }
