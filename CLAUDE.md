@@ -42,7 +42,7 @@ scripts/store-shots.mjs скриншоты для магазинов (npm run st
 scripts/store-promo.mjs промо-картинки (тоже npm run store, или отдельно): плитка 440×280 и большая 1400×560 на тёмном фоне, 24-битный PNG без альфы
 store/                 карточка магазина: listing-ru.md / listing-en.md (описание, обоснования разрешений, поля), privacy-policy.md
 site/                  сайт (GitHub Pages: dvmnum.github.io/torii) — index.html (ru), en/index.html, privacy.html, style.css, gallery.js (лайтбокс скриншотов: ссылки с data-gallery, стрелки/клавиши/свайп); без сборки.
-                       Chrome Web Store: https://chromewebstore.google.com/detail/eimplcpjlibipimkmaipfkidbdagknof (кнопки Chrome и «Edge, Яндекс, Opera»). Firefox пока href="#" + data-soon («скоро»); после публикации вписать адрес и убрать data-soon.
+                       Chrome Web Store: https://chromewebstore.google.com/detail/eimplcpjlibipimkmaipfkidbdagknof (кнопки Chrome и «Edge, Яндекс, Opera»). Firefox пока href="#" + data-soon («скоро») — в двух местах: кнопка `.btn.ff` в первом экране и карточка в «Установить» (там ещё `<em class="soon">`); после публикации вписать адрес и убрать data-soon и пометку. «Что умеет» — бенто `.bento/.card` с CSS-демо в каждой карточке.
                        Картинки — npm run site (scripts/site-assets.mjs: store/ → site/img/*.webp), посмотреть — npm run site:serve (localhost:4173)
 plitka/_locales/       название и краткое описание расширения для магазина (ru, en; default_locale — en): manifest берёт __MSG_appName__/__MSG_appDesc__
 scripts/make-icons.mjs PNG-иконки 16/32/48/128 из plitka/icons/icon.svg (ворота-тории) — после правки svg
