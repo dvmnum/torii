@@ -937,6 +937,10 @@
         nodes.push(h('h4', { class: 'modal-sub' }, f.label));
         continue;
       }
+      if (f.type === 'note') { // просто текст — пояснение в модалке подтверждения
+        nodes.push(h('p', { class: 'modal-note' }, f.label));
+        continue;
+      }
       if (f.type === 'color') {
         // null = «нет своего цвета» (f.empty — подпись для этого случая)
         let cur = f.value || null;

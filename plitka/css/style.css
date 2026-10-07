@@ -548,6 +548,37 @@ body.no-motion .clock-time .colon { animation: none; }
 .bm-sub[hidden] { display: none; }
 .bm-empty { padding: 8px; }
 
+/* закладки правятся прямо с вкладки: «⋯» на плитке при наведении, перетаскивание, бросок в папку */
+.w-links .link[data-bm] { position: relative; touch-action: none; user-select: none; }
+.bm-more {
+  position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 7px;
+  display: grid; place-items: center; background: rgba(var(--fg), .14); color: var(--ink);
+  opacity: 0; transition: opacity .15s, background .15s;
+}
+.bm-more svg { width: 16px; height: 16px; }
+.link[data-bm]:hover .bm-more { opacity: 1; }
+.bm-more:hover { background: rgba(var(--fg), .26); }
+.bm-sorting .link[data-bm] { cursor: grabbing; }
+.bm-sorting .bm-more { display: none; }
+.link.bm-dragging { z-index: 5; opacity: .92; transition: none !important; pointer-events: none; }
+.link.bm-dragging .link-ico { box-shadow: 0 14px 28px -10px rgba(0,0,0,.7); }
+.link.bm-into .link-ico { transform: scale(1.14); box-shadow: 0 0 0 2px var(--accent); color: var(--accent); }
+@container (max-height: 52px) { .bm-more { width: 18px; height: 18px; top: 0; right: 0; } }
+
+/* маленькое меню у курсора (правка закладок) */
+.pop-menu {
+  position: fixed; z-index: 70; min-width: 190px; padding: 5px; border-radius: 12px;
+  background: rgba(26, 26, 27, .98); border: 1px solid var(--line-2); box-shadow: 0 20px 50px -12px rgba(0,0,0,.7);
+  opacity: 0; transform: scale(.97); transform-origin: top left; transition: opacity .12s, transform .15s var(--ease);
+}
+.pop-menu.open { opacity: 1; transform: none; }
+.pop-item {
+  display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: none; text-align: left;
+  color: var(--ink-2); font: 500 13.5px 'Manrope', sans-serif;
+}
+.pop-item:hover { background: rgba(255,255,255,.07); color: var(--ink); }
+.pop-item.danger:hover { background: rgba(255, 90, 110, .18); color: #ff8a9a; }
+
 /* список: строки по центру по высоте, как плитки (в низком блоке они прилипали к верху); safe — не уезжать за верх, если не влезли */
 .w-links.style-list { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); align-content: safe center; }
 @container (max-height: 96px) { .w-links.style-list .link { padding-block: 4px; } .w-links.style-list .link-ico { width: 26px; height: 26px; } }
@@ -1245,6 +1276,7 @@ body.bg-fade #bg-mesh, body.bg-fade #bg .bg-image { opacity: 0 !important; }
 .color-btn i { width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(255,255,255,.4); }
 .color-btn i.none { background: linear-gradient(135deg, rgba(255,255,255,.3), rgba(255,255,255,.05)) !important; border-style: dashed; }
 .modal-sub { margin: 6px 0 -4px; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); font-weight: 700; }
+.modal-note { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ink-2); }
 .mesh-color-btn { display: inline-flex; align-items: center; gap: 7px; }
 .mesh-color-btn i { width: 14px; height: 14px; border-radius: 50%; background: var(--c); border: 1px solid rgba(255,255,255,.5); }
 .pill:disabled { opacity: .4; pointer-events: none; }

@@ -1,6 +1,6 @@
 {
   "name": "torii",
-  "version": "0.12.5",
+  "version": "0.13.0",
   "private": true,
   "license": "GPL-3.0-only",
   "type": "module",
@@ -11,6 +11,7 @@
     "i18n": "node tests/i18n-scan.mjs",
     "perf": "node tests/perf.mjs",
     "test:firefox": "node tests/firefox.mjs",
+    "test:bookmarks": "node tests/bookmarks.mjs",
     "build": "node scripts/build.mjs",
     "store": "node scripts/store-shots.mjs && node scripts/store-promo.mjs",
     "site": "node scripts/site-assets.mjs",
