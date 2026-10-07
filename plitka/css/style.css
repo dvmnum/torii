@@ -579,6 +579,16 @@ body.no-motion .clock-time .colon { animation: none; }
 @container (max-width: 150px) { .w-weather.is-mini { padding: 0 6px; gap: 4px; justify-content: center; } }
 .w-weather.is-error .wx-ico { font-size: min(36cqh, 16cqw); color: var(--ink-3); opacity: .7; }
 .w-weather.is-stale .wx-temp { opacity: .6; }
+/* старая погода из памяти (3 ч – сутки): приглушена, пока не придёт свежая; в углу — «5 ч назад» и спиннер */
+.w-weather { position: relative; }
+.w-weather > * { transition: opacity .4s, filter .4s; }
+.w-weather.is-old > :not(.wx-ago) { opacity: .4; filter: saturate(.5); }
+.wx-ago {
+  position: absolute; top: clamp(4px, 6cqh, 10px); right: clamp(6px, 4cqw, 12px); display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; color: var(--ink-2); white-space: nowrap; pointer-events: none;
+}
+.wx-ago .spinner { width: 11px; height: 11px; border-width: 1.5px; }
+@container (max-width: 210px) { .wx-ago span:not(.spinner) { display: none; } }
 .wx-ico { font-size: min(55cqh, 26cqw); color: var(--ink); display: grid; flex: none; }
 .wx-ico svg { stroke-width: 1.3; }
 .wx-main { display: flex; align-items: center; gap: clamp(8px, 4cqw, 16px); min-width: 0; }

@@ -141,6 +141,47 @@ await page.evaluate(() => window.dispatchEvent(new Event('online')));
 await page.waitForTimeout(800);
 check(await page.locator('.w-weather .wx-temp:has-text("3°")').count() === 1, 'погода: восстановилась после online');
 
+// погода из памяти: подкладываем кэш нужного возраста (с другой температурой, чтобы отличить)
+const API = 'https://api.open-meteo.com/**';
+const oldWx = (hours, temp) => page.evaluate(async ([hours, temp]) => {
+  const k = 'wx3:москва', { [k]: c } = await chrome.storage.local.get(k);
+  await chrome.storage.local.set({ [k]: { at: Date.now() - hours * 3600e3, w: { ...c.w, temp } } });
+}, [hours, temp]);
+const wxState = () => page.evaluate(() => {
+  const b = document.querySelector('.w-weather');
+  return { temp: b.querySelector('.wx-temp')?.textContent, old: b.classList.contains('is-old'), loading: b.classList.contains('is-loading'),
+    ago: b.querySelector('.wx-ago')?.textContent || '', spin: !!b.querySelector('.wx-ago .spinner') };
+});
+// 5 часов назад, сеть медленная: сразу старая — приглушённая, «5 ч назад» со спиннером; потом свежая
+const slow = async (r) => { await new Promise(s => setTimeout(s, 1500)); r.fallback(); };
+await ctx.route(API, slow);
+await oldWx(5, 77);
+await page.reload();
+await page.waitForTimeout(500);
+let wm = await wxState();
+check(wm.temp === '77°' && wm.old && wm.spin && wm.ago === '5 ч назад', `погода: старше 3 ч — приглушена, «5 ч назад» и загрузка (${JSON.stringify(wm)})`);
+await page.locator('.grid-stack-item[gs-id="w-weather"]').screenshot({ path: `${out}/08b-weather-old.png` });
+await page.waitForTimeout(2000);
+wm = await wxState();
+check(wm.temp === '3°' && !wm.old && !wm.ago, `погода: свежая пришла — пометка ушла (${JSON.stringify(wm)})`);
+await ctx.unroute(API, slow);
+// 2 часа назад без сети: сразу из памяти, как обычная, без «Смотрю в окно…» и пометки «ч назад»
+const off = (r) => r.abort('internetdisconnected');
+await ctx.route(API, off);
+await oldWx(2, 55);
+await page.reload();
+await page.waitForTimeout(150);
+wm = await wxState();
+check(wm.temp === '55°' && !wm.old && !wm.loading, `погода: моложе 3 ч — сразу из памяти (${JSON.stringify(wm)})`);
+// 5 часов назад без сети: приглушена, «5 ч назад · нет сети», без спиннера
+await oldWx(5, 77);
+await page.reload();
+await page.waitForTimeout(1200);
+wm = await wxState();
+check(wm.temp === '77°' && wm.old && !wm.spin && wm.ago === '5 ч назад · нет сети', `погода: старая и без сети (${JSON.stringify(wm)})`);
+await ctx.unroute(API, off);
+await page.evaluate(() => chrome.storage.local.remove('wx3:москва'));
+
 // битое хранилище: неизвестный тип, мусор в координатах и настройках — страница живая
 await page.evaluate(() => chrome.storage.local.set({
   widgets: [null, { type: 'nope' }, { id: 'x', type: 'clock', data: [1] }, { id: 'x', type: 'search' }],

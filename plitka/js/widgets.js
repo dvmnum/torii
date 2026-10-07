@@ -677,7 +677,17 @@ const Widgets = {
           ),
         );
       };
+      // старая погода из памяти (3 ч – сутки): приглушена, в углу «5 ч назад» и спиннер, пока не придёт свежая
+      let ago = null;
+      const showAgo = (at, loading) => {
+        const hrs = Math.max(1, Math.floor((Date.now() - at) / 3600000));
+        ago = h('div', { class: 'wx-ago' }, ...(loading ? [h('span', { class: 'spinner' })] : []), h('span', {}, loading ? `${hrs} ч назад` : `${hrs} ч назад · нет сети`));
+        box.classList.add('is-old');
+        box.append(ago);
+      };
+      const clearAgo = () => { ago?.remove(); ago = null; box.classList.remove('is-old'); };
       const fail = (text) => {
+        clearAgo();
         box.classList.remove('is-loading');
         box.classList.add('is-error');
         box.replaceChildren(h('div', { class: 'wx-ico', html: ICONS.cloud }), h('div', { class: 'w-muted' }, text));
@@ -689,9 +699,12 @@ const Widgets = {
       };
       function load() {
         clearTimeout(retryT);
-        loadWeather(data.city).then(({ w, stale }) => {
+        loadWeather(data.city).then(({ w, stale, at }) => {
           if (!alive) return;
-          paint(w, stale);
+          const old = stale && Date.now() - at >= WX_MEMORY;
+          clearAgo();
+          paint(w, stale && !old);
+          if (old) showAgo(at, false);
           if (stale) retryLater(); else attempt = 0;
         }).catch((e) => {
           if (!alive) return;
@@ -703,18 +716,30 @@ const Widgets = {
       }
       const onOnline = () => { attempt = 0; load(); };
       window.addEventListener('online', onOnline);
-      load();
+      // сначала — что есть в памяти, без «Смотрю в окно…»; потом load() решит, нужен ли запрос
+      weatherCache(data.city).then((c) => {
+        if (!alive) return;
+        const age = c ? Date.now() - c.at : Infinity;
+        if (age < 24 * 3600 * 1000) { paint(c.w, false); if (age >= WX_MEMORY) showAgo(c.at, true); }
+        load();
+      });
       return { destroy: () => { alive = false; clearTimeout(retryT); window.removeEventListener('online', onOnline); } };
     },
   },
 };
 
-// → { w, stale }. Без сети отдаёт старый кэш (не старше суток) со stale: true.
+// погода, которую смотрели не раньше чем 3 часа назад, показывается из памяти как обычная;
+// старше (до суток) — приглушённой с пометкой «N ч назад», пока не придёт свежая
+const WX_MEMORY = 3 * 3600 * 1000;
+const wxKey = (city) => 'wx3:' + city.toLowerCase(); // wx3 — с прогнозом на неделю, по часам и подробностями
+const weatherCache = (city) => Store.get(wxKey(city), null);
+
+// → { w, stale, at }. Свежее 30 минут — из кэша без запроса. Без сети отдаёт старый кэш (не старше суток) со stale: true.
 // Ошибка с code 'notfound' — город не найден, повторять бессмысленно; остальные — сеть.
 async function loadWeather(city) {
-  const key = 'wx3:' + city.toLowerCase(); // wx3 — с прогнозом на неделю, по часам и подробностями
-  const cached = await Store.get(key, null);
-  if (cached && Date.now() - cached.at < 30 * 60 * 1000) return { w: cached.w, stale: false };
+  const key = wxKey(city);
+  const cached = await weatherCache(city);
+  if (cached && Date.now() - cached.at < 30 * 60 * 1000) return { w: cached.w, stale: false, at: cached.at };
 
   const get = (u) => fetch(u, { signal: AbortSignal.timeout(8000) }).then((r) => {
     if (!r.ok) throw new Error('http ' + r.status);
@@ -743,10 +768,11 @@ async function loadWeather(city) {
       // ближайшие часы — для вида «По часам»
       hours: (hr.time || []).map((time, i) => ({ time, code: hr.weather_code?.[i] ?? 0, temp: hr.temperature_2m?.[i], pop: hr.precipitation_probability?.[i] })),
     };
-    Store.set(key, { at: Date.now(), w });
-    return { w, stale: false };
+    const at = Date.now();
+    Store.set(key, { at, w });
+    return { w, stale: false, at };
   } catch (e) {
-    if (e.code !== 'notfound' && cached && Date.now() - cached.at < 24 * 3600 * 1000) return { w: cached.w, stale: true };
+    if (e.code !== 'notfound' && cached && Date.now() - cached.at < 24 * 3600 * 1000) return { w: cached.w, stale: true, at: cached.at };
     throw e;
   }
 }
