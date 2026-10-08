@@ -217,15 +217,76 @@ const ICONS_SETTING = { key: 'icons', label: 'Иконки', type: 'select', opt
 // расстояние между плитками: авто — растягиваются на всю ширину блока, иначе фиксированный шаг по центру
 const GAP_SETTING = { key: 'gap', label: 'Расстояние между иконками', type: 'select', options: [['auto', 'Авто'], ['tight', 'Плотно'], ['normal', 'Обычно'], ['wide', 'Свободно']] };
 
+// своя иконка для адреса — картинка или цвет; общая для «Ссылок», «Частых сайтов» и закладок (ключ — адрес).
+// Ключ linkIcons в хранилище: { [адрес]: { img: dataURL } | { color: '#rrggbb' } }; меняется — событие torii:linkicons
+const LinkIcons = {
+  map: {},
+  key: (url) => normalizeUrl(url).replace(/\/+$/, '').toLowerCase(),
+  load(m) { this.map = this.clean(m); },
+  clean(m) {
+    const out = {};
+    for (const [k, v] of Object.entries(m && typeof m === 'object' ? m : {})) {
+      if (typeof v?.img === 'string' && v.img.startsWith('data:image/') && v.img.length < 400000) out[k] = { img: v.img };
+      else if (/^#[0-9a-f]{6}$/i.test(v?.color || '')) out[k] = { color: v.color };
+    }
+    return out;
+  },
+  get(url) { return url ? this.map[this.key(url)] || null : null; },
+  set(url, icon) {
+    const k = this.key(url);
+    if (icon) this.map[k] = icon; else delete this.map[k];
+    Store.set('linkIcons', this.map);
+    window.dispatchEvent(new Event('torii:linkicons'));
+  },
+  // картинку ужимаем до 128px (webp) — в хранилище копейки
+  async pickImage(url) {
+    const inp = h('input', { type: 'file', accept: 'image/*' });
+    inp.addEventListener('change', async () => {
+      const f = inp.files[0];
+      if (!f) return;
+      try {
+        const bmp = await createImageBitmap(f, { resizeWidth: 128, resizeHeight: 128, resizeQuality: 'high' });
+        const c = h('canvas', { width: 128, height: 128 });
+        c.getContext('2d').drawImage(bmp, 0, 0);
+        bmp.close();
+        LinkIcons.set(url, { img: c.toDataURL('image/webp', 0.9) });
+      } catch (e) { console.warn('[plitka] не смог прочитать картинку для иконки', e); }
+    });
+    inp.click();
+  },
+  // пункты меню «своя иконка» для адреса
+  items(url, ctx) {
+    const cur = LinkIcons.get(url);
+    return [
+      ['Своя иконка: картинка…', () => LinkIcons.pickImage(url)],
+      ['Своя иконка: цвет…', () => ctx.modal({
+        title: 'Цвет иконки',
+        fields: [{ key: 'color', label: 'Цвет', type: 'color', value: cur?.color || (/^#[0-9a-f]{6}$/i.test(brandColor(url)) ? brandColor(url) : '#8a7cff') }],
+        submit: 'Готово',
+        onSubmit: (v) => v.color && LinkIcons.set(url, { color: v.color }),
+      })],
+      ...(cur ? [['Вернуть иконку сайта', () => LinkIcons.set(url, null)]] : []),
+    ];
+  },
+};
+
+// копировать текст в буфер с тостом
+function copyText(text, ctx) {
+  navigator.clipboard?.writeText(text).then(() => ctx.toast('Скопировано'), () => ctx.toast('Не получилось скопировать'));
+}
+
 // одна ссылка-плитка; icons — стиль иконки (задаётся классом на обёртке .w-links.icons-*)
 function linkEl(l, { newTab = false, icons = 'glass' } = {}) {
   const title = l.title || hostOf(l.url);
-  const ico = icons === 'letter'
-    ? h('span', { class: 'mono' }, (title.trim()[0] || '?').toUpperCase())
+  const letter = (title.trim()[0] || '?').toUpperCase();
+  const own = LinkIcons.get(l.url);
+  const ico = own?.img ? h('img', { src: own.img, alt: '' })
+    : own?.color || icons === 'letter' ? h('span', { class: 'mono' }, letter)
     : favicon(l.url, l.title, icons === 'big' ? 128 : 64);
-  const a = h('a', { class: 'link', href: l.url, title, target: newTab ? '_blank' : null, rel: 'noopener', style: `--brand:${brandColor(l.url)}` },
-    h('span', { class: 'link-ico' }, ico),
+  const a = h('a', { class: 'link', href: l.url, title, target: newTab ? '_blank' : null, rel: 'noopener', style: `--brand:${own?.color || brandColor(l.url)}` },
+    h('span', { class: 'link-ico' + (own?.img ? ' own-img' : own?.color ? ' own-color' : '') }, ico),
     h('span', { class: 'link-title', translate: 'no' }, title));
+  if (own) return a;
   // сайта нет в списке фирменных и цвет ещё не узнавали — узнаём из иконки и перекрашиваем
   const host = hostOf(l.url);
   if (host && !Object.keys(BRAND).some(k => host === k || host.endsWith('.' + k)) && !Brands.map?.[host]) {
@@ -281,6 +342,15 @@ const Widgets = {
       };
       tick();
       const t = setInterval(tick, 1000);
+      const set = (patch) => () => { Object.assign(data, patch); ctx.save(); ctx.rerender(); };
+      ctx.menu(() => [
+        ['Цифровые', set({ style: 'digital' }), data.style !== 'analog' ? 'checked' : ''],
+        ['Стрелочные', set({ style: 'analog' }), data.style === 'analog' ? 'checked' : ''],
+        null,
+        ['24 часа', set({ format: '24' }), data.format !== '12' ? 'checked' : ''],
+        ['12 часов', set({ format: '12' }), data.format === '12' ? 'checked' : ''],
+        ['Секунды', set({ seconds: !data.seconds }), data.seconds ? 'checked' : ''],
+      ]);
       return { destroy: () => clearInterval(t) };
     },
   },
@@ -400,12 +470,21 @@ const Widgets = {
       // призрак: есть текст — сразу ищет в инкогнито; пусто — включает режим «следующий поиск в инкогнито»
       ghostBtn.addEventListener('click', () => {
         if (input.value.trim()) return search(input.value, 'incognito');
+        toggleGhost();
+      });
+      function toggleGhost() {
         ghost = !ghost;
         ghostBtn.classList.toggle('on', ghost);
         form.classList.toggle('ghost', ghost);
         input.placeholder = ghost ? 'Инкогнито — следующий поиск' : placeholder();
         input.focus();
-      });
+      }
+      // правый клик по строке (в самом поле — обычное меню браузера: вставить и т. п.)
+      ctx.menu((e) => e.target.closest('input') ? [] : [
+        ...(data.showEngine !== false ? [['Выбрать поисковик', () => engineBtn.click()]] : []),
+        ['Следующий поиск — в инкогнито', toggleGhost, ghost ? 'checked' : ''],
+        ...(data.history?.length ? [['Очистить недавние', () => { data.history = []; ctx.save(); closeRecent(); ctx.toast('Недавние очищены'); }]] : []),
+      ]);
 
       // калькулятор: ответ справа, клик — скопировать
       const onInput = () => {
@@ -496,24 +575,41 @@ const Widgets = {
     ],
     render(body, data, ctx) {
       const wrap = h('div', { class: `w-links style-${data.style} icons-${data.icons || 'glass'} gap-${data.gap || 'auto'}` });
-      for (const l of data.links) wrap.append(linkEl(l, { newTab: data.newTab, icons: data.icons }));
-      // «+» в углу при наведении — не занимает места в сетке плиток (иначе ломал центровку в низком блоке)
-      const add = h('button', {
-        class: 'w-add', type: 'button', title: 'Добавить ссылку', html: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
-        onclick: () => ctx.modal({
-          title: 'Новая ссылка',
-          fields: [
-            { key: 'url', label: 'Адрес', type: 'text', placeholder: 'example.com', required: true },
-            { key: 'title', label: 'Название', type: 'text', placeholder: 'необязательно' },
-          ],
-          submit: 'Добавить',
-          onSubmit: (v) => {
-            data.links.push({ title: v.title.trim(), url: normalizeUrl(v.url) });
-            ctx.save(); ctx.rerender();
-          },
-        }),
+      data.links.forEach((l, i) => { const a = linkEl(l, { newTab: data.newTab, icons: data.icons }); a.dataset.i = i; wrap.append(a); });
+      if (!data.links.length) wrap.append(h('div', { class: 'w-muted' }, 'Ссылок нет — правый клик, чтобы добавить'));
+      const done = () => { ctx.save(); ctx.rerender(); };
+      // новая ссылка — на место at (по умолчанию в конец)
+      const add = (at = data.links.length) => ctx.modal({
+        title: 'Новая ссылка',
+        fields: [
+          { key: 'url', label: 'Адрес', type: 'text', placeholder: 'example.com', required: true },
+          { key: 'title', label: 'Название', type: 'text', placeholder: 'необязательно' },
+        ],
+        submit: 'Добавить',
+        onSubmit: (v) => { data.links.splice(at, 0, { title: v.title.trim(), url: normalizeUrl(v.url) }); done(); },
       });
-      body.append(wrap, add);
+      // правый клик: по ссылке — как у закладок, плюс своя иконка; по пустому месту — добавить
+      ctx.menu((e) => {
+        const a = e.target.closest('.link[data-i]');
+        if (!a) return [['Добавить ссылку', () => add()]];
+        const i = +a.dataset.i, l = data.links[i];
+        return [
+          ['Открыть в новой вкладке', () => chrome.tabs?.create ? chrome.tabs.create({ url: l.url }) : window.open(l.url, '_blank', 'noopener')],
+          ['Изменить', () => ctx.modal({
+            title: 'Ссылка',
+            fields: [{ key: 'title', label: 'Название', type: 'text', value: l.title || '' }, { key: 'url', label: 'Адрес', type: 'text', value: l.url, required: true }],
+            submit: 'Сохранить',
+            onSubmit: (v) => { l.title = v.title.trim(); l.url = normalizeUrl(v.url); done(); },
+          })],
+          ['Копировать адрес', () => copyText(l.url, ctx)],
+          ['Удалить', () => { data.links.splice(i, 1); done(); ctx.toast('Ссылка удалена', 'Вернуть', () => { data.links.splice(i, 0, l); done(); }); }, 'danger'],
+          null,
+          ...LinkIcons.items(l.url, ctx),
+          null,
+          ['Добавить ссылку', () => add(i + 1)],
+        ];
+      });
+      body.append(wrap);
     },
   },
 
@@ -537,6 +633,21 @@ const Widgets = {
         data.title ? h('div', { class: 'w-label' }, data.title) : null,
         ta,
       ));
+      const commit = () => { clearTimeout(t); data.text = ta.value; ctx.save(); };
+      ctx.menu(() => [
+        ['Вставить дату и время', () => {
+          const stamp = new Date().toLocaleString(I18N.locale(), { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+          const at = document.activeElement === ta ? ta.selectionStart : ta.value.length;
+          const sep = at > 0 && !/\s/.test(ta.value[at - 1]) ? ' ' : ''; // не прилепляем к слову
+          ta.setRangeText(sep + stamp, at, ta.selectionEnd > at ? ta.selectionEnd : at, 'end');
+          ta.focus();
+          commit();
+        }],
+        ...(ta.value ? [
+          ['Копировать всё', () => copyText(ta.value, ctx)],
+          ['Очистить', () => { const was = ta.value; ta.value = ''; commit(); ctx.toast('Заметка очищена', 'Вернуть', () => { ta.value = was; commit(); }); }, 'danger'],
+        ] : []),
+      ]);
       return { destroy: () => { clearTimeout(t); data.text = ta.value; } };
     },
   },
@@ -697,9 +808,9 @@ const Widgets = {
         clearTimeout(retryT);
         retryT = setTimeout(load, Math.min(15000 * 2 ** attempt++, 600000));
       };
-      function load() {
+      function load(force) {
         clearTimeout(retryT);
-        loadWeather(data.city).then(({ w, stale, at }) => {
+        loadWeather(data.city, force).then(({ w, stale, at }) => {
           if (!alive) return;
           const old = stale && Date.now() - at >= WX_MEMORY;
           clearAgo();
@@ -715,6 +826,16 @@ const Widgets = {
         });
       }
       const onOnline = () => { attempt = 0; load(); };
+      const VIEWS = [['now', 'Сейчас'], ['mini', 'Мини'], ['details', 'Подробно'], ['hours', 'По часам'], ['week', 'Неделя']];
+      ctx.menu(() => [
+        ['Обновить сейчас', () => { clearAgo(); ago = h('div', { class: 'wx-ago' }, h('span', { class: 'spinner' })); box.append(ago); load(true); }],
+        ['Сменить город', () => ctx.modal({
+          title: 'Город', fields: [{ key: 'city', label: 'Город', type: 'text', value: data.city, required: true }], submit: 'Готово',
+          onSubmit: (v) => { if (v.city.trim()) { data.city = v.city.trim(); ctx.save(); ctx.rerender(); } },
+        })],
+        null,
+        ...VIEWS.map(([k, t]) => [t, () => { data.view = k; ctx.save(); ctx.rerender(); }, (data.view || 'now') === k ? 'checked' : '']),
+      ]);
       window.addEventListener('online', onOnline);
       // сначала — что есть в памяти, без «Смотрю в окно…»; потом load() решит, нужен ли запрос
       weatherCache(data.city).then((c) => {
@@ -736,10 +857,10 @@ const weatherCache = (city) => Store.get(wxKey(city), null);
 
 // → { w, stale, at }. Свежее 30 минут — из кэша без запроса. Без сети отдаёт старый кэш (не старше суток) со stale: true.
 // Ошибка с code 'notfound' — город не найден, повторять бессмысленно; остальные — сеть.
-async function loadWeather(city) {
+async function loadWeather(city, force = false) {
   const key = wxKey(city);
   const cached = await weatherCache(city);
-  if (cached && Date.now() - cached.at < 30 * 60 * 1000) return { w: cached.w, stale: false, at: cached.at };
+  if (!force && cached && Date.now() - cached.at < 30 * 60 * 1000) return { w: cached.w, stale: false, at: cached.at };
 
   const get = (u) => fetch(u, { signal: AbortSignal.timeout(8000) }).then((r) => {
     if (!r.ok) throw new Error('http ' + r.status);

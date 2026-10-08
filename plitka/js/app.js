@@ -110,7 +110,8 @@
 
   // всё для первого кадра — одним запросом. Картинка-фон лежит отдельным ключом bgImage (мегабайты):
   // иначе её перечитывали бы и перезаписывали вместе с настройками на каждый шаг любого ползунка
-  const boot = await Store.getMany({ settings: {}, bgImage: null, widgets: null, layouts: null, scenes: null, opens: 0, donateDone: false, donateDay: null });
+  const boot = await Store.getMany({ settings: {}, bgImage: null, widgets: null, layouts: null, scenes: null, opens: 0, donateDone: false, donateDay: null, linkIcons: {} });
+  LinkIcons.load(boot.linkIcons); // свои иконки ссылок — до отрисовки блоков
   let settings = cleanSettings(boot.settings);
   persistSettings.img = boot.bgImage;
   if (!settings.bgImage && typeof boot.bgImage === 'string' && boot.bgImage.startsWith('data:image/')) settings.bgImage = boot.bgImage;
@@ -489,6 +490,15 @@
       rerender: () => renderWidget(item),
       modal: openModal,
       toast,
+      // свои пункты для правого клика по блоку: fn(e) → [пункты] (пусто — в поле ввода будет меню браузера)
+      menu: (fn) => { const r = live.get(item.id); if (r) r.menu = fn; },
+      // картинка (Blob) → фон вкладки, с «Вернуть» (виджет «Картинка»)
+      setBackground: async (blob) => {
+        const had = settings.bgImage;
+        await loadBgImage(blob);
+        sampleImage();
+        toast('Картинка стала фоном', 'Вернуть', () => { setSetting('bgImage', had); sampleImage(); renderSettings(); });
+      },
     };
   }
 
@@ -496,6 +506,7 @@
     const rec = live.get(item.id);
     if (!rec) return;
     rec.inst?.destroy?.();
+    rec.menu = null; // пункты правого клика виджет задаст заново
     rec.body.replaceChildren();
     rec.shell.classList.toggle('glass', !!item.data.glass);
     rec.shell.classList.toggle('tinted', !!item.data.tint);
@@ -2202,7 +2213,7 @@
       if (raw?.settings) raw.settings = { ...raw.settings, bgImage: await Store.get('sceneimg:' + s.id, null) };
       states[s.id] = raw;
     }
-    const data = { app: 'torii', v: 3, settings, widgets: stripGeom(layout), layouts, scenes: { ...scenes, states } };
+    const data = { app: 'torii', v: 3, settings, widgets: stripGeom(layout), layouts, scenes: { ...scenes, states }, linkIcons: LinkIcons.map };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = h('a', { href: URL.createObjectURL(blob), download: 'torii-backup.json' });
     a.click();
@@ -2238,6 +2249,7 @@
         await Store.set('scene:' + s.id, st);
       }
       await Store.set('scenes', sc);
+      if (d.linkIcons) await Store.set('linkIcons', LinkIcons.clean(d.linkIcons)); // свои иконки ссылок (бэкапы с 0.13)
       location.reload();
     } catch (e) {
       console.info('[import]', e.message);
@@ -2253,6 +2265,42 @@
     requestAnimationFrame(() => t.classList.add('show'));
     setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, actionText ? 5000 : 2500);
   }
+
+  // ---------- правый клик ----------
+  // По блоку: его пункты (виджет отдаёт через ctx.menu), под чертой — «Настроить» и «Удалить блок».
+  // По фону вкладки — добавить виджет, раскладка, настройки. Свои меню — только на сетке и фоне: в панели, доке,
+  // модалках и полях ввода остаётся меню браузера (вставить, проверка орфографии). В режиме редактирования — тоже браузерное.
+  document.addEventListener('contextmenu', (e) => {
+    if (e.defaultPrevented || editing) return;
+    const t = e.target;
+    const itemEl = t.closest('#grid .grid-stack-item');
+    if (itemEl) {
+      const id = itemEl.gridstackNode?.id, item = layout.find(i => i.id === id), rec = live.get(id);
+      if (!item || !rec) return;
+      const field = t.closest('input, textarea');
+      if (field && field.selectionStart !== field.selectionEnd) return; // выделен текст — нужен «Копировать» браузера
+      const own = rec.menu?.(e) || [];
+      if (field && !own.length) return;
+      e.preventDefault();
+      popMenu(e.clientX, e.clientY, [...own, ...(own.length ? [null] : []),
+        ['Настроить', () => openWidgetSettings(item)],
+        ['Удалить блок', () => removeWidget(item), 'danger']]);
+      return;
+    }
+    if (!(t === document.body || t === document.documentElement || t.closest('#grid, #bg, #guides'))) return;
+    e.preventDefault();
+    const s = settings.slides;
+    popMenu(e.clientX, e.clientY, [
+      ['Добавить виджет', () => { setEditing(true); if (editing) document.getElementById('btn-add').click(); }],
+      ['Изменить раскладку', () => setEditing(true)],
+      ['Настройки', () => openSettings()],
+      ...(s.on && s.items.length > 1 ? [['Следующий слайд', () => nextSlide()]] : []),
+      // раскладки — сразу списком, текущая с галочкой
+      ...(scenes.list.length > 1 ? [null, ...scenes.list.map(sc => [sc.name, () => switchScene(sc.id), sc.id === scenes.active ? 'checked' : ''])] : []),
+    ]);
+  });
+  // своя иконка у адреса поменялась — перерисовываем всё, где есть ссылки
+  window.addEventListener('torii:linkicons', () => { for (const it of layout) if (['links', 'topsites', 'bookmarks'].includes(it.type)) renderWidget(it); });
 
   // ---------- клавиатура ----------
   document.addEventListener('keydown', (e) => {

@@ -125,18 +125,22 @@ const Bookmarks = {
     ['Добавить папку', () => Bookmarks.add(ctx, true, parentId, index)],
     ...extra,
   ],
-  // меню по правому клику на плитке: её действия, а под чертой — добавить рядом с ней
-  menu(n, x, y, ctx, newTab, extra) {
+  // пункты по правому клику на плитке: её действия, своя иконка, а под чертой — добавить рядом с ней
+  items(n, ctx, newTab, extra) {
     const open = () => chrome.tabs?.create ? chrome.tabs.create({ url: n.url }) : window.open(n.url, '_blank', 'noopener');
-    popMenu(x, y, [...(n.url ? [
+    return [...(n.url ? [
       newTab ? ['Открыть здесь', () => { location.href = n.url; }] : ['Открыть в новой вкладке', open],
       ['Изменить', () => Bookmarks.edit(n, ctx)],
+      ['Копировать адрес', () => copyText(n.url, ctx)],
       ['Удалить', () => Bookmarks.remove(n, ctx), 'danger'],
+      null,
+      ...LinkIcons.items(n.url, ctx),
     ] : [
       ['Переименовать', () => Bookmarks.edit(n, ctx)],
       ['Удалить папку', () => Bookmarks.remove(n, ctx), 'danger'],
-    ]), null, ...Bookmarks.addItems(ctx, n.parentId, n.index + 1, extra)]);
+    ]), null, ...Bookmarks.addItems(ctx, n.parentId, n.index + 1, extra)];
   },
+  menu(n, x, y, ctx, newTab, extra) { popMenu(x, y, Bookmarks.items(n, ctx, newTab, extra)); },
 };
 
 // маленькое меню у курсора: items — [подпись, действие, класс?], null — черта
@@ -275,7 +279,8 @@ function bmTile(n, view, { onMenu, onFolder }) {
   el.dataset.bm = n.id;
   if (n.url) el.dataset.url = '1';
   el.draggable = false;
-  el.addEventListener('contextmenu', (e) => {
+  // своё меню — только в окошке папки; в блоке пункты отдаёт ctx.menu (к ним добавятся «Настроить» и «Удалить блок»)
+  if (onMenu) el.addEventListener('contextmenu', (e) => {
     if (document.body.classList.contains('editing')) return;
     e.preventDefault();
     onMenu(n, e.clientX, e.clientY);
@@ -330,6 +335,7 @@ function openFolderPop(anchor, folderId, { view, ctx, onMenu, extra }) {
   }
   bmEmptyMenu(grid, ctx, cur, extra);
   const off = onBookmarksChange(paint);
+  window.addEventListener('torii:linkicons', paint); // своя иконка у закладки внутри — сразу видна
   const onKey = (e) => {
     if (e.key !== 'Escape' || bmUiOpen()) return;
     e.stopImmediatePropagation();
@@ -345,6 +351,7 @@ function openFolderPop(anchor, folderId, { view, ctx, onMenu, extra }) {
   });
   function close() {
     off();
+    window.removeEventListener('torii:linkicons', paint);
     window.removeEventListener('keydown', onKey, true);
     ov.classList.remove('open');
     setTimeout(() => ov.remove(), 220);
@@ -443,7 +450,7 @@ Object.assign(Widgets, {
         list.replaceChildren(...items.map(it => {
           const text = h('span', { class: 'todo-text', title: 'Двойной клик — изменить', translate: 'no' }, it.text);
           text.addEventListener('dblclick', () => edit(it, text));
-          const li = h('li', { class: 'todo-item' + (it.done ? ' done' : ''), draggable: it.done ? null : 'true' },
+          const li = h('li', { class: 'todo-item' + (it.done ? ' done' : ''), draggable: it.done ? null : 'true', 'data-id': it.id },
             h('button', { type: 'button', class: 'todo-check', 'aria-label': it.done ? 'Вернуть' : 'Готово', onclick: () => { it.done = !it.done; save(); } }),
             text,
             h('button', { type: 'button', class: 'todo-del', title: 'Удалить', html: SVG.x, onclick: () => { data.items = data.items.filter(x => x !== it); save(); } }),
@@ -477,6 +484,20 @@ Object.assign(Widgets, {
         save();
       });
       clear.addEventListener('click', () => { data.items = data.items.filter(i => !i.done); save(); });
+      // правый клик: по задаче — отметить, изменить, наверх, удалить; по пустому месту — убрать сделанные
+      ctx.menu((e) => {
+        if (e.target.closest('input')) return [];
+        const li = e.target.closest('.todo-item'), it = li && data.items.find(x => x.id === li.dataset.id);
+        const sweep = data.items.some(i => i.done) ? [['Убрать сделанные', () => clear.click()]] : [];
+        if (!it) return sweep;
+        return [
+          [it.done ? 'Вернуть в работу' : 'Готово', () => { it.done = !it.done; save(); }],
+          ['Изменить', () => edit(it, li.querySelector('.todo-text'))],
+          ...(it.done ? [] : [['Наверх', () => { data.items = [it, ...data.items.filter(x => x !== it)]; save(); }]]),
+          ['Удалить', () => { const at = data.items.indexOf(it); data.items.splice(at, 1); save(); ctx.toast('Задача удалена', 'Вернуть', () => { data.items.splice(at, 0, it); save(); }); }, 'danger'],
+          ...(sweep.length ? [null, ...sweep] : []),
+        ];
+      });
 
       paint();
       body.append(h('div', { class: 'w-todo' },
@@ -552,6 +573,16 @@ Object.assign(Widgets, {
       });
       const reset = h('button', { type: 'button', class: 'pomo-btn', title: 'Сначала', html: SVG.reset, onclick: () => { Tab.set(null); setState({ phase: data.state.phase, left: len(data.state.phase) }); } });
       const skip = h('button', { type: 'button', class: 'pomo-btn', title: 'Следующая фаза', html: SVG.skip, onclick: () => next(false) });
+      // длительность фокуса: не идёт — сразу с новой длиной, идёт — со следующего круга
+      const setWork = (m) => () => { data.work = m; if (!running() && data.state.phase === 'work') setState({ phase: 'work', left: len('work') }); else { ctx.save(); paint(); } };
+      ctx.menu(() => [
+        [running() ? 'Пауза' : 'Старт', () => toggle.click()],
+        ['Сбросить', () => reset.click()],
+        ['Пропустить фазу', () => skip.click()],
+        null,
+        ['Фокус 25 минут', setWork('25'), data.work === '25' ? 'checked' : ''],
+        ['Фокус 50 минут', setWork('50'), data.work === '50' ? 'checked' : ''],
+      ]);
 
       const t = setInterval(() => {
         if (running() && left() <= 0 && data.state.owner === me) next(true);
@@ -587,9 +618,25 @@ Object.assign(Widgets, {
         }
         chrome.topSites.get((list) => {
           if (!alive) return;
-          const sites = list.filter(s => /^https?:/.test(s.url)).slice(0, +data.count);
+          // скрытые по правому клику — data.hidden (адреса), на их место встают следующие
+          const hidden = new Set(data.hidden || []);
+          const sites = list.filter(s => /^https?:/.test(s.url) && !hidden.has(LinkIcons.key(s.url))).slice(0, +data.count);
           body.append(sites.length ? linkTiles(sites, data) : h('div', { class: 'w-empty' }, h('div', { class: 'w-muted' }, 'Браузер ещё не знает твоих частых сайтов')));
         });
+      });
+      const unhide = (data.hidden || []).length ? [['Вернуть скрытые', () => { data.hidden = []; ctx.save(); ctx.rerender(); }]] : [];
+      ctx.menu((e) => {
+        const a = e.target.closest('a.link');
+        if (!a) return unhide;
+        const url = a.getAttribute('href');
+        return [
+          ['Открыть в новой вкладке', () => chrome.tabs?.create ? chrome.tabs.create({ url }) : window.open(url, '_blank', 'noopener')],
+          ['Копировать адрес', () => copyText(url, ctx)],
+          ['Скрыть этот сайт', () => { data.hidden = [...(data.hidden || []), LinkIcons.key(url)]; ctx.save(); ctx.rerender(); }],
+          null,
+          ...LinkIcons.items(url, ctx),
+          ...(unhide.length ? [null, ...unhide] : []),
+        ];
       });
       return { destroy: () => { alive = false; } };
     },
@@ -614,12 +661,20 @@ Object.assign(Widgets, {
       const treeItem = (x, y) => [null, ['Все закладки', () => openBookmarkTree({ x, y }, { ctx, newTab: data.newTab, onMenu })]];
       const onMenu = (n, x, y) => Bookmarks.menu(n, x, y, ctx, data.newTab, treeItem(x, y));
       const onFolder = (n, el) => openFolderPop(el, n.id, { view: data, ctx, onMenu, extra: treeItem });
+      const byId = new Map();
       const paint = () => Bookmarks.bar().then((nodes) => {
         if (!alive) return;
-        wrap.replaceChildren(...nodes.map(n => bmTile(n, data, { onMenu, onFolder })));
+        byId.clear();
+        for (const n of nodes) byId.set(n.id, n);
+        wrap.replaceChildren(...nodes.map(n => bmTile(n, data, { onFolder })));
         if (!nodes.length) wrap.append(h('div', { class: 'w-muted' }, 'В строке закладок пусто — правый клик, чтобы добавить'));
       });
-      bmEmptyMenu(wrap, ctx, () => Bookmarks.barId, treeItem);
+      ctx.menu((e) => {
+        if (!Bookmarks.barId) return [];
+        const n = byId.get(e.target.closest('[data-bm]')?.dataset.bm);
+        return n ? Bookmarks.items(n, ctx, data.newTab, treeItem(e.clientX, e.clientY))
+          : Bookmarks.addItems(ctx, Bookmarks.barId, undefined, treeItem(e.clientX, e.clientY));
+      });
       bmSortable(wrap, {
         list: () => data.style === 'list',
         onStart: () => { closeFolderPop?.(); closeBmTree?.(); },
@@ -662,13 +717,14 @@ Object.assign(Widgets, {
       let alive = true;
       const box = h('div', { class: 'w-recent' }, h('div', { class: 'w-label' }, 'Недавно закрытые'));
       const list = h('ul', { class: 'recent-list' });
+      let tabs = [];
       const paint = () => chrome.sessions.getRecentlyClosed({ maxResults: 25 }, (sessions) => {
         if (!alive) return;
-        const tabs = sessions.flatMap(s => s.tab ? [s.tab] : (s.window?.tabs || []))
+        tabs = sessions.flatMap(s => s.tab ? [s.tab] : (s.window?.tabs || []))
           .filter(t => t.url && /^https?:/.test(t.url))
           .slice(0, +data.count);
-        list.replaceChildren(...tabs.map(t => h('li', {},
-          h('button', { type: 'button', class: 'recent-item', title: t.url, onclick: () => chrome.sessions.restore(t.sessionId) },
+        list.replaceChildren(...tabs.map((t, i) => h('li', {},
+          h('button', { type: 'button', class: 'recent-item', title: t.url, 'data-i': i, onclick: () => chrome.sessions.restore(t.sessionId) },
             h('span', { class: 'recent-ico' }, favicon(t.url, t.title, 32)),
             h('span', { class: 'recent-title', translate: 'no' }, t.title || hostOf(t.url))))));
         if (!tabs.length) list.replaceChildren(h('li', { class: 'w-muted' }, 'Пока ничего не закрывали'));
@@ -686,6 +742,18 @@ Object.assign(Widgets, {
         paint();
         chrome.sessions.onChanged.addListener(paint);
       });
+      // «Восстановить все» — по порядку, начиная с самой давней, чтобы вкладки встали как были
+      const all = () => tabs.length > 1 ? [['Восстановить все', async () => { for (const t of [...tabs].reverse()) await chrome.sessions.restore(t.sessionId); }]] : [];
+      ctx.menu((e) => {
+        const t = tabs[e.target.closest('.recent-item')?.dataset.i];
+        if (!t) return all();
+        return [
+          ['Восстановить', () => chrome.sessions.restore(t.sessionId)],
+          ['Открыть в новой вкладке', () => chrome.tabs?.create({ url: t.url, active: false })],
+          ['Копировать адрес', () => copyText(t.url, ctx)],
+          ...(all().length ? [null, ...all()] : []),
+        ];
+      });
       return { destroy: () => { alive = false; chrome.sessions?.onChanged?.removeListener(paint); } };
     },
   },
@@ -695,12 +763,23 @@ Object.assign(Widgets, {
     size: { w: 4, h: 3 }, min: { w: 3, h: 2 },
     defaults: { glass: true, codes: 'USD, EUR, CNY' },
     settings: [{ key: 'codes', label: 'Валюты (коды через запятую)', type: 'text', placeholder: 'USD, EUR, CNY' }, GLASS_SETTING],
-    render(body, data) {
+    render(body, data, ctx) {
       let alive = true;
       const box = h('div', { class: 'w-rates' }, h('div', { class: 'w-muted' }, 'Узнаю курс…'));
       body.append(box);
       const fmt = (v) => v.toLocaleString(I18N.locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      loadRates().then(({ r, stale }) => {
+      ctx.menu((e) => {
+        const row = e.target.closest('.rate');
+        return [
+          ...(row ? [['Копировать курс', () => copyText(`${row.querySelector('.rate-code').textContent} ${row.querySelector('.rate-val').textContent}`, ctx)], null] : []),
+          ['Обновить', () => load(true)],
+          ['Добавить валюту', () => ctx.modal({
+            title: 'Валюта', fields: [{ key: 'code', label: 'Код валюты', type: 'text', placeholder: 'GBP, JPY, KZT…', required: true }], submit: 'Добавить',
+            onSubmit: (v) => { const c = v.code.trim().toUpperCase(); if (c) { data.codes = [data.codes, c].filter(Boolean).join(', '); ctx.save(); ctx.rerender(); } },
+          })],
+        ];
+      });
+      const load = (force) => loadRates(force).then(({ r, stale }) => {
         if (!alive) return;
         const codes = data.codes.toUpperCase().split(/[\s,;]+/).filter(Boolean);
         const rows = codes.map(c => r.Valute[c] && { c, ...r.Valute[c] }).filter(Boolean);
@@ -716,6 +795,7 @@ Object.assign(Widgets, {
           }),
           ...(rows.length ? [] : [h('div', { class: 'w-muted' }, 'Не нашёл таких валют')])); // replaceChildren превратил бы null в текст
       }).catch(() => { if (alive) box.replaceChildren(h('div', { class: 'w-muted' }, 'Нет связи с ЦБ')); });
+      load();
       return { destroy: () => { alive = false; } };
     },
   },
@@ -730,7 +810,19 @@ Object.assign(Widgets, {
       ALIGN_SETTING,
       GLASS_SETTING,
     ],
-    render(body, data) {
+    render(body, data, ctx) {
+      ctx.menu(() => [['Изменить событие и дату', () => ctx.modal({
+        title: 'Обратный отсчёт',
+        fields: [
+          { key: 'title', label: 'Событие', type: 'text', value: data.title || '' },
+          { key: 'date', label: 'Дата', type: 'text', value: data.date || '', placeholder: 'ДД.ММ.ГГГГ, пусто — Новый год' },
+        ],
+        submit: 'Сохранить',
+        onSubmit: (v) => {
+          if (v.date.trim() && !parseDate(v.date)) return ctx.toast('Не понял дату — напиши как 31.12.2026');
+          data.title = v.title.trim(); data.date = v.date.trim(); ctx.save(); ctx.rerender();
+        },
+      })]]);
       const target = parseDate(data.date) || new Date(new Date().getFullYear() + 1, 0, 1);
       const big = h('div', { class: 'cd-big' });
       const unit = h('div', { class: 'cd-unit' });
@@ -782,12 +874,12 @@ Object.assign(Widgets, {
         grid.replaceChildren(
           h('span'), ...days.map((d) => h('span', { class: 'hb-dn' + (dayKey(d) === today ? ' today' : '') }, d.toLocaleDateString(I18N.locale(), { weekday: 'short' }).slice(0, 2))), h('span'),
           ...data.habits.flatMap(hb => [
-            h('span', { class: 'hb-name', title: hb.name, translate: 'no' }, hb.name,
+            h('span', { class: 'hb-name', title: hb.name, translate: 'no', 'data-hb': hb.id }, hb.name,
               h('button', { type: 'button', class: 'todo-del', title: 'Удалить', html: SVG.x, onclick: () => { data.habits = data.habits.filter(x => x !== hb); save(); } })),
             ...days.map(d => {
               const k = dayKey(d);
               if (k > today) return h('span', { class: 'hb-dot future', title: d.toLocaleDateString(I18N.locale()) });
-              return h('button', { type: 'button', class: 'hb-dot' + (hb.days[k] ? ' on' : '') + (k === today ? ' today' : ''), title: d.toLocaleDateString(I18N.locale()), onclick: () => { if (hb.days[k]) delete hb.days[k]; else hb.days[k] = true; save(); } });
+              return h('button', { type: 'button', class: 'hb-dot' + (hb.days[k] ? ' on' : '') + (k === today ? ' today' : ''), 'data-hb': hb.id, title: d.toLocaleDateString(I18N.locale()), onclick: () => { if (hb.days[k]) delete hb.days[k]; else hb.days[k] = true; save(); } });
             }),
             h('span', { class: 'hb-streak', title: 'Дней подряд' }, streak(hb) ? `${streak(hb)}🔥` : ''),
           ]));
@@ -797,6 +889,23 @@ Object.assign(Widgets, {
         data.habits.push({ id: uid(), name: input.value.trim(), days: {} });
         input.value = '';
         save();
+      });
+      // правый клик по привычке: отметить сегодня, переименовать, удалить; везде — «Новая привычка»
+      ctx.menu((e) => {
+        if (e.target.closest('input')) return [];
+        const hb = data.habits.find(x => x.id === e.target.closest('[data-hb]')?.dataset.hb);
+        const add = [['Новая привычка', () => input.focus()]];
+        if (!hb) return add;
+        return [
+          [hb.days[today] ? 'Снять отметку за сегодня' : 'Отметить сегодня', () => { if (hb.days[today]) delete hb.days[today]; else hb.days[today] = true; save(); }],
+          ['Переименовать', () => ctx.modal({
+            title: 'Привычка', fields: [{ key: 'name', label: 'Название', type: 'text', value: hb.name, required: true }], submit: 'Сохранить',
+            onSubmit: (v) => { if (v.name.trim()) { hb.name = v.name.trim(); save(); } },
+          })],
+          ['Удалить', () => { const at = data.habits.indexOf(hb); data.habits.splice(at, 1); save(); ctx.toast('Привычка удалена', 'Вернуть', () => { data.habits.splice(at, 0, hb); save(); }); }, 'danger'],
+          null,
+          ...add,
+        ];
       });
       paint();
       body.append(h('div', { class: 'w-habits' }, h('div', { class: 'w-label' }, 'Привычки'), grid, input));
@@ -812,6 +921,10 @@ Object.assign(Widgets, {
       // цитата дня; «ещё» листает дальше, на следующий день сдвиг сбрасывается
       if (data.shiftDay !== dayIndex()) { data.shift = 0; data.shiftDay = dayIndex(); }
       const [text, who, from] = QUOTES[(dayIndex() + data.shift) % QUOTES.length];
+      ctx.menu(() => [
+        ['Другая цитата', () => { data.shift++; ctx.save(); ctx.rerender(); }],
+        ['Копировать', () => copyText(`«${text}» — ${[who, from].filter(Boolean).join(', ')}`, ctx)],
+      ]);
       body.append(h('figure', { class: 'w-quote aligned ' + alignClass(data.align), translate: 'no' },
         h('blockquote', {}, `«${text}»`),
         h('figcaption', {}, [who, from].filter(Boolean).join(', ')),
@@ -827,6 +940,10 @@ Object.assign(Widgets, {
     render(body, data, ctx) {
       if (data.shiftDay !== dayIndex()) { data.shift = 0; data.shiftDay = dayIndex(); }
       const [word, meaning] = WORDS[(dayIndex() + data.shift) % WORDS.length];
+      ctx.menu(() => [
+        ['Другое слово', () => { data.shift++; ctx.save(); ctx.rerender(); }],
+        ['Копировать', () => copyText(`${word} — ${meaning}`, ctx)],
+      ]);
       body.append(h('div', { class: 'w-word aligned ' + alignClass(data.align) },
         h('div', { class: 'w-label' }, 'Слово дня'),
         h('div', { class: 'word-w', translate: 'no' }, word),
@@ -852,9 +969,10 @@ Object.assign(Widgets, {
       body.append(frame);
       // показываем, только когда картинка целиком скачана и раскодирована — иначе она проявлялась полосами сверху вниз;
       // пока грузится — переливающаяся заглушка (или прежняя картинка, если листаем «Ещё»)
-      let seq = 0;
+      let seq = 0, cur = null; // cur — адрес картинки, что сейчас на экране
       const show = (src, caption) => {
         const my = ++seq;
+        cur = src;
         const img = h('img', { alt: '', referrerpolicy: 'no-referrer', src, class: 'pic-in' });
         if (!frame.querySelector('img')) frame.replaceChildren(h('div', { class: 'pic-loading' }), more);
         frame.classList.add('busy');
@@ -893,6 +1011,24 @@ Object.assign(Widgets, {
         more.onclick = load;
         if (fresh) show(data.cache.url, data.cache.caption); else load();
       }
+      // правый клик: сделать фоном, другая, открыть оригинал, копировать. Картинку качаем заново (сервисы отдают её с CORS)
+      const blob = () => fetch(cur).then(r => { if (!r.ok) throw new Error('http ' + r.status); return r.blob(); });
+      const fail = () => ctx.toast('Сервис не дал скачать картинку');
+      ctx.menu(() => [
+        ...(cur ? [['Сделать фоном вкладки', () => blob().then(ctx.setBackground, fail)]] : []),
+        [data.source === 'file' ? 'Другой файл' : 'Другая', () => more.click()],
+        ...(cur && !cur.startsWith('data:') ? [['Открыть оригинал', () => chrome.tabs?.create ? chrome.tabs.create({ url: cur }) : window.open(cur, '_blank', 'noopener')]] : []),
+        ...(cur ? [['Копировать картинку', () => blob().then(async (b) => {
+          // в буфер браузер берёт только PNG — перерисовываем (у гифки — первый кадр)
+          const bmp = await createImageBitmap(b);
+          const c = h('canvas', { width: bmp.width, height: bmp.height });
+          c.getContext('2d').drawImage(bmp, 0, 0);
+          bmp.close();
+          const png = await new Promise(ok => c.toBlob(ok, 'image/png'));
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+          ctx.toast('Скопировано');
+        }).catch(fail)]] : []),
+      ]);
       return { destroy: () => { alive = false; } };
     },
   },
@@ -927,9 +1063,9 @@ for (const [k, m] of Object.entries(WIDGET_META)) if (Widgets[k]) Object.assign(
 // ---------- данные для виджетов ----------
 
 // Курс ЦБ через cbr-xml-daily.ru (зеркало официального XML, отдаёт JSON с CORS). Кэш — час, без сети — до трёх дней.
-async function loadRates() {
+async function loadRates(force = false) {
   const cached = await Store.get('cbr', null);
-  if (cached && Date.now() - cached.at < 3600000) return { r: cached.r, stale: false };
+  if (!force && cached && Date.now() - cached.at < 3600000) return { r: cached.r, stale: false };
   try {
     const r = await fetch('https://www.cbr-xml-daily.ru/daily_json.js', { signal: AbortSignal.timeout(8000) }).then(x => { if (!x.ok) throw new Error('http ' + x.status); return x.json(); });
     if (!r.Valute) throw new Error('bad data');

@@ -491,15 +491,6 @@ body.no-motion .clock-time .colon { animation: none; }
   .w-links:not(.style-list) .link-title { display: none; }
   .w-body .w-links:not(.style-list) .link-ico { width: min(44px, 68cqh); height: min(44px, 68cqh); }
 }
-/* «+» в углу «Ссылок»: появляется при наведении, места в сетке не занимает */
-.w-add {
-  position: absolute; right: 8px; top: 8px; width: 24px; height: 24px; padding: 0; border-radius: 50%;
-  border: 0; background: rgba(var(--fg), .12); color: var(--ink-2); display: grid; place-items: center; font-size: 14px;
-  opacity: 0; transition: opacity .2s, background .2s;
-}
-.w-body:hover .w-add { opacity: 1; }
-.w-add:hover { background: rgba(var(--fg), .22); color: var(--ink); }
-@container (max-height: 96px) { .w-add { top: 50%; transform: translateY(-50%); right: 6px; } }
 
 /* стили иконок (класс на обёртке): --brand — фирменный цвет сайта, ставит linkEl() */
 .w-links.icons-big .link-ico { width: clamp(38px, 34cqh, 62px); height: clamp(38px, 34cqh, 62px); background: none; border: 0; box-shadow: none; }
@@ -615,6 +606,16 @@ body.no-motion .clock-time .colon { animation: none; }
 .pop-item:hover { background: rgba(255,255,255,.07); color: var(--ink); }
 .pop-item.danger:hover { background: rgba(255, 90, 110, .18); color: #ff8a9a; }
 .pop-sep { height: 1px; margin: 4px 6px; background: var(--line-2); }
+.pop-item.checked { color: var(--ink); display: flex; align-items: center; }
+.pop-item.checked::after { content: ''; width: 14px; height: 14px; margin-left: auto; padding-left: 12px; background: var(--accent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") right / 14px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") right / 14px no-repeat; }
+
+/* своя иконка ссылки (правый клик → «Своя иконка»): картинка на всю плитку или цвет с буквой — сильнее любого стиля иконок */
+.w-links .link .link-ico.own-img, .fp-grid .link .link-ico.own-img { padding: 0; background: none; border: 0; overflow: hidden; }
+.w-links .link .link-ico.own-img img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; filter: none; opacity: 1; }
+.w-links .link .link-ico.own-color { background: linear-gradient(160deg, color-mix(in srgb, var(--brand) 82%, white), var(--brand)); border: 0; box-shadow: 0 8px 18px -10px var(--brand); }
+.w-links .link .link-ico.own-color .mono { color: #fff; font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
 
 /* список: строки по центру по высоте, как плитки (в низком блоке они прилипали к верху); safe — не уезжать за верх, если не влезли */
 .w-links.style-list { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); align-content: safe center; }

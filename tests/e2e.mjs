@@ -1016,6 +1016,102 @@ const bmText = await page.evaluate(() => {
 check(/Разрешить|обнови вкладку/.test(bmText), `закладки: без доступа — кнопка «Разрешить» («${bmText.replace(/\s+/g, ' ').trim()}»)`);
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
+// ---------- правый клик: меню у блоков и фона, свои иконки ссылок ----------
+await page.evaluate(() => chrome.storage.local.set({
+  settings: {},
+  linkIcons: {},
+  widgets: [
+    { id: 'm-links', type: 'links', data: { links: [{ title: 'GitHub', url: 'https://github.com' }, { title: 'Хабр', url: 'https://habr.com' }] } },
+    { id: 'm-clock', type: 'clock', data: {} },
+    { id: 'm-notes', type: 'notes', data: { text: 'привет' } },
+    { id: 'm-todo', type: 'todo', data: { items: [{ id: 't1', text: 'купить хлеб', done: false }] } },
+    { id: 'm-search', type: 'search', data: {} },
+  ],
+  layouts: { lg: { 'm-links': { x: 0, y: 0, w: 10, h: 2 }, 'm-clock': { x: 12, y: 0, w: 8, h: 3 }, 'm-notes': { x: 0, y: 4, w: 6, h: 4 }, 'm-todo': { x: 8, y: 4, w: 6, h: 4 }, 'm-search': { x: 0, y: 9, w: 12, h: 1 } } },
+}));
+await page.reload();
+await page.waitForTimeout(1200);
+const menuOf = async (sel, opts = {}) => {
+  await page.click(sel, { button: 'right', ...opts });
+  await page.waitForTimeout(150);
+  return page.$$eval('.pop-menu .pop-item', els => els.map(e => e.textContent));
+};
+const pick = async (text) => { await page.click(`.pop-menu .pop-item:text-is("${text}")`); await page.waitForTimeout(300); };
+// фон вкладки
+await page.mouse.click(1450, 500, { button: 'right' }); // пустое место сетки справа
+await page.waitForTimeout(150);
+let mm = await page.$$eval('.pop-menu .pop-item', els => els.map(e => e.textContent));
+check(['Добавить виджет', 'Изменить раскладку', 'Настройки'].every(x => mm.includes(x)), `правый клик: меню фона (${mm})`);
+await page.keyboard.press('Escape');
+// ссылка: свои пункты + общие «Настроить / Удалить блок»
+mm = await menuOf('[gs-id="m-links"] .link[data-i="0"]');
+check(['Открыть в новой вкладке', 'Изменить', 'Копировать адрес', 'Удалить', 'Своя иконка: картинка…', 'Своя иконка: цвет…', 'Добавить ссылку', 'Настроить', 'Удалить блок'].every(x => mm.includes(x)) && !mm.includes('Вернуть иконку сайта'),
+  `правый клик: меню ссылки (${mm})`);
+await page.screenshot({ path: `${out}/70-menu-link.png`, clip: { x: 0, y: 0, width: 900, height: 600 } });
+await pick('Удалить');
+check(await page.locator('[gs-id="m-links"] .link').count() === 1, 'правый клик: ссылка удалена');
+await page.click('.toast-btn:has-text("Вернуть")');
+await page.waitForTimeout(300);
+check(await page.locator('[gs-id="m-links"] .link').count() === 2, 'правый клик: ссылка вернулась');
+// свои иконки: цвет и картинка (выбор цвета/файла — системные окна, ставим напрямую), видны сразу
+await page.evaluate(() => LinkIcons.set('https://github.com', { color: '#ff3366' }));
+await page.waitForTimeout(300);
+const ownColor = await page.$eval('[gs-id="m-links"] .link[data-i="0"] .link-ico', e => e.classList.contains('own-color') && getComputedStyle(e.closest('.link')).getPropertyValue('--brand').trim());
+check(ownColor === '#ff3366', `своя иконка: цвет (${ownColor})`);
+await page.evaluate(() => {
+  const c = document.createElement('canvas'); c.width = c.height = 8; const g = c.getContext('2d'); g.fillStyle = '#00c8ff'; g.fillRect(0, 0, 8, 8);
+  LinkIcons.set('https://habr.com/', { img: c.toDataURL() });
+});
+await page.waitForTimeout(300);
+check(await page.locator('[gs-id="m-links"] .link[data-i="1"] .link-ico.own-img img').count() === 1, 'своя иконка: картинка (адрес со слешем — тот же сайт)');
+mm = await menuOf('[gs-id="m-links"] .link[data-i="0"]');
+check(mm.includes('Вернуть иконку сайта'), 'своя иконка: в меню есть «Вернуть иконку сайта»');
+await page.locator('[gs-id="m-links"]').screenshot({ path: `${out}/71-own-icons.png` });
+await pick('Вернуть иконку сайта');
+check(await page.locator('[gs-id="m-links"] .link[data-i="0"] .own-color').count() === 0, 'своя иконка: вернулась иконка сайта');
+await page.reload();
+await page.waitForTimeout(1000);
+check(await page.locator('[gs-id="m-links"] .link[data-i="1"] .own-img').count() === 1, 'своя иконка: пережила перезагрузку');
+// часы: вид прямо из меню, текущий — с галочкой
+mm = await menuOf('[gs-id="m-clock"] .w-clock');
+check(await page.locator('.pop-menu .pop-item.checked:text-is("Цифровые")').count() === 1, `часы: меню с галочкой (${mm})`);
+await pick('Стрелочные');
+check(await page.locator('[gs-id="m-clock"] .is-analog').count() === 1, 'часы: стрелочные из меню');
+// заметки: вставить дату в конец
+await menuOf('[gs-id="m-notes"] textarea');
+await pick('Вставить дату и время');
+const noteText = await page.inputValue('[gs-id="m-notes"] textarea');
+check(noteText.startsWith('привет') && noteText.length > 'привет'.length + 5, `заметки: дата вставлена («${noteText}»)`);
+// дела: удалить задачу и вернуть
+mm = await menuOf('[gs-id="m-todo"] .todo-text');
+check(['Готово', 'Изменить', 'Наверх', 'Удалить'].every(x => mm.includes(x)), `дела: меню задачи (${mm})`);
+await pick('Готово');
+check(await page.locator('[gs-id="m-todo"] .todo-item.done').count() === 1, 'дела: «Готово» из меню');
+// поиск: в самом поле — меню браузера (наше не появляется), на строке вокруг — наше
+await page.click('[gs-id="m-search"] [data-search]', { button: 'right' });
+await page.waitForTimeout(150);
+check(await page.locator('.pop-menu').count() === 0, 'поиск: в поле ввода — меню браузера');
+await page.keyboard.press('Escape');
+mm = await menuOf('[gs-id="m-search"] .engine');
+check(mm.includes('Выбрать поисковик') && mm.includes('Следующий поиск — в инкогнито'), `поиск: меню строки (${mm})`);
+await page.keyboard.press('Escape');
+// «Удалить блок» из меню — с «Вернуть»
+await menuOf('[gs-id="m-clock"] .w-clock');
+await pick('Удалить блок');
+check(await page.locator('[gs-id="m-clock"]').count() === 0, 'правый клик: «Удалить блок»');
+await page.click('.toast-btn:has-text("Вернуть")');
+await page.waitForTimeout(400);
+check(await page.locator('[gs-id="m-clock"]').count() === 1, 'правый клик: блок вернулся');
+// в режиме редактирования — меню браузера, не наше
+await page.keyboard.press('e');
+await page.waitForTimeout(300);
+await page.click('[gs-id="m-clock"]', { button: 'right' });
+await page.waitForTimeout(150);
+check(await page.locator('.pop-menu').count() === 0, 'правый клик: в редакторе своего меню нет');
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+await page.evaluate(() => chrome.storage.local.set({ settings: {}, linkIcons: {} }));
+
 // ---------- поиск: префиксы, калькулятор, недавние, выбор поисковика, инкогнито ----------
 await page.evaluate(() => chrome.storage.local.set({
   settings: {},
