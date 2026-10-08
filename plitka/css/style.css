@@ -554,16 +554,6 @@ body.no-motion .clock-time .colon { animation: none; }
 .link.bm-dragging { z-index: 5; opacity: .92; transition: none !important; pointer-events: none; }
 .link.bm-dragging .link-ico { box-shadow: 0 14px 28px -10px rgba(0,0,0,.7); }
 .link.bm-into .link-ico { transform: scale(1.14); box-shadow: 0 0 0 2px var(--accent); color: var(--accent); }
-/* «+» — плитка на месте будущей закладки: пунктирная, тише остальных */
-.link.bm-add { cursor: pointer; color: var(--ink-3); }
-.link.bm-add .link-ico { background: none; border: 1.5px dashed rgba(var(--fg), .28); box-shadow: none; color: var(--ink-3); }
-.link.bm-add .link-ico svg { width: 42%; height: 42%; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; }
-.link.bm-add:hover, .link.bm-add:hover .link-ico { color: var(--ink); border-color: rgba(var(--fg), .5); }
-.bm-sorting .bm-add { opacity: .3; }
-/* в блоке «+» виден только при наведении; место за ним держится, чтобы плитки не прыгали. В окошке папки — всегда */
-.w-body .w-links > .bm-add { opacity: 0; transition: opacity .2s; }
-.w-body:hover .w-links > .bm-add, .w-body .w-links > .bm-add:focus-visible { opacity: 1; }
-.w-body:hover .bm-sorting > .bm-add { opacity: .3; }
 /* папка: внутри мини-иконки первых сайтов 2×2, как в iOS */
 /* отступы в px: проценты у padding считаются от ширины плитки, а не значка — иконки сжимались в точку */
 .link-ico.bm-folder-ico { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 3px; padding: 7px; place-items: stretch; box-sizing: border-box; }
@@ -596,6 +586,7 @@ body.no-motion .clock-time .colon { animation: none; }
 .fp-back[hidden] { display: none; }
 .fp-back svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .fp-back:hover { background: rgba(255,255,255,.16); }
+.fp-empty { grid-column: 1 / -1; padding: 18px 8px; text-align: center; font-size: 13px; color: var(--ink-3); }
 .fp-title { text-align: center; font-size: 19px; font-weight: 800; letter-spacing: -.01em; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fp-panel .fp-grid { flex: 1 1 auto; grid-template-columns: repeat(var(--cols, 3), 92px); justify-content: start; align-content: start; padding: 4px; gap: 10px 6px; overflow-y: auto; }
 .fp-panel .fp-grid .link-ico { width: 52px; height: 52px; }

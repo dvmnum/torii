@@ -58,14 +58,7 @@ const W = '.grid-stack-item[gs-id="wb"]';
 const names = () => page.evaluate(async (barId) => (await chrome.bookmarks.getChildren(barId)).map(n => n.title), barId);
 const tiles = () => page.$$eval(`${W} [data-bm] .link-title`, els => els.map(e => e.textContent));
 check((await tiles()).join() === 'Alpha,Beta,Gamma,Delta,Работа', `видна строка закладок (${await tiles()})`);
-check(await page.locator(`${W} .w-links > .link:last-child.bm-add`).count() === 1 && await page.locator(`${W} .bm-more, ${W} .bm-tree-btn`).count() === 0, '«+» — последняя плитка; ни «⋯», ни кнопки в углу');
-await page.mouse.move(5, 5);
-await page.waitForTimeout(300);
-const addOp = async () => +(await page.$eval(`${W} .bm-add`, e => getComputedStyle(e).opacity));
-const hidden = await addOp();
-await page.hover(`${W} [data-bm]:nth-child(1)`);
-await page.waitForTimeout(300);
-check(hidden === 0 && (await addOp()) === 1, `«+» виден только при наведении на блок (${hidden} → ${await addOp()})`);
+check(await page.locator(`${W} .bm-add, ${W} .bm-more, ${W} .bm-tree-btn`).count() === 0, 'ни «+», ни «⋯», ни кнопок в углу — всё по правому клику');
 const mini = await page.$$eval(`${W} [data-bm] .bm-folder-ico > span`, els => els.map(e => { const r = e.getBoundingClientRect(), c = e.firstElementChild?.getBoundingClientRect(); return [Math.round(r.width), Math.round(c?.width || 0), e.firstElementChild?.tagName, e.textContent]; }));
 check(mini.length === 2 && mini.every(([w, cw]) => w >= 8 && cw >= 6), `папка: в значке мини-иконки сайтов внутри (${JSON.stringify(mini)})`);
 await page.locator(W).screenshot({ path: `${out}/bm-0-bar.png` });
@@ -74,7 +67,7 @@ await page.locator(W).screenshot({ path: `${out}/bm-0-bar.png` });
 await page.click(`${W} [data-bm]:nth-child(1)`, { button: 'right' });
 await page.waitForTimeout(250);
 const menu = await page.$$eval('.pop-menu .pop-item', els => els.map(e => e.textContent));
-check(menu.join() === 'Открыть в новой вкладке,Изменить,Удалить', `меню закладки (${menu})`);
+check(menu.join() === 'Открыть в новой вкладке,Изменить,Удалить,Добавить закладку,Добавить папку,Все закладки' && await page.locator('.pop-menu .pop-sep').count() === 2, `меню закладки: её действия, потом «добавить» и «все закладки» (${menu})`);
 await page.screenshot({ path: `${out}/bm-1-menu.png`, clip: { x: 300, y: 260, width: 900, height: 360 } });
 await page.click('.pop-item:has-text("Изменить")');
 await page.waitForTimeout(250);
@@ -125,27 +118,32 @@ const inFolder = await page.evaluate(async (barId) => {
 }, barId);
 check(inFolder.includes('Delta') && !(await names()).includes('Delta'), `в папку: закладка внутри (${inFolder})`);
 
-// «+» → «Закладку»
-await page.click(`${W} .bm-add`);
-await page.click('.pop-item:has-text("Закладку")');
+// правый клик по Gamma → «Добавить закладку» — новая встаёт сразу за ней
+await page.click(`${W} [data-bm]:has-text("Gamma")`, { button: 'right' });
+await page.click('.pop-item:has-text("Добавить закладку")');
 await page.waitForTimeout(250);
 await page.fill('#modal-form input >> nth=0', 'example.org');
 await page.click('#modal-form button[type=submit]');
 await page.waitForTimeout(500);
-check((await names()).at(-1) === 'example.org', `добавить: новая закладка в конце (${await names()})`);
+check((await names()).join() === 'Beta,Gamma,example.org,Alpha 2,Работа', `добавить: новая закладка сразу за той, по которой кликнули (${await names()})`);
 
-// папка как в iOS: окошко с плитками, вложенная — там же со стрелкой «назад», внутри свой «+»
+// папка как в iOS: окошко с плитками, вложенная — там же со стрелкой «назад»
 await page.click(`${W} [data-bm]:has-text("Работа")`);
 await page.waitForTimeout(450);
 const fp = await page.evaluate(() => {
   const g = document.querySelector('.fp-overlay.open .fp-grid');
   return g && { title: document.querySelector('.fp-title').textContent, tiles: [...g.querySelectorAll('[data-bm] .link-title')].map(e => e.textContent),
-    cols: getComputedStyle(g).gridTemplateColumns.split(' ').length, add: !!g.querySelector('.bm-add'), back: !document.querySelector('.fp-back').hidden };
+    cols: getComputedStyle(g).gridTemplateColumns.split(' ').length, back: !document.querySelector('.fp-back').hidden };
 });
-check(fp && fp.title === 'Работа' && fp.tiles.join() === 'Docs,Mail,Архив,Delta' && fp.cols === 3 && fp.add && !fp.back, `папка: окошко с плитками (${JSON.stringify(fp)})`);
+check(fp && fp.title === 'Работа' && fp.tiles.join() === 'Docs,Mail,Архив,Delta' && fp.cols === 3 && !fp.back, `папка: окошко с плитками (${JSON.stringify(fp)})`);
 await page.screenshot({ path: `${out}/bm-4-folder.png` });
-const addLook = await page.$eval('.fp-grid .bm-add .link-ico', e => { const s = getComputedStyle(e); return `${s.borderTopStyle} ${s.borderTopWidth}`; });
-check(/dashed/.test(addLook), `папка: «+» внутри — пунктирная плитка (${addLook})`);
+const gb = await page.locator('.fp-grid').boundingBox();
+await page.mouse.click(gb.x + gb.width - 8, gb.y + gb.height - 8, { button: 'right' });
+await page.waitForTimeout(200);
+const fpMenu = await page.$$eval('.pop-menu .pop-item', els => els.map(e => e.textContent));
+check(fpMenu.join() === 'Добавить закладку,Добавить папку', `папка: правый клик по пустому месту — добавить внутрь (${fpMenu})`);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(150);
 await page.click('.fp-grid [data-bm]:has-text("Архив")');
 await page.waitForTimeout(300);
 check((await page.textContent('.fp-title')) === 'Архив' && await page.locator('.fp-back:visible').count() === 1, 'папка: вложенная открылась там же, есть «назад»');
@@ -167,15 +165,12 @@ await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
 check(await page.locator('.fp-overlay').count() === 0, 'папка: Esc закрывает окошко');
 
-// все закладки деревом: правый клик по пустому месту блока, и из меню «+»
+// все закладки деревом — из меню по правому клику (здесь — по пустому месту блока)
 const wb = await page.locator(`${W} .w-links`).boundingBox();
 await page.mouse.click(wb.x + 6, wb.y + 6, { button: 'right' });
 await page.waitForTimeout(200);
 const emptyMenu = await page.$$eval('.pop-menu .pop-item', els => els.map(e => e.textContent));
 check(emptyMenu.join() === 'Добавить закладку,Добавить папку,Все закладки', `пустое место: своё меню (${emptyMenu})`);
-await page.keyboard.press('Escape');
-await page.hover(W);
-await page.click(`${W} .bm-add`);
 await page.click('.pop-item:has-text("Все закладки")');
 await page.waitForTimeout(350);
 const tree = await page.$$eval('.bm-tree .bm-title', els => els.map(e => e.textContent));

@@ -83,7 +83,7 @@ const Bookmarks = {
       onSubmit: (v) => chrome.bookmarks.update(n.id, n.url ? { title: v.title.trim(), url: normalizeUrl(v.url) } : { title: v.title.trim() }),
     });
   },
-  add(ctx, folder, parentId = Bookmarks.barId) {
+  add(ctx, folder, parentId = Bookmarks.barId, index) {
     ctx.modal({
       title: folder ? 'Новая папка' : 'Новая закладка',
       fields: folder
@@ -91,9 +91,9 @@ const Bookmarks = {
         : [{ key: 'url', label: 'Адрес', type: 'text', placeholder: 'example.com', required: true }, { key: 'title', label: 'Название', type: 'text', placeholder: 'необязательно' }],
       submit: 'Добавить',
       onSubmit: (v) => {
-        if (folder) return chrome.bookmarks.create({ parentId, title: v.title.trim() });
+        if (folder) return chrome.bookmarks.create({ parentId, index, title: v.title.trim() });
         const url = normalizeUrl(v.url);
-        chrome.bookmarks.create({ parentId, url, title: v.title.trim() || hostOf(url) });
+        chrome.bookmarks.create({ parentId, index, url, title: v.title.trim() || hostOf(url) });
       },
     });
   },
@@ -119,17 +119,23 @@ const Bookmarks = {
   },
   // новый порядок внутри папки. Chrome при переносе вниз в той же папке считает индекс «до удаления» — поэтому +1; Firefox — итоговое место
   moveTo: (id, parentId, from, to) => chrome.bookmarks.move(id, { parentId, index: to > from && !IS_FIREFOX ? to + 1 : to }),
-  // меню для закладки или папки (правый клик)
-  menu(n, x, y, ctx, newTab) {
+  // пункты «добавить» — в папку parentId (на место index, если задан); extra — ещё пункты (у виджета — «Все закладки»)
+  addItems: (ctx, parentId, index, extra = []) => [
+    ['Добавить закладку', () => Bookmarks.add(ctx, false, parentId, index)],
+    ['Добавить папку', () => Bookmarks.add(ctx, true, parentId, index)],
+    ...extra,
+  ],
+  // меню по правому клику на плитке: её действия, а под чертой — добавить рядом с ней
+  menu(n, x, y, ctx, newTab, extra) {
     const open = () => chrome.tabs?.create ? chrome.tabs.create({ url: n.url }) : window.open(n.url, '_blank', 'noopener');
-    popMenu(x, y, n.url ? [
+    popMenu(x, y, [...(n.url ? [
       newTab ? ['Открыть здесь', () => { location.href = n.url; }] : ['Открыть в новой вкладке', open],
       ['Изменить', () => Bookmarks.edit(n, ctx)],
       ['Удалить', () => Bookmarks.remove(n, ctx), 'danger'],
     ] : [
       ['Переименовать', () => Bookmarks.edit(n, ctx)],
       ['Удалить папку', () => Bookmarks.remove(n, ctx), 'danger'],
-    ]);
+    ]), null, ...Bookmarks.addItems(ctx, n.parentId, n.index + 1, extra)]);
   },
 };
 
@@ -248,7 +254,6 @@ function bmSortable(wrap, { list = () => false, onStart, onMove, onInto }) {
 }
 const FOLDER_SVG = '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor" fill-opacity=".2"/><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 
-const PLUS_SVG = '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>';
 const BACK_SVG = '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>';
 const CHEV_SVG = '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>';
 // что-то из закладок открыто поверх (папка, дерево, меню, модалка) — Esc и клик мимо сначала для них
@@ -277,13 +282,13 @@ function bmTile(n, view, { onMenu, onFolder }) {
   });
   return el;
 }
-// «+» — плитка на месте будущей закладки; extra — ещё пункты меню (у виджета — «Все закладки»)
-function bmAddTile(ctx, parentId, extra = []) {
-  const b = h('button', {
-    type: 'button', class: 'link bm-add', title: 'Добавить закладку или папку',
-    onclick: () => { const r = b.getBoundingClientRect(); popMenu(r.left, r.bottom + 4, [['Закладку', () => Bookmarks.add(ctx, false, parentId())], ['Папку', () => Bookmarks.add(ctx, true, parentId())], ...extra]); },
-  }, h('span', { class: 'link-ico', html: PLUS_SVG }), h('span', { class: 'link-title' }, 'Добавить'));
-  return b;
+// правый клик по пустому месту сетки — добавить в эту папку (в конец)
+function bmEmptyMenu(grid, ctx, parentId, extra = () => []) {
+  grid.addEventListener('contextmenu', (e) => {
+    if (e.target.closest('[data-bm]') || document.body.classList.contains('editing')) return;
+    e.preventDefault();
+    popMenu(e.clientX, e.clientY, Bookmarks.addItems(ctx, parentId(), undefined, extra(e.clientX, e.clientY)));
+  });
 }
 // пересчитать по событиям закладок (пачкой); → отписка
 function onBookmarksChange(fn) {
@@ -318,10 +323,11 @@ function openFolderPop(anchor, folderId, { view, ctx, onMenu }) {
     title.textContent = node.title || 'Папка';
     back.hidden = stack.length < 2;
     const kids = node.children || [];
-    const n = kids.length + 1; // + «Добавить»
-    grid.style.setProperty('--cols', n <= 6 ? 3 : n <= 12 ? 4 : 5);
-    grid.replaceChildren(...kids.map(k => bmTile(k, view, { onMenu, onFolder: (f) => { stack.push(f.id); paint(); } })), bmAddTile(ctx, cur));
+    grid.style.setProperty('--cols', kids.length <= 6 ? 3 : kids.length <= 12 ? 4 : 5);
+    grid.replaceChildren(...kids.map(k => bmTile(k, view, { onMenu, onFolder: (f) => { stack.push(f.id); paint(); } })));
+    if (!kids.length) grid.append(h('div', { class: 'fp-empty' }, 'Папка пустая — правый клик, чтобы добавить'));
   }
+  bmEmptyMenu(grid, ctx, cur);
   const off = onBookmarksChange(paint);
   const onKey = (e) => {
     if (e.key !== 'Escape' || bmUiOpen()) return;
@@ -603,20 +609,16 @@ Object.assign(Widgets, {
     render(body, data, ctx) {
       let alive = true, off = null;
       const wrap = h('div', { class: `w-links style-${data.style} icons-${data.icons} gap-${data.gap || 'auto'}` });
-      const onMenu = (n, x, y) => Bookmarks.menu(n, x, y, ctx, data.newTab);
+      // правый клик (по плитке или пустому месту): действия, «Добавить закладку / папку» и всё дерево закладок
+      const treeItem = (x, y) => [null, ['Все закладки', () => openBookmarkTree({ x, y }, { ctx, newTab: data.newTab, onMenu })]];
+      const onMenu = (n, x, y) => Bookmarks.menu(n, x, y, ctx, data.newTab, treeItem(x, y));
       const onFolder = (n, el) => openFolderPop(el, n.id, { view: data, ctx, onMenu });
-      // всё дерево — из меню «+» и правым кликом по пустому месту блока
-      const showTree = (x, y) => openBookmarkTree({ x, y }, { ctx, newTab: data.newTab, onMenu });
       const paint = () => Bookmarks.bar().then((nodes) => {
         if (!alive) return;
-        const add = bmAddTile(ctx, () => Bookmarks.barId, [null, ['Все закладки', () => { const r = add.getBoundingClientRect(); showTree(r.right, r.bottom + 4); }]]);
-        wrap.replaceChildren(...nodes.map(n => bmTile(n, data, { onMenu, onFolder })), add);
+        wrap.replaceChildren(...nodes.map(n => bmTile(n, data, { onMenu, onFolder })));
+        if (!nodes.length) wrap.append(h('div', { class: 'w-muted' }, 'В строке закладок пусто — правый клик, чтобы добавить'));
       });
-      wrap.addEventListener('contextmenu', (e) => {
-        if (e.target.closest('[data-bm], .bm-add') || document.body.classList.contains('editing')) return;
-        e.preventDefault();
-        popMenu(e.clientX, e.clientY, [['Добавить закладку', () => Bookmarks.add(ctx, false)], ['Добавить папку', () => Bookmarks.add(ctx, true)], null, ['Все закладки', () => showTree(e.clientX, e.clientY)]]);
-      });
+      bmEmptyMenu(wrap, ctx, () => Bookmarks.barId, treeItem);
       bmSortable(wrap, {
         list: () => data.style === 'list',
         onStart: () => { closeFolderPop?.(); closeBmTree?.(); },
