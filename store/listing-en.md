@@ -17,10 +17,10 @@ FREE-FORM LAYOUT
 What sets Torii apart from other new tab pages: widgets aren't stuck in a single centered column. Drag them anywhere and resize them from any corner — the grid keeps everything neatly aligned. Layouts for wide monitors and laptops are remembered separately.
 
 WIDGETS
-• Clock — digital or analog, with a greeting and the date
+• Clock — digital, duo or analog, with a greeting and the date
 • Search — uses your browser's default search engine (or another one you pick), quick prefixes for a one-off search elsewhere, a calculator right in the search bar, Shift+Enter to search in incognito
-• Links and Top sites — as tiles or a list, with site icons
-• Bookmarks bar — your bookmarks right on the new tab
+• Links and Top sites — as tiles or a list, with site icons or your own picture or color
+• Bookmarks bar — your bookmarks right on the new tab: edit, drag to reorder, folders open like on iOS
 • Weather — now, details, hourly or for the week
 • Notes, to-do list, weekly habit tracker
 • Pomodoro timer, countdown to an event
@@ -32,6 +32,9 @@ Smooth animated gradients with 14 presets and a color editor. Or your own image 
 GLASS
 Frosted-glass widgets that adapt their brightness to the background so text stays readable. In Chrome there's also "liquid glass" with refraction at the edges. Each widget can have its own color, font, shadow and backing.
 
+RIGHT-CLICK ANYTHING
+Every widget has its own menu: edit a link, restore a closed tab, change the city, set a picture as the background. Right-click the empty space to add a widget or switch layouts.
+
 SAVED LAYOUTS
 Keep several versions of your new tab — "Work", "Home", "Study" — and switch with Alt+1…9. Each layout has its own widgets, background and style.
 
@@ -40,7 +43,7 @@ FAST AND PRIVATE
 • No ads, no analytics, no data collection — everything stays in your browser
 • Backup to a file to move everything to another computer
 • Access to bookmarks, top sites and recent tabs is requested only when you add such a widget
-• English and Russian interface
+• Interface in English, Russian, Spanish, German, French and Portuguese
 
 ---
 

@@ -1,0 +1,10 @@
+{
+  "appName": {
+    "message": "Torii — Nova aba",
+    "description": "Extension name in the store and the extensions list (up to 75 characters)"
+  },
+  "appDesc": {
+    "message": "Uma nova aba com layout livre: mova e redimensione widgets onde quiser. Fundos animados, vidro e layouts salvos.",
+    "description": "Short description in the store (up to 132 characters)"
+  }
+}

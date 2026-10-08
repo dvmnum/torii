@@ -1608,6 +1608,36 @@ await page.screenshot({ path: `${out}/61-english.png` });
 await ptab('more');
 check(await page.locator('.panel a.donate-link[href="https://web.tribute.tg/d/RJo"]').count() === 1 && await page.locator('.panel a.donate-link').count() === 1, 'english: «Support» ведёт на Tribute');
 await page.click('.panel [data-close]');
+
+// немецкий (и так же испанский, французский, португальский): словарь грузится, приветствие, поиск, даты; во всех вкладках панели
+// ни русского, ни оставшегося английского (строки, у которых в словаре есть перевод)
+await page.evaluate(() => chrome.storage.local.set({ settings: { lang: 'de', name: 'Vova' } }));
+await page.reload();
+await page.waitForTimeout(1500);
+const de = await page.evaluate(() => ({ greet: document.querySelector('.greet')?.textContent, ph: document.querySelector('[data-search]')?.placeholder, lang: document.documentElement.lang, monday: I18N.monday(), loc: I18N.locale() }));
+check(de.lang === 'de' && /^(Guten Morgen|Guten Tag|Guten Abend|Gute Nacht), Vova$/.test(de.greet) && de.ph === 'Suchen' && de.monday && de.loc === 'de-DE', `deutsch: Begrüßung, Suche, Woche ab Montag (${JSON.stringify(de)})`);
+await page.click('#btn-settings');
+await page.waitForTimeout(400);
+const leftDe = [];
+for (const t of ['bg', 'fx', 'blocks', 'tab', 'more']) {
+  await ptab(t);
+  leftDe.push(...await page.evaluate(() => {
+    const d = I18N.EXTRA.de.dict, out = [];
+    const w = document.createTreeWalker(document.getElementById('settings'), NodeFilter.SHOW_TEXT);
+    for (let n; (n = w.nextNode());) {
+      const v = n.nodeValue.trim();
+      if (!v || n.parentElement.closest('[translate="no"]')) continue;
+      if (/[А-Яа-яЁё]/.test(v) && v !== 'Русский') out.push('ru: ' + v);
+      else if (d[v] && d[v] !== v) out.push('en: ' + v);
+    }
+    return out;
+  }));
+}
+check(leftDe.length === 0, `deutsch: в панели всё переведено${leftDe.length ? ' — ' + [...new Set(leftDe)].slice(0, 6).join(' | ') : ''}`);
+await ptab('more');
+await page.screenshot({ path: `${out}/62-deutsch.png` });
+check(await page.locator('.panel .dd-btn:has-text("Deutsch")').count() === 1, 'deutsch: в выборе языка — Deutsch');
+await page.click('.panel [data-close]');
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
 const real = errors.filter(e => !/Failed to load resource/i.test(e));

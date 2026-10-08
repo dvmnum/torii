@@ -11,7 +11,7 @@ const Tab = {
 
 const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 // первый день недели: по-русски понедельник (1), по-английски воскресенье (0)
-const weekStart = () => (I18N.lang() === 'ru' ? 1 : 0);
+const weekStart = () => (I18N.monday() ? 1 : 0); // с понедельника — ru, es, de, fr; с воскресенья — en, pt-BR
 // семь дней текущей календарной недели
 const weekDays = (from = new Date()) => {
   const d0 = new Date(from);

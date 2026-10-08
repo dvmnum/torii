@@ -16,7 +16,7 @@
 - **Live backgrounds** — animated WebGL gradients, 14 presets, your own image with effects (frosted glass, reeded, halftone, duotone), slideshow.
 - **Glass** — frosted widgets that adapt to the background; "liquid glass" with refraction in Chromium.
 - **Saved layouts** — several versions of your new tab, each with its own widgets and style, switched with Alt+1…9.
-- **Fast and private** — opens in ~80 ms, no ads, no analytics, everything stays in the browser. English and Russian UI.
+- **Fast and private** — opens in ~80 ms, no ads, no analytics, everything stays in the browser. Interface in English, Russian, Spanish, German, French and Portuguese.
 
 ## Install
 

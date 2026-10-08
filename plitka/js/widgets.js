@@ -718,16 +718,17 @@ const Widgets = {
   weather: {
     title: 'Погода',
     size: { w: 6, h: 2 }, min: { w: 3, h: 1 },
-    defaults: { glass: true, city: 'Москва', view: 'now', side: 'left' },
+    defaults: { glass: true, city: '', view: 'now', side: 'left' }, // пустой город — по языку (WX_CITY)
     // иконка и градусы влезают и в 2×1; «Подробно» и «По часам» без высоты теряют смысл
     minFor: (d) => d.view === 'mini' ? { w: 2, h: 1 } : ['details', 'hours'].includes(d.view) ? { w: 4, h: 2 } : null,
     settings: [
-      { key: 'city', label: 'Город', type: 'text' },
+      { key: 'city', label: 'Город', type: 'text', get placeholder() { return WX_CITY(); } }, // город по языку — когда поле пустое
       { key: 'view', label: 'Вид', type: 'select', options: [['now', 'Сейчас'], ['mini', 'Мини'], ['details', 'Подробно'], ['hours', 'По часам'], ['week', 'Неделя']] },
       { key: 'side', label: 'Выравнивание', type: 'select', options: [['left', 'Слева'], ['center', 'По центру'], ['right', 'Справа']] },
       GLASS_SETTING,
     ],
     render(body, data, ctx) {
+      const city = (data.city || '').trim() || WX_CITY();
       // mini — только иконка и градусы; side — куда прижать содержимое
       const box = h('div', { class: `w-weather is-loading side-${data.side || 'left'}` + (data.view === 'mini' ? ' is-mini' : '') }, h('div', { class: 'w-muted' }, 'Смотрю в окно…'));
       body.append(box);
@@ -823,7 +824,7 @@ const Widgets = {
       };
       function load(force) {
         clearTimeout(retryT);
-        loadWeather(data.city, force).then(({ w, stale, at }) => {
+        loadWeather(city, force).then(({ w, stale, at }) => {
           if (!alive) return;
           // без сети: моложе 3 ч — «нет сети», старше — приглушено и «5 ч назад · нет сети»
           const old = stale && Date.now() - at >= WX_MEMORY;
@@ -831,7 +832,7 @@ const Widgets = {
           if (stale) retryLater(); else attempt = 0;
         }).catch((e) => {
           if (!alive) return;
-          if (e.code === 'notfound') return fail(`Не знаю город «${data.city}»`);
+          if (e.code === 'notfound') return fail(`Не знаю город «${city}»`);
           console.info('[weather] нет сети, повторю позже:', e.message);
           fail('Нет связи с погодой');
           retryLater();
@@ -842,7 +843,7 @@ const Widgets = {
       ctx.menu(() => [
         ['Обновить сейчас', () => { box.classList.add('is-updating'); load(true); }],
         ['Сменить город', () => ctx.modal({
-          title: 'Город', fields: [{ key: 'city', label: 'Город', type: 'text', value: data.city, required: true }], submit: 'Готово',
+          title: 'Город', fields: [{ key: 'city', label: 'Город', type: 'text', value: city, required: true }], submit: 'Готово',
           onSubmit: (v) => { if (v.city.trim()) { data.city = v.city.trim(); ctx.save(); ctx.rerender(); } },
         })],
         null,
@@ -850,7 +851,7 @@ const Widgets = {
       ]);
       window.addEventListener('online', onOnline);
       // сначала — что есть в памяти, без «Смотрю в окно…»; потом load() решит, нужен ли запрос
-      weatherCache(data.city).then((c) => {
+      weatherCache(city).then((c) => {
         if (!alive) return;
         const age = c ? Date.now() - c.at : Infinity;
         // старше 3 ч — переливается, как скелетон, а третьей строкой «5 ч назад», пока не придёт свежая
@@ -861,6 +862,9 @@ const Widgets = {
     },
   },
 };
+
+// город по умолчанию — по языку интерфейса (у блока пустой city); function — зовётся из Widgets до этой строки
+function WX_CITY() { return { ru: 'Москва', en: 'London', es: 'Madrid', de: 'Berlin', fr: 'Paris', pt: 'São Paulo' }[I18N.lang()] || 'London'; }
 
 // погода, которую смотрели не раньше чем 3 часа назад, показывается из памяти как обычная;
 // старше (до суток) — приглушённой с пометкой «N ч назад», пока не придёт свежая
@@ -880,7 +884,7 @@ async function loadWeather(city, force = false) {
     return r.json();
   });
   try {
-    const geo = await get(`https://geocoding-api.open-meteo.com/v1/search?count=1&language=ru&name=${encodeURIComponent(city)}`);
+    const geo = await get(`https://geocoding-api.open-meteo.com/v1/search?count=1&language=${I18N.lang()}&name=${encodeURIComponent(city)}`);
     const p = geo.results && geo.results[0];
     if (!p) throw Object.assign(new Error('city not found'), { code: 'notfound' });
     const f = await get(`https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +

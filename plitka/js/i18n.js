@@ -1,4 +1,5 @@
-// Языки: русский (исходный, строки прямо в коде) и английский — словарь ниже.
+// Языки: русский (исходный, строки прямо в коде), английский — словарь ниже; испанский, немецкий, французский,
+// португальский — словари «английский → язык» в js/lang/<код>.js (цепочка через английский).
 // Перевод — на лету: MutationObserver переводит текстовые узлы и атрибуты (placeholder, title, aria-label)
 // по точному совпадению или шаблону. Так не нужно оборачивать каждую строку в коде; новые строки ловит
 // `node tests/i18n-scan.mjs` (печатает русские строки без перевода).
@@ -182,16 +183,41 @@ const I18N = (() => {
     [/^(Сверху|По центру|Снизу) · (слева|по центру|справа)$/, (m) => `${tr(m[1])} · ${tr(m[2])}`],
   ];
   // строки, которые переводить не нужно (служебные, логи)
-  const SKIP = [/^(Русский|English)$/, /^\[/, /в фоне, вкладка/, /^(осталась|осталось|события)$/, /^У$|^у$/, /replace/, /^<svg/, /^(Вода 2 л|Спорт|Чтение|Хабр|Кинопоиск)$/];
+  const SKIP = [/^(Русский|English|Español|Deutsch|Français|Português)$/, /^\[/, /в фоне, вкладка/, /^(осталась|осталось|события)$/, /^У$|^у$/, /replace/, /^<svg/, /^(Вода 2 л|Спорт|Чтение|Хабр|Кинопоиск)$/];
+
+  // Языки интерфейса. Кроме русского и английского — словари «английский → язык» в js/lang/<код>.js:
+  // перевод идёт цепочкой русский → английский (EN/PATTERNS выше) → язык (dict/patterns файла). Грузится только выбранный.
+  // monday — неделя с понедельника; locale — для дат и чисел.
+  const LANGS = {
+    ru: { name: 'Русский', locale: 'ru-RU', monday: true },
+    en: { name: 'English', locale: 'en-US', monday: false },
+    es: { name: 'Español', locale: 'es-ES', monday: true },
+    de: { name: 'Deutsch', locale: 'de-DE', monday: true },
+    fr: { name: 'Français', locale: 'fr-FR', monday: true },
+    pt: { name: 'Português', locale: 'pt-BR', monday: false },
+  };
+  const EXTRA = {}; // код → { dict, patterns } — заполняют файлы js/lang/*.js через I18N.add()
 
   let lang = 'ru';
+  function toEn(t) {
+    let r = EN[t];
+    if (r == null) for (const [re, f] of PATTERNS) { const m = t.match(re); if (m) { r = f(m); break; } }
+    return r;
+  }
   function tr(s) {
     if (lang === 'ru' || typeof s !== 'string') return s;
     const t = s.trim();
     if (!t) return s;
-    let r = EN[t];
-    if (r == null) for (const [re, f] of PATTERNS) { const m = t.match(re); if (m) { r = f(m); break; } }
-    return r == null ? s : s.replace(t, r);
+    let r = toEn(t);
+    if (r == null) return s;
+    const x = EXTRA[lang];
+    if (x) {
+      const e = r.trim();
+      let y = x.dict[e];
+      if (y == null) for (const [re, f] of x.patterns) { const m = e.match(re); if (m) { y = f(m); break; } }
+      if (y != null) r = r.replace(e, y);
+    }
+    return s.replace(t, r);
   }
 
   const ATTRS = ['placeholder', 'title', 'aria-label', 'data-tip'];
@@ -210,9 +236,21 @@ const I18N = (() => {
     for (let c = root.firstChild; c; c = c.nextSibling) walk(c);
   }
 
-  function setLang(l) {
-    const pick = l === 'en' || l === 'ru' ? l : (navigator.language || 'ru').slice(0, 2);
-    lang = ['ru', 'uk', 'be', 'kk'].includes(pick) ? 'ru' : 'en';
+  // auto — по языку браузера: ru/uk/be/kk → русский, есть словарь → он, иначе английский.
+  // Async: словарь языка (js/lang/<код>.js) подгружается тегом script до первой отрисовки; не загрузился — английский
+  async function setLang(l) {
+    const pick = LANGS[l] ? l : (navigator.language || 'ru').slice(0, 2).toLowerCase();
+    lang = ['ru', 'uk', 'be', 'kk'].includes(pick) ? 'ru' : LANGS[pick] ? pick : 'en';
+    if (!['ru', 'en'].includes(lang) && !EXTRA[lang]) {
+      await new Promise((ok) => {
+        const sc = document.createElement('script');
+        sc.src = `js/lang/${lang}.js`;
+        sc.onload = ok;
+        sc.onerror = () => { console.warn('[plitka] нет словаря', lang); ok(); };
+        document.head.append(sc);
+      });
+      if (!EXTRA[lang]) lang = 'en';
+    }
     document.documentElement.lang = lang;
     if (lang === 'ru') return;
     walk(document.body);
@@ -225,5 +263,9 @@ const I18N = (() => {
     }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ATTRS });
   }
 
-  return { t: tr, setLang, lang: () => lang, locale: () => (lang === 'en' ? 'en-US' : 'ru-RU'), EN, PATTERNS, SKIP };
+  return {
+    t: tr, setLang, lang: () => lang, locale: () => LANGS[lang].locale, monday: () => LANGS[lang].monday,
+    LANGS, EN, PATTERNS, SKIP, EXTRA,
+    add: (code, data) => { EXTRA[code] = { dict: data.dict || {}, patterns: data.patterns || [] }; },
+  };
 })();

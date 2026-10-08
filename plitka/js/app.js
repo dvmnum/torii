@@ -71,7 +71,7 @@
     tab: { title: 'Torii', icon: 'logo', emoji: '🌙', letter: 'T', image: null }, // по умолчанию вкладка — как приложение: название и иконка Torii
     text: { font: 'manrope', shadow: 'none' },
     slides: { on: false, items: [], every: 'tab', order: 'seq', idx: -1, at: 0 },
-    lang: 'auto', // язык интерфейса: auto (как в браузере) | ru | en
+    lang: 'auto', // язык интерфейса: auto (как в браузере) или код из I18N.LANGS (ru, en, es, de, fr, pt)
     greetings: [], // свои приветствия: [{ text, when: any|morning|day|evening|night }], до 5
   };
 
@@ -116,7 +116,7 @@
   persistSettings.img = boot.bgImage;
   if (!settings.bgImage && typeof boot.bgImage === 'string' && boot.bgImage.startsWith('data:image/')) settings.bgImage = boot.bgImage;
   if (boot.settings?.bgImage) persistSettings(); // старый формат (картинка внутри settings) — разносим по ключам
-  I18N.setLang(settings.lang); // до отрисовки: дальше переводчик ловит всё, что появляется в DOM
+  await I18N.setLang(settings.lang); // до отрисовки (словарь языка подгружается): дальше переводчик ловит всё, что появляется в DOM
   // layout — общие для всех экранов виджеты { id, type, data } + x/y/w/h текущего диапазона;
   // layouts — { md?, lg? }: позиции { [id]: { x, y, w, h } }
   let { widgets: layout, layouts } = await loadState();
@@ -165,7 +165,7 @@
       else if (k === 'tab') s.tab = cleanTab(v);
       else if (k === 'text') s.text = cleanText(v);
       else if (k === 'slides') s.slides = cleanSlides(v);
-      else if (k === 'lang') s.lang = ['auto', 'ru', 'en'].includes(v) ? v : 'auto';
+      else if (k === 'lang') s.lang = v === 'auto' || I18N.LANGS[v] ? v : 'auto';
       else if (k === 'greetings') s.greetings = Array.isArray(v) ? v.filter(g => g && typeof g.text === 'string').slice(0, 5).map(g => ({ text: g.text.slice(0, 80), when: DAY_PARTS.some(([p]) => p === g.when) ? g.when : 'any' })) : [];
       else if (typeof v === typeof DEFAULT_SETTINGS[k] && (typeof v !== 'number' || Number.isFinite(v))) s[k] = v;
     }
@@ -1606,7 +1606,7 @@
     h('span', {}, h('b', {}, 'Torii'), ' ', chrome.runtime?.getManifest?.().version || ''),
     // справа — сайт и код, мелко
     h('span', { class: 'pf-links' },
-      h('a', { href: SITE_URL + (I18N.lang() === 'en' ? 'en/' : ''), target: '_blank', rel: 'noopener' }, 'Сайт'),
+      h('a', { href: SITE_URL + (I18N.lang() === 'ru' ? '' : 'en/'), target: '_blank', rel: 'noopener' }, 'Сайт'),
       h('a', { href: REPO_URL, target: '_blank', rel: 'noopener' }, 'GitHub'))));
 
   function renderSettings() {
@@ -1687,7 +1687,9 @@
               h('button', { type: 'button', class: 'pill small', onclick: exportAll }, h('span', { class: 'btn-ico', html: ICO.down }), 'Сохранить файл'),
               h('button', { type: 'button', class: 'pill small', onclick: () => pickFile('application/json', importAll) }, h('span', { class: 'btn-ico', html: ICO.up }), 'Загрузить'))),
           section('Язык',
-            segmented([['auto', 'Авто'], ['ru', 'Русский'], ['en', 'English']], settings.lang, (v) => { settings.lang = v; persistSettings().then(() => location.reload()); }).el),
+            // названия языков — на самих языках (переводчик их не трогает: в них нет русского)
+            dropdown([['auto', 'Авто'], ...Object.entries(I18N.LANGS).map(([k, l]) => [k, l.name])], settings.lang,
+              (v) => { settings.lang = v; persistSettings().then(() => location.reload()); }).el),
           section('Клавиши',
             h('dl', { class: 'hotkeys' },
               ...[[kbd('E'), 'Изменить раскладку'], [kbd('/'), 'Перейти к поиску'], [kbd('Esc'), 'Закрыть панель, выйти из редактора'],

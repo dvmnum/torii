@@ -1,0 +1,10 @@
+{
+  "appName": {
+    "message": "Torii — Neuer Tab",
+    "description": "Extension name in the store and the extensions list (up to 75 characters)"
+  },
+  "appDesc": {
+    "message": "Ein neuer Tab mit freiem Layout: Widgets beliebig verschieben und skalieren. Lebendige Hintergründe, Glas, gespeicherte Layouts.",
+    "description": "Short description in the store (up to 132 characters)"
+  }
+}

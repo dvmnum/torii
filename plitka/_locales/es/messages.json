@@ -1,0 +1,10 @@
+{
+  "appName": {
+    "message": "Torii — Nueva pestaña",
+    "description": "Extension name in the store and the extensions list (up to 75 characters)"
+  },
+  "appDesc": {
+    "message": "Una nueva pestaña con diseño libre: mueve y redimensiona widgets donde quieras. Fondos animados, vidrio, diseños guardados.",
+    "description": "Short description in the store (up to 132 characters)"
+  }
+}

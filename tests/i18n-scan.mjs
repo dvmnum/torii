@@ -25,4 +25,18 @@ const all = [...found].sort();
 const missing = all.filter(s => !(s in EN) && !PATTERNS.some(([re]) => re.test(s)) && !ctx.I18N.SKIP.some(re => re.test(s)));
 for (const s of process.argv.includes('--all') ? all : missing) console.log(JSON.stringify(s));
 console.error(`всего: ${all.length}, без перевода: ${missing.length}`);
-process.exitCode = missing.length ? 1 : 0;
+
+// словари остальных языков (js/lang/*.js): у каждой английской строки из EN должен быть перевод.
+// Разрешены без перевода: подстановки {…}, единицы и то, что на всех языках одинаково (URL, бренды)
+const SAME = new Set(['{time}', '{date}', '{day}', ' m/s', 'm/s']);
+let langMissing = 0;
+for (const f of fs.readdirSync('plitka/js/lang').filter(f => f.endsWith('.js'))) {
+  const code = f.replace('.js', '');
+  vm.runInContext(fs.readFileSync('plitka/js/lang/' + f, 'utf8'), Object.assign(ctx, {}));
+  const x = ctx.I18N.EXTRA[code];
+  const miss = [...new Set(Object.values(EN))].filter(e => !SAME.has(e) && !(e.trim() in x.dict) && !x.patterns.some(([re]) => re.test(e.trim())));
+  for (const s of miss) console.log(`${code}: ${JSON.stringify(s)}`);
+  console.error(`${code}: без перевода ${miss.length}`);
+  langMissing += miss.length;
+}
+process.exitCode = missing.length || langMissing ? 1 : 0;

@@ -24,6 +24,8 @@ await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ json: {
 await ctx.route('https://www.cbr-xml-daily.ru/**', r => r.fulfill({ json: { Date: new Date().toISOString(), Valute: { USD: { Nominal: 1, Value: 81.72, Previous: 81.4 }, EUR: { Nominal: 1, Value: 95.1, Previous: 95.6 }, CNY: { Nominal: 1, Value: 11.38, Previous: 11.31 } } } }));
 
 const page = await ctx.newPage();
+// снимки — днём, в обычный будний день: «Доброе утро», 10:24, а не то время, когда их пересобирали
+await page.clock.setFixedTime(new Date('2026-10-14T10:24:00'));
 page.on('pageerror', e => console.log('[pageerror]', e.message));
 await page.goto('chrome://extensions');
 const id = await page.evaluate(() => new Promise(r => chrome.management.getAll(l => r(l.find(x => x.name.startsWith('Torii'))?.id))));

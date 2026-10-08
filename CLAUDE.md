@@ -29,7 +29,8 @@ plitka/
   js/widget-art.js     WIDGET_ART — SVG-макеты виджетов для меню «+ Виджет»; грузится лениво (loadScript) при первом открытии меню
   js/widgets-more.js   вторая партия виджетов: дела, помодоро, частые сайты, недавно закрытые, курсы ЦБ,
                        отсчёт, привычки, цитата, слово дня, картинка — дописывает Widgets через Object.assign
-  js/i18n.js           I18N: ru/en — словарь EN + шаблоны, перевод на лету MutationObserver-ом (t, setLang, locale)
+  js/i18n.js           I18N: ru/en — словарь EN + шаблоны, перевод на лету MutationObserver-ом (t, setLang, locale, monday, LANGS)
+  js/lang/<код>.js     словари остальных языков (es, de, fr, pt): «английский → язык» + шаблоны; грузится только выбранный (I18N.add)
   js/liquid.js         Liquid: «жидкое стекло» — карта преломления под размер блока, SVG-фильтр в backdrop-filter (Chrome)
   js/mesh.js           Mesh: живой фон на WebGL1 (create/random/cssPreview/lumAt), без библиотек
   js/app.js            IIFE: настройки, тема, сетка, редактор, модалки, панель, тосты, хоткеи
@@ -41,11 +42,11 @@ tests/firefox.mjs      смоук в движке Firefox (npm run test:firefox)
 scripts/build.mjs      сборка под магазины (npm run build) → dist/torii-<версия>-chrome.zip и -firefox.zip (+ распакованные копии)
 scripts/store-shots.mjs скриншоты для магазинов (npm run store) → store/screenshots/{ru,en}/*.png 1280×800; нужна сеть (иконки сайтов)
 scripts/store-promo.mjs промо-картинки (тоже npm run store, или отдельно): плитка 440×280 и большая 1400×560 на тёмном фоне, 24-битный PNG без альфы
-store/                 карточка магазина: listing-ru.md / listing-en.md (описание, обоснования разрешений, поля), privacy-policy.md
+store/                 карточка магазина: listing-ru.md / listing-en.md (описание, обоснования разрешений, поля), listing-es/de/fr/pt.md (только описание), privacy-policy.md
 site/                  сайт (GitHub Pages: dvmnum.github.io/torii) — index.html (ru), en/index.html, privacy.html, style.css, gallery.js (лайтбокс скриншотов: ссылки с data-gallery, стрелки/клавиши/свайп); без сборки.
                        Chrome Web Store: https://chromewebstore.google.com/detail/eimplcpjlibipimkmaipfkidbdagknof (кнопки Chrome и «Edge, Яндекс, Opera»). Firefox (AMO): https://addons.mozilla.org/firefox/addon/torii-new-tab/ — кнопка `.btn.ff` в первом экране и карточка в «Установить». Заглушка для будущих магазинов — href="#" + data-soon («скоро») и `<em class="soon">` в карточке. «Что умеет» — бенто `.bento/.card` с CSS-демо в каждой карточке.
                        Картинки — npm run site (scripts/site-assets.mjs: store/ → site/img/*.webp), посмотреть — npm run site:serve (localhost:4173)
-plitka/_locales/       название и краткое описание расширения для магазина (ru, en; default_locale — en): manifest берёт __MSG_appName__/__MSG_appDesc__
+plitka/_locales/       название и краткое описание расширения для магазина (ru, en, es, de, fr, pt_BR; default_locale — en): manifest берёт __MSG_appName__/__MSG_appDesc__
 scripts/make-icons.mjs PNG-иконки 16/32/48/128 из plitka/icons/icon.svg (ворота-тории) — после правки svg
 tests/debug.mjs        открыть вкладку расширения и вывести ошибки консоли (npm run debug) — когда e2e падает на старте
 ```
@@ -142,7 +143,7 @@ myWidget: {
 - Картинка-заглушка `#bg .bg-image` лежит поверх канваса (порядок в DOM): при `mesh-on` она уходит с задержкой, когда канвас под ней проявился; для картинки с эффектом заглушку до готовности WebGL не показываем (`photo-fx`), без WebGL — показываем (`no-webgl`).
 - Жидкое стекло (`liquid.js`): фильтр ставится **инлайном** (`url(#…)` через CSS-переменную из внешнего style.css Chrome ищет в файле стилей); координаты фильтра — от угла блока; `color-interpolation-filters="sRGB"` — **только на `feDisplacementMap`**, не на всём `<filter>` (на фильтре ломается карта, а без него вовсе тёмный фон под стеклом сереет — «засвет»); каждая перестройка — новый `<filter>` с новым id (изменения содержимого подключённого фильтра Chrome не перерисовывает). Проверять на контрастном фоне (полосы), на гладком градиенте преломления не видно.
 - Подложка блока: «Стиль: Как везде / Свой» в инспекторе. Пока «как везде» — полей нет, в data `null`/`inherit`; «свой» — `LOOK_SETTINGS` (`glassKind`, `elev`, `radius`, `blur`, `alpha`) начинаются с общих значений; сохраняются только отличающиеся от общих (совпадающее остаётся `null`/`inherit` и следует за общей настройкой). Условные поля — `showIf(get)` в `buildFields`. Тень под блоком — `settings.elev` / `data.elev` (`none|soft|strong`) → `--elev` через `body[data-elev]` / `.w[data-elev]`.
-- **Языки** (`i18n.js`): строки пишем по-русски прямо в коде, английский — в словаре `EN` (точное совпадение) или `PATTERNS` (строки с переменными). Переводчик ловит текст и атрибуты `placeholder/title/aria-label/data-tip` при появлении в DOM. Пользовательский текст — в контейнере с `translate="no"`. Даты/числа — `I18N.locale()`, не `'ru-RU'`. После новых строк — `npm run i18n`; e2e проверяет, что в английской панели нет кириллицы.
+- **Языки** (`i18n.js`): строки пишем по-русски прямо в коде, английский — в словаре `EN` (точное совпадение) или `PATTERNS` (строки с переменными). Остальные языки (`LANGS`: es, de, fr, pt) — цепочкой: русский → английский → язык, словари «английский → язык» в `js/lang/<код>.js` (`I18N.add`), грузятся тегом script при `await I18N.setLang()` до отрисовки; новая строка в `EN` — перевод и во все `js/lang/*.js` (`npm run i18n` показывает пропуски по каждому языку). `I18N.monday()` — неделя с понедельника; `I18N.locale()` — для дат. Город погоды по умолчанию — `WX_CITY()` по языку (у блока пустой `city`), геокодинг — на языке интерфейса. e2e проверяет немецкую панель: ни русского, ни непереведённого английского. Переводчик ловит текст и атрибуты `placeholder/title/aria-label/data-tip` при появлении в DOM. Пользовательский текст — в контейнере с `translate="no"`. Даты/числа — `I18N.locale()`, не `'ru-RU'`. После новых строк — `npm run i18n`; e2e проверяет, что в английской панели нет кириллицы.
 - Подсказки — значком ⓘ (`info(text)`, `labelInfo(label, tip)`), не абзацем под настройкой. Всплывашка — один `.tip` в body (`showTip`), держится в пределах экрана.
 - Полоса прокрутки — своя глобально (`::-webkit-scrollbar`, цвет от `--fg`); `scrollbar-width` в Chrome не ставить — он отключает `::-webkit-scrollbar`.
 - Меню «+ Виджет» — карточки с мини-макетами (`WIDGET_ART` в `js/widget-art.js`, SVG 160×96, цвета классами `.add-art .gl/.fg/.mu/.ac/…`, без слов в картинках). Новый виджет — добавь ему макет.
