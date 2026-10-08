@@ -49,7 +49,9 @@ await page.evaluate((all) => {
 }, all);
 await page.reload();
 await page.waitForTimeout(2000);
-check(await page.locator('.grid-stack-item').count() === all.length, `firefox: все ${all.length} виджетов отрисованы`);
+// цитата и «Слово дня» — только по-русски (ruOnly); здесь язык английский — их не должно быть
+const expected = await page.evaluate((all) => all.filter(t => !(Widgets[t].ruOnly && I18N.lang() !== 'ru')).length, all);
+check(expected === all.length - 2 && await page.locator('.grid-stack-item').count() === expected, `firefox: все ${expected} виджетов отрисованы (без цитаты и слова дня — язык ${await page.evaluate(() => I18N.lang())})`);
 const notesPh = await page.getAttribute('.notes-text', 'placeholder');
 check(!/[А-Яа-яЁё]/.test(notesPh), `firefox (английский): подсказка заметок переведена («${notesPh}»)`);
 check(await page.evaluate(() => !document.querySelector('.w.liquid') || !/url\(/.test(getComputedStyle(document.querySelector('.w.liquid')).backdropFilter)), 'firefox: жидкое стекло не включается (нет поддержки) — обычное стекло');
