@@ -302,7 +302,8 @@ function onBookmarksChange(fn) {
 // папка как в iOS: окошко поверх вкладки с плитками внутри (3–5 в ряд по количеству), вложенные — там же со стрелкой «назад».
 // Внутри — то же: правый клик, перетаскивание, «+». view — оформление плиток виджета, onMenu(n, x, y)
 let closeFolderPop = null;
-function openFolderPop(anchor, folderId, { view, ctx, onMenu }) {
+// extra(x, y) — ещё пункты для правого клика по пустому месту («Все закладки»)
+function openFolderPop(anchor, folderId, { view, ctx, onMenu, extra }) {
   closeFolderPop?.();
   closeBmTree?.();
   const stack = [folderId];
@@ -327,7 +328,7 @@ function openFolderPop(anchor, folderId, { view, ctx, onMenu }) {
     grid.replaceChildren(...kids.map(k => bmTile(k, view, { onMenu, onFolder: (f) => { stack.push(f.id); paint(); } })));
     if (!kids.length) grid.append(h('div', { class: 'fp-empty' }, 'Папка пустая — правый клик, чтобы добавить'));
   }
-  bmEmptyMenu(grid, ctx, cur);
+  bmEmptyMenu(grid, ctx, cur, extra);
   const off = onBookmarksChange(paint);
   const onKey = (e) => {
     if (e.key !== 'Escape' || bmUiOpen()) return;
@@ -612,7 +613,7 @@ Object.assign(Widgets, {
       // правый клик (по плитке или пустому месту): действия, «Добавить закладку / папку» и всё дерево закладок
       const treeItem = (x, y) => [null, ['Все закладки', () => openBookmarkTree({ x, y }, { ctx, newTab: data.newTab, onMenu })]];
       const onMenu = (n, x, y) => Bookmarks.menu(n, x, y, ctx, data.newTab, treeItem(x, y));
-      const onFolder = (n, el) => openFolderPop(el, n.id, { view: data, ctx, onMenu });
+      const onFolder = (n, el) => openFolderPop(el, n.id, { view: data, ctx, onMenu, extra: treeItem });
       const paint = () => Bookmarks.bar().then((nodes) => {
         if (!alive) return;
         wrap.replaceChildren(...nodes.map(n => bmTile(n, data, { onMenu, onFolder })));

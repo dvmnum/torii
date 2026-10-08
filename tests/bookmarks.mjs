@@ -141,7 +141,7 @@ const gb = await page.locator('.fp-grid').boundingBox();
 await page.mouse.click(gb.x + gb.width - 8, gb.y + gb.height - 8, { button: 'right' });
 await page.waitForTimeout(200);
 const fpMenu = await page.$$eval('.pop-menu .pop-item', els => els.map(e => e.textContent));
-check(fpMenu.join() === 'Добавить закладку,Добавить папку', `папка: правый клик по пустому месту — добавить внутрь (${fpMenu})`);
+check(fpMenu.join() === 'Добавить закладку,Добавить папку,Все закладки', `папка: правый клик по пустому месту — добавить внутрь и «Все закладки» (${fpMenu})`);
 await page.keyboard.press('Escape');
 await page.waitForTimeout(150);
 await page.click('.fp-grid [data-bm]:has-text("Архив")');
