@@ -1651,7 +1651,7 @@ await page.keyboard.press('e');
 await page.waitForTimeout(300);
 await page.click('#btn-add');
 await page.waitForTimeout(400);
-check(await page.locator('.add-item[data-type="quote"]').count() === 0 && await page.locator('.add-item[data-type="word"]').count() === 1, 'deutsch: в «+ Widget» цитаты нет');
+check(await page.locator('.add-item[data-type="quote"], .add-item[data-type="word"]').count() === 0 && await page.locator('.add-item[data-type="notes"]').count() === 1, 'deutsch: в «+ Widget» нет цитаты и слова дня');
 await page.keyboard.press('Escape');
 // двигаем заметки — раскладка сохраняется; цитата и её место должны остаться в хранилище
 const nb = await page.locator('[gs-id="n1"]').boundingBox();

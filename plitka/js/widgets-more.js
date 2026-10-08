@@ -947,6 +947,7 @@ Object.assign(Widgets, {
 
   word: {
     title: 'Слово дня',
+    ruOnly: true, // русские слова и толкования — на других языках блока нет (app.js: away)
     size: { w: 5, h: 2 }, min: { w: 3, h: 2 },
     defaults: { glass: true, shift: 0, align: 'middle-left' },
     settings: [ALIGN_SETTING, GLASS_SETTING],
