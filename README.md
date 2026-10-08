@@ -20,7 +20,7 @@
 
 ## Install
 
-**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/eimplcpjlibipimkmaipfkidbdagknof)** — also works in Edge, Yandex Browser, Opera, Brave and Vivaldi. Firefox Add-ons — coming soon.
+**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/eimplcpjlibipimkmaipfkidbdagknof)** — also works in Edge, Yandex Browser, Opera, Brave and Vivaldi. **[Firefox Add-ons](https://addons.mozilla.org/firefox/addon/torii-new-tab/)**.
 
 From source: `chrome://extensions` → Developer mode → **Load unpacked** → the `plitka/` folder.
 
