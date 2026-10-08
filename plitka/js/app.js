@@ -462,6 +462,44 @@
     draggable: { cancel: '.w-tools, .w-tools *' },
   }, '#grid');
 
+  // Блок у края сетки: тянешь ручку в сторону края (дальше некуда) — он растёт в обратную сторону, а этот край прижат.
+  // Ведёшь обратно — сжимается с той же стороны и возвращается к краю, а не остаётся висеть. Так для всех четырёх краёв.
+  // Как: пока тянешь, ручка «s» у блока внизу работает как «n» с зеркальным ходом мыши (и так же e↔w, n↔s у верха, w↔e у левого края):
+  // gridstack сам двигает y/x, чтобы противоположный край стоял на месте (его hasMovedX/Y).
+  grid.on('resizestart', (_e, el) => {
+    const r = el.ddElement?.ddResizable;
+    const n = el.gridstackNode;
+    if (!r || !n) return;
+    patchEdgeResize(r);
+    r._toriiStart = { x: n.x, y: n.y, w: n.w, h: n.h };
+  });
+  grid.on('resizestop', (_e, el) => { const r = el.ddElement?.ddResizable; if (r) delete r._toriiStart; });
+  function patchEdgeResize(r) {
+    const proto = Object.getPrototypeOf(r);
+    if (proto._toriiEdge) return;
+    proto._toriiEdge = true;
+    const orig = proto._resizing;
+    proto._resizing = function (e, dir) {
+      const st = this._toriiStart, s0 = this.startEvent;
+      if (!st || !s0 || typeof dir !== 'string') return orig.call(this, e, dir);
+      let d = dir, x = e.clientX, y = e.clientY;
+      // по вертикали: низ у края и тянут вниз — растём вверх; верх у края и тянут вверх — растём вниз
+      if (d.includes('s') && st.y + st.h >= ROWS) { d = d.replace('s', 'n'); y = 2 * s0.clientY - e.clientY; }
+      else if (d.includes('n') && st.y === 0) { d = d.replace('n', 's'); y = 2 * s0.clientY - e.clientY; }
+      // по горизонтали так же
+      if (d.includes('e') && st.x + st.w >= COLS) { d = d.replace('e', 'w'); x = 2 * s0.clientX - e.clientX; }
+      else if (d.includes('w') && st.x === 0) { d = d.replace('w', 'e'); x = 2 * s0.clientX - e.clientX; }
+      if (d === dir) return orig.call(this, e, dir);
+      const fake = {
+        type: e.type, target: e.target, clientX: x, clientY: y,
+        pageX: e.pageX + (x - e.clientX), pageY: e.pageY + (y - e.clientY), screenX: e.screenX + (x - e.clientX), screenY: e.screenY + (y - e.clientY),
+        button: e.button, buttons: e.buttons, altKey: e.altKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, metaKey: e.metaKey,
+        preventDefault: () => e.preventDefault(), stopPropagation: () => e.stopPropagation(),
+      };
+      return orig.call(this, fake, d);
+    };
+  }
+
   const live = new Map(); // id -> { el, body, inst }
 
   const saveLayout = debounce(() => {

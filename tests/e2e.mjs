@@ -1144,6 +1144,42 @@ await page.keyboard.press('Escape');
 await page.keyboard.press('Escape');
 await page.evaluate(() => chrome.storage.local.set({ settings: {}, linkIcons: {} }));
 
+// ---------- растягивание у края: блок внизу тянут вниз — растёт вверх; обратно — возвращается к краю ----------
+await page.evaluate(() => chrome.storage.local.set({
+  settings: {},
+  widgets: [{ id: 'e-low', type: 'notes', data: {} }, { id: 'e-right', type: 'notes', data: {} }],
+  layouts: { lg: { 'e-low': { x: 0, y: 8, w: 6, h: 4 }, 'e-right': { x: 18, y: 0, w: 6, h: 3 } } },
+}));
+await page.reload();
+await page.waitForTimeout(1000);
+await page.keyboard.press('e');
+await page.waitForTimeout(500);
+const nodeOf = (id) => page.evaluate((id) => { const n = document.querySelector(`.grid-stack-item[gs-id="${id}"]`).gridstackNode; return { x: n.x, y: n.y, w: n.w, h: n.h }; }, id);
+const handleDrag = async (id, cls, dx, dy, back) => {
+  await page.hover(`.grid-stack-item[gs-id="${id}"]`);
+  const hb = await page.locator(`.grid-stack-item[gs-id="${id}"] > .ui-resizable-${cls}`).boundingBox();
+  const sx = hb.x + hb.width / 2, sy = hb.y + hb.height / 2;
+  await page.mouse.move(sx, sy);
+  await page.mouse.down();
+  await page.mouse.move(sx + dx, sy + dy, { steps: 12 });
+  await page.waitForTimeout(150);
+  const mid = await nodeOf(id);
+  if (back) { await page.mouse.move(sx + 2, sy + 2, { steps: 12 }); await page.waitForTimeout(150); }
+  await page.mouse.up();
+  await page.waitForTimeout(500);
+  return { mid, end: await nodeOf(id) };
+};
+const lowBox = await page.locator('.grid-stack-item[gs-id="e-low"]').boundingBox();
+const ch = lowBox.height / 4, cw = lowBox.width / 6;
+let er = await handleDrag('e-low', 's', 0, ch * 2.2, true);
+check(er.mid.h === 6 && er.mid.y === 6 && er.end.h === 4 && er.end.y === 8, `край снизу: тянешь вниз — растёт вверх, обратно — вернулся вниз (${JSON.stringify(er)})`);
+er = await handleDrag('e-low', 's', 0, ch * 2.2, false);
+check(er.end.h === 6 && er.end.y === 6, `край снизу: отпустил — остался выше, низ у края (${JSON.stringify(er.end)})`);
+er = await handleDrag('e-right', 'e', cw * 2.2, 0, false);
+check(er.end.w === 8 && er.end.x === 16, `край справа: тянешь вправо — растёт влево (${JSON.stringify(er.end)})`);
+await page.keyboard.press('Escape');
+await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
+
 // ---------- поиск: префиксы, калькулятор, недавние, выбор поисковика, инкогнито ----------
 await page.evaluate(() => chrome.storage.local.set({
   settings: {},
