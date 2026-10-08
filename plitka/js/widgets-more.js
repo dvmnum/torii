@@ -58,16 +58,19 @@ function permGate(body, perm, text, ctx) {
 }
 
 // сайты плитками — как в «Ссылках»
-// Строка закладок браузера. У Chrome это папка с folderType 'bookmarks-bar' (раньше — просто первая в дереве).
+// Строка закладок браузера. У Chrome это папка с folderType 'bookmarks-bar' (раньше — просто первая в дереве),
+// у Firefox folderType нет, а первая в дереве — «Меню закладок»; строка там — папка с постоянным id 'toolbar_____'.
 const Bookmarks = {
   available: () => !!chrome.bookmarks?.getTree,
   barId: null, // id самой строки закладок — куда добавлять новые
   bar: () => new Promise((resolve) => chrome.bookmarks.getTree((tree) => {
     const root = tree[0];
-    const bar = root.children.find(c => c.folderType === 'bookmarks-bar') || root.children[0];
+    const bar = root.children.find(c => c.folderType === 'bookmarks-bar' || c.id === 'toolbar_____') || root.children[0];
     Bookmarks.barId = bar?.id ?? null;
-    resolve(bar?.children || []);
+    resolve(Bookmarks.visible(bar?.children));
   })),
+  // без разделителей (они есть только в Firefox) — у них нет ни адреса, ни детей
+  visible: (list) => (list || []).filter(n => n.type !== 'separator'),
   // плоский список ссылок: прямые закладки и первый уровень папок
   flat: async () => (await Bookmarks.bar()).flatMap(n => n.url ? [n] : (n.children || []).filter(c => c.url)),
 
@@ -117,8 +120,13 @@ const Bookmarks = {
     const made = await chrome.bookmarks.create({ parentId, index, title: n.title, ...(n.url ? { url: n.url } : {}) });
     for (const c of n.children || []) await Bookmarks.restore(c, made.id);
   },
-  // новый порядок внутри папки. Chrome при переносе вниз в той же папке считает индекс «до удаления» — поэтому +1; Firefox — итоговое место
-  moveTo: (id, parentId, from, to) => chrome.bookmarks.move(id, { parentId, index: to > from && !IS_FIREFOX ? to + 1 : to }),
+  // новый порядок внутри папки. Chrome при переносе вниз в той же папке считает индекс «до удаления» — поэтому +1; Firefox — итоговое место.
+  // shown — показанные плитки: from/to — их номера, а индекс в папке берём настоящий (в Firefox между ними бывают разделители)
+  moveTo: (id, parentId, from, to, shown) => {
+    const real = (i) => shown?.[i]?.index ?? i;
+    const [f, t] = [real(from), real(to)];
+    return chrome.bookmarks.move(id, { parentId, index: t > f && !IS_FIREFOX ? t + 1 : t });
+  },
   // пункты «добавить» — в папку parentId (на место index, если задан); extra — ещё пункты (у виджета — «Все закладки»)
   addItems: (ctx, parentId, index, extra = []) => [
     ['Добавить закладку', () => Bookmarks.add(ctx, false, parentId, index)],
@@ -315,12 +323,13 @@ function openFolderPop(anchor, folderId, { view, ctx, onMenu, extra }) {
   const cur = () => stack.at(-1);
   const back = h('button', { type: 'button', class: 'fp-back', title: 'Назад', html: BACK_SVG, onclick: () => { stack.pop(); paint(); } });
   const title = h('div', { class: 'fp-title', translate: 'no' });
+  let shown = []; // показанные плитки — для настоящих индексов при перетаскивании
   const grid = h('div', { class: `w-links style-tiles icons-${view.icons || 'glass'} gap-auto fp-grid` });
   const panel = h('div', { class: 'fp-panel', role: 'dialog' }, h('div', { class: 'fp-head' }, back, title), grid);
   const ov = h('div', { class: 'fp-overlay' }, panel);
   ov.addEventListener('mousedown', (e) => { if (e.target === ov) close(); });
   bmSortable(grid, {
-    onMove: (id, from, to) => Bookmarks.moveTo(id, cur(), from, to),
+    onMove: (id, from, to) => Bookmarks.moveTo(id, cur(), from, to, shown),
     onInto: (id, f) => chrome.bookmarks.move(id, { parentId: f }),
   });
   async function paint() {
@@ -328,7 +337,7 @@ function openFolderPop(anchor, folderId, { view, ctx, onMenu, extra }) {
     if (!node) { if (stack.length > 1) { stack.pop(); return paint(); } return close(); }
     title.textContent = node.title || 'Папка';
     back.hidden = stack.length < 2;
-    const kids = node.children || [];
+    const kids = shown = Bookmarks.visible(node.children);
     grid.style.setProperty('--cols', kids.length <= 6 ? 3 : kids.length <= 12 ? 4 : 5);
     grid.replaceChildren(...kids.map(k => bmTile(k, view, { onMenu, onFolder: (f) => { stack.push(f.id); paint(); } })));
     if (!kids.length) grid.append(h('div', { class: 'fp-empty' }, 'Папка пустая — правый клик, чтобы добавить'));
@@ -383,13 +392,14 @@ function openBookmarkTree(at, { ctx, newTab, onMenu }) {
       // корневые папки браузера не переименовать и не удалить
       oncontextmenu: (e) => { e.preventDefault(); if (!top) onMenu(n, e.clientX, e.clientY); },
     }, h('span', { class: 'bmt-chev', html: CHEV_SVG }), h('span', { class: 'bm-ico', html: FOLDER_SVG }),
-    h('span', { class: 'bm-title', translate: 'no' }, n.title || 'Папка'), h('span', { class: 'bmt-count' }, String((n.children || []).length)));
-    return h('div', {}, btn, isOpen ? h('div', { class: 'bm-sub' }, (n.children || []).length ? n.children.map(c => item(c)) : h('div', { class: 'w-muted bm-empty' }, 'Папка пустая')) : null);
+    h('span', { class: 'bm-title', translate: 'no' }, n.title || 'Папка'), h('span', { class: 'bmt-count' }, String(Bookmarks.visible(n.children).length)));
+    return h('div', {}, btn, isOpen ? h('div', { class: 'bm-sub' }, Bookmarks.visible(n.children).length ? Bookmarks.visible(n.children).map(c => item(c)) : h('div', { class: 'w-muted bm-empty' }, 'Папка пустая')) : null);
   };
   async function paint() {
     const [root] = await chrome.bookmarks.getTree();
-    const tops = (root.children || []).filter(c => c.children?.length || c.folderType === 'bookmarks-bar' || c.id === Bookmarks.barId);
-    if (!open.size && !paint.done) { paint.done = true; tops.slice(0, 1).forEach(t => open.add(t.id)); } // строка закладок — раскрыта сразу
+    const tops = (root.children || []).filter(c => c.children?.length || c.id === Bookmarks.barId);
+    // строка закладок — раскрыта сразу (в Firefox она не первая: сначала «Меню закладок»)
+    if (!paint.done) { paint.done = true; open.add(Bookmarks.barId ?? tops[0]?.id); }
     const st = list.scrollTop;
     list.replaceChildren(...tops.map(t => item(t, true)));
     list.scrollTop = st;
@@ -662,9 +672,11 @@ Object.assign(Widgets, {
       const onMenu = (n, x, y) => Bookmarks.menu(n, x, y, ctx, data.newTab, treeItem(x, y));
       const onFolder = (n, el) => openFolderPop(el, n.id, { view: data, ctx, onMenu, extra: treeItem });
       const byId = new Map();
+      let shown = [];
       const paint = () => Bookmarks.bar().then((nodes) => {
         if (!alive) return;
         byId.clear();
+        shown = nodes;
         for (const n of nodes) byId.set(n.id, n);
         wrap.replaceChildren(...nodes.map(n => bmTile(n, data, { onFolder })));
         if (!nodes.length) wrap.append(h('div', { class: 'w-muted' }, 'В строке закладок пусто — правый клик, чтобы добавить'));
@@ -678,7 +690,7 @@ Object.assign(Widgets, {
       bmSortable(wrap, {
         list: () => data.style === 'list',
         onStart: () => { closeFolderPop?.(); closeBmTree?.(); },
-        onMove: (id, from, to) => Bookmarks.moveTo(id, Bookmarks.barId, from, to),
+        onMove: (id, from, to) => Bookmarks.moveTo(id, Bookmarks.barId, from, to, shown),
         onInto: (id, folderId) => chrome.bookmarks.move(id, { parentId: folderId }),
       });
       Perm.has('bookmarks').then((ok) => {

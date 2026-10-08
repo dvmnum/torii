@@ -1056,8 +1056,18 @@ check(await page.locator('[gs-id="m-links"] .link').count() === 2, 'правый
 // свои иконки: цвет и картинка (выбор цвета/файла — системные окна, ставим напрямую), видны сразу
 await page.evaluate(() => LinkIcons.set('https://github.com', { color: '#ff3366' }));
 await page.waitForTimeout(300);
-const ownColor = await page.$eval('[gs-id="m-links"] .link[data-i="0"] .link-ico', e => e.classList.contains('own-color') && getComputedStyle(e.closest('.link')).getPropertyValue('--brand').trim());
-check(ownColor === '#ff3366', `своя иконка: цвет (${ownColor})`);
+const ownColor = await page.$eval('[gs-id="m-links"] .link[data-i="0"] .link-ico', e => e.classList.contains('own-color') && !e.childElementCount && !e.textContent && getComputedStyle(e).backgroundColor);
+check(ownColor === 'rgb(255, 51, 102)', `своя иконка: цвет — сплошная заливка без значка (${ownColor})`);
+await page.locator('[gs-id="m-links"]').screenshot({ path: `${out}/71a-own-color.png` });
+// «Сбросить» в окне цвета — иконка сайта возвращается
+await menuOf('[gs-id="m-links"] .link[data-i="0"]');
+await pick('Своя иконка: цвет…');
+await page.click('#modal-form button:has-text("Сбросить")');
+await page.click('#modal-form button[type=submit]');
+await page.waitForTimeout(300);
+check(await page.locator('[gs-id="m-links"] .link[data-i="0"] .own-color').count() === 0, 'своя иконка: «Сбросить» цвет возвращает иконку сайта');
+await page.evaluate(() => LinkIcons.set('https://github.com', { color: '#ff3366' }));
+await page.waitForTimeout(300);
 await page.evaluate(() => {
   const c = document.createElement('canvas'); c.width = c.height = 8; const g = c.getContext('2d'); g.fillStyle = '#00c8ff'; g.fillRect(0, 0, 8, 8);
   LinkIcons.set('https://habr.com/', { img: c.toDataURL() });

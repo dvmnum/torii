@@ -614,8 +614,8 @@ body.no-motion .clock-time .colon { animation: none; }
 /* своя иконка ссылки (правый клик → «Своя иконка»): картинка на всю плитку или цвет с буквой — сильнее любого стиля иконок */
 .w-links .link .link-ico.own-img, .fp-grid .link .link-ico.own-img { padding: 0; background: none; border: 0; overflow: hidden; }
 .w-links .link .link-ico.own-img img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; filter: none; opacity: 1; }
-.w-links .link .link-ico.own-color { background: linear-gradient(160deg, color-mix(in srgb, var(--brand) 82%, white), var(--brand)); border: 0; box-shadow: 0 8px 18px -10px var(--brand); }
-.w-links .link .link-ico.own-color .mono { color: #fff; font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+/* цвет — сплошная заливка всей плитки, без значка и градиента */
+.w-links .link .link-ico.own-color { background: var(--own); border: 0; box-shadow: none; }
 
 /* список: строки по центру по высоте, как плитки (в низком блоке они прилипали к верху); safe — не уезжать за верх, если не влезли */
 .w-links.style-list { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); align-content: safe center; }

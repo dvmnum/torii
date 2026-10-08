@@ -263,7 +263,8 @@ const LinkIcons = {
         title: 'Цвет иконки',
         fields: [{ key: 'color', label: 'Цвет', type: 'color', value: cur?.color || (/^#[0-9a-f]{6}$/i.test(brandColor(url)) ? brandColor(url) : '#8a7cff') }],
         submit: 'Готово',
-        onSubmit: (v) => v.color && LinkIcons.set(url, { color: v.color }),
+        // «Сбросить» в поле цвета — вернуть иконку сайта
+        onSubmit: (v) => LinkIcons.set(url, v.color ? { color: v.color } : null),
       })],
       ...(cur ? [['Вернуть иконку сайта', () => LinkIcons.set(url, null)]] : []),
     ];
@@ -280,11 +281,13 @@ function linkEl(l, { newTab = false, icons = 'glass' } = {}) {
   const title = l.title || hostOf(l.url);
   const letter = (title.trim()[0] || '?').toUpperCase();
   const own = LinkIcons.get(l.url);
+  // своя: картинка на всю плитку или сплошной цвет без значка
   const ico = own?.img ? h('img', { src: own.img, alt: '' })
-    : own?.color || icons === 'letter' ? h('span', { class: 'mono' }, letter)
+    : own?.color ? null
+    : icons === 'letter' ? h('span', { class: 'mono' }, letter)
     : favicon(l.url, l.title, icons === 'big' ? 128 : 64);
   const a = h('a', { class: 'link', href: l.url, title, target: newTab ? '_blank' : null, rel: 'noopener', style: `--brand:${own?.color || brandColor(l.url)}` },
-    h('span', { class: 'link-ico' + (own?.img ? ' own-img' : own?.color ? ' own-color' : '') }, ico),
+    h('span', { class: 'link-ico' + (own?.img ? ' own-img' : own?.color ? ' own-color' : ''), style: own?.color ? `--own:${own.color}` : null }, ico),
     h('span', { class: 'link-title', translate: 'no' }, title));
   if (own) return a;
   // сайта нет в списке фирменных и цвет ещё не узнавали — узнаём из иконки и перекрашиваем
