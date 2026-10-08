@@ -152,6 +152,7 @@ const wxState = () => page.evaluate(() => {
   return { temp: b.querySelector('.wx-temp')?.textContent, old: b.classList.contains('is-old'), loading: b.classList.contains('is-loading'),
     updating: b.classList.contains('is-updating'), place: b.querySelector('.wx-place')?.textContent, line3: b.querySelector('.wx-range')?.textContent || '',
     ico: !!b.querySelector('.wx-cond .wx-ico svg'), shimmer: getComputedStyle(b.querySelector('.wx-temp')).animationName,
+    desc: (() => { const e = b.querySelector('.wx-cond .wx-desc'); return !!e && getComputedStyle(e).display !== 'none'; })(),
     spin: b.querySelector('.wx-cond .wx-ico') ? getComputedStyle(b.querySelector('.wx-cond .wx-ico'), '::after').animationName : '' };
 });
 // 5 часов назад, сеть медленная: сразу старая — переливается, как скелетон, третьей строкой «5 ч назад»; потом свежая
@@ -161,11 +162,11 @@ await oldWx(5, 77);
 await page.reload();
 await page.waitForTimeout(500);
 let wm = await wxState();
-check(wm.temp === '77°' && wm.updating && wm.shimmer === 'wx-shimmer' && wm.line3 === '5 ч назад' && wm.place === 'Москва' && wm.spin === 'spin', `погода: старше 3 ч — переливается, кружок вместо значка, «5 ч назад» внизу (${JSON.stringify(wm)})`);
+check(wm.temp === '77°' && wm.updating && wm.shimmer === 'wx-shimmer' && wm.line3 === '5 ч назад' && wm.place === 'Москва' && wm.spin === 'spin' && !wm.desc, `погода: старше 3 ч — переливается, кружок вместо значка без подписи, «5 ч назад» внизу (${JSON.stringify(wm)})`);
 await page.locator('.grid-stack-item[gs-id="w-weather"]').screenshot({ path: `${out}/08b-weather-old.png` });
 await page.waitForTimeout(2000);
 wm = await wxState();
-check(wm.temp === '3°' && !wm.updating && !wm.old && /^-?\d+° \/ -?\d+°$/.test(wm.line3), `погода: свежая пришла — третьей строкой макс/мин (${JSON.stringify(wm)})`);
+check(wm.temp === '3°' && !wm.updating && !wm.old && wm.desc && /^-?\d+° \/ -?\d+°$/.test(wm.line3), `погода: свежая пришла — третьей строкой макс/мин (${JSON.stringify(wm)})`);
 await page.locator('.grid-stack-item[gs-id="w-weather"]').screenshot({ path: `${out}/08c-weather-now.png` });
 await ctx.unroute(API, slow);
 // 2 часа назад без сети: сразу из памяти, как обычная, без «Смотрю в окно…» и пометки «ч назад»
@@ -1309,9 +1310,10 @@ check(!spill.length, `другие виды в минимальном разме
 const lowWx = await page.evaluate(() => {
   const b = [...document.querySelectorAll('.grid-stack-item')].find(it => it.gridstackNode?.h === 1 && it.querySelector('.is-now'));
   const vis = (s) => { const e = b?.querySelector(s); return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0; };
-  return { range: vis('.wx-range'), desc: vis('.wx-cond .wx-desc'), place: vis('.wx-place') };
+  const ir = b?.querySelector('.wx-cond .wx-ico')?.getBoundingClientRect(), dr = b?.querySelector('.wx-cond .wx-desc')?.getBoundingClientRect();
+  return { range: vis('.wx-range'), desc: vis('.wx-cond .wx-desc'), place: vis('.wx-place'), under: !!ir && !!dr && dr.top >= ir.bottom - 2, inside: !!dr && dr.bottom <= b.querySelector('.w-body').getBoundingClientRect().bottom + 1 };
 });
-check(lowWx.range && lowWx.desc && lowWx.place, `погода в одну клетку: видны город, «макс / мин» и подпись (${JSON.stringify(lowWx)})`);
+check(lowWx.range && lowWx.desc && lowWx.place && lowWx.under && lowWx.inside, `погода в одну клетку: видны город, «макс / мин» и подпись под значком (${JSON.stringify(lowWx)})`);
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
 // ---------- пёстрый фон: стекло выравнивает яркость под собой ----------

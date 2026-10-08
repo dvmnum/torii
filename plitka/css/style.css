@@ -708,12 +708,15 @@ body.no-motion .clock-time .colon { animation: none; }
 .is-now .wx-cond .wx-ico { font-size: min(30cqh, 12cqw); }
 .is-now .wx-cond .wx-desc { font-size: clamp(10px, 9cqh, 12px); font-weight: 600; color: var(--ink-2); max-width: 22cqw; }
 .w-weather.is-now.side-center .wx-cond, .w-weather.is-now.side-right .wx-cond { margin-left: 0; }
-/* низкий блок (в одну клетку): «макс / мин» остаётся под городом, подпись «Дождь» — рядом со значком, а не под ним */
+/* низкий блок (в одну клетку): «макс / мин» остаётся под городом, подпись «Пасмурно» — так же под значком, всё плотнее */
 @container (max-height: 96px) {
-  .is-now .wx-cond { flex-direction: row; gap: 6px; }
-  .is-now .wx-cond .wx-ico { font-size: min(46cqh, 11cqw); }
+  .is-now .wx-cond { gap: 1px; }
+  .is-now .wx-cond .wx-ico { font-size: min(34cqh, 11cqw); }
+  .is-now .wx-cond .wx-desc { font-size: 10px; line-height: 1.1; }
   .is-now .wx-place { font-size: clamp(13px, 26cqh, 20px); }
 }
+/* пока обновляется — подписи под значком нет, только кружок */
+.w-weather.is-updating .wx-cond .wx-desc { display: none; }
 /* прячем, только когда места нет совсем: сначала подпись у значка, потом «макс / мин», потом город */
 @container (max-width: 250px) { .is-now .wx-cond .wx-desc { display: none; } }
 @container (max-height: 44px) { .is-now .wx-range { display: none; } }
