@@ -725,10 +725,9 @@ const Widgets = {
       let attempt = 0;
 
       // неделя: колонка на день — день недели, иконка, макс/мин
-      const paintWeek = (w, stale) => {
+      const paintWeek = (w) => {
         const wd = (iso, i) => i === 0 ? 'Сегодня' : new Date(iso + 'T12:00').toLocaleDateString(I18N.locale(), { weekday: 'short' });
         box.classList.remove('is-loading', 'is-error');
-        box.classList.toggle('is-stale', stale);
         box.classList.add('is-week');
         box.replaceChildren(...w.days.map((d, i) => h('div', { class: 'wx-day' + (i === 0 ? ' today' : '') },
           h('div', { class: 'wx-dname' }, wd(d.date, i)),
@@ -738,10 +737,9 @@ const Widgets = {
       };
 
       // по часам: «Сейчас» и дальше каждые 2 часа — время, иконка, градусы, вероятность осадков (если заметная)
-      const paintHours = (w, stale) => {
+      const paintHours = (w) => {
         const hm = (iso) => new Date(iso).toLocaleTimeString(I18N.locale(), { hour: '2-digit', minute: '2-digit' });
         box.classList.remove('is-loading', 'is-error');
-        box.classList.toggle('is-stale', stale);
         box.classList.add('is-week', 'is-hours');
         box.replaceChildren(...w.hours.filter((_, i) => i % 2 === 0).slice(0, 8).map((x, i) => h('div', { class: 'wx-day' + (i === 0 ? ' today' : '') },
           h('div', { class: 'wx-dname' }, i === 0 ? 'Сейчас' : hm(x.time)),
@@ -751,23 +749,25 @@ const Widgets = {
         )));
       };
 
+      // правая колонка: город, описание и третьей строкой макс/мин — или пометка вместо них («5 ч назад», «нет сети»)
+      const meta = (w, desc, note) => h('div', { class: 'wx-meta' },
+        h('div', { class: 'wx-place', translate: 'no' }, w.place),
+        h('div', { class: 'wx-desc' }, desc),
+        h('div', { class: 'wx-range' }, note || `${Math.round(w.max)}° / ${Math.round(w.min)}°`));
+      // значок погоды — крупно и бледно, фоном за текстом (по другую сторону от выравнивания)
+      const bgIcon = (ico) => h('div', { class: 'wx-bg', html: ICONS[ico], 'aria-hidden': 'true' });
+
       // подробно: сверху как «Сейчас», снизу строка показателей
-      const paintDetails = (w, stale) => {
+      const paintDetails = (w, note) => {
         const [desc, ico] = weatherInfo(w.code);
         const num = (v, unit) => (Number.isFinite(v) ? Math.round(v) + unit : '—');
         const hm = (iso) => (iso ? new Date(iso).toLocaleTimeString(I18N.locale(), { hour: '2-digit', minute: '2-digit' }) : '—');
         // до заката — показываем закат, после — восход
         const sun = w.sunset && Date.now() < new Date(w.sunset) ? ['Закат', hm(w.sunset)] : ['Восход', hm(w.sunrise)];
-        box.classList.remove('is-loading', 'is-error', 'is-week');
-        box.classList.toggle('is-stale', stale);
         box.classList.add('is-details');
         box.replaceChildren(
-          h('div', { class: 'wx-top' },
-            h('div', { class: 'wx-ico', html: ICONS[ico] }),
-            h('div', { class: 'wx-temp' }, `${Math.round(w.temp)}°`),
-            h('div', { class: 'wx-meta' },
-              h('div', { class: 'wx-desc' }, desc),
-              h('div', { class: 'w-muted' }, stale ? `${w.place} · нет сети` : `${w.place} · ${Math.round(w.max)}° / ${Math.round(w.min)}°`))),
+          bgIcon(ico),
+          h('div', { class: 'wx-top' }, h('div', { class: 'wx-temp' }, `${Math.round(w.temp)}°`), meta(w, desc, note)),
           h('div', { class: 'wx-stats' }, ...[
             ['Ощущается', num(w.feels, '°')], ['Влажность', num(w.humidity, '%')],
             ['Ветер', num(w.wind, ' м/с')], ['Осадки', num(w.rain, '%')], sun,
@@ -775,37 +775,31 @@ const Widgets = {
         );
       };
 
-      const paint = (w, stale) => {
-        if (data.view === 'week' && w.days?.length > 1) return paintWeek(w, stale);
-        if (data.view === 'hours' && w.hours?.length > 1) return paintHours(w, stale);
-        if (data.view === 'details') return paintDetails(w, stale);
+      // st: { note — третья строка вместо макс/мин, updating — данные старые и уже обновляются (переливается, как скелетон),
+      //       dim — старые и обновить не вышло (приглушено) }
+      const paint = (w, st = {}) => {
+        box.classList.remove('is-loading', 'is-error', 'is-week', 'is-hours', 'is-details', 'is-now');
+        box.classList.toggle('is-updating', !!st.updating);
+        box.classList.toggle('is-old', !!st.dim);
+        if (data.view === 'week' && w.days?.length > 1) return paintWeek(w);
+        if (data.view === 'hours' && w.hours?.length > 1) return paintHours(w);
+        if (data.view === 'details') return paintDetails(w, st.note);
         const [desc, ico] = weatherInfo(w.code);
-        box.classList.remove('is-loading', 'is-error', 'is-week');
-        box.classList.toggle('is-stale', stale);
-        box.title = data.view === 'mini' ? `${desc} · ${w.place}` : '';
-        box.replaceChildren(
-          h('div', { class: 'wx-ico', html: ICONS[ico] }),
-          h('div', { class: 'wx-main' },
-            h('div', { class: 'wx-temp' }, `${Math.round(w.temp)}°`),
-            data.view === 'mini' ? '' : h('div', { class: 'wx-meta' },
-              h('div', { class: 'wx-desc' }, desc),
-              h('div', { class: 'w-muted' }, stale ? `${w.place} · нет сети` : `${w.place} · ${Math.round(w.max)}° / ${Math.round(w.min)}°`),
-            ),
-          ),
-        );
+        box.title = data.view === 'mini' ? `${desc} · ${w.place}` + (st.note ? ` · ${st.note}` : '') : '';
+        if (data.view === 'mini') {
+          box.replaceChildren(h('div', { class: 'wx-ico', html: ICONS[ico] }), h('div', { class: 'wx-temp' }, `${Math.round(w.temp)}°`));
+          return;
+        }
+        // «Сейчас»: сверху крупно градусы, под ними «Дождь · Москва», внизу макс/мин (или пометка); значок — из правого нижнего угла
+        box.classList.add('is-now');
+        box.replaceChildren(bgIcon(ico),
+          h('div', { class: 'wx-temp' }, `${Math.round(w.temp)}°`),
+          h('div', { class: 'wx-sub' }, desc, h('span', { translate: 'no' }, ` · ${w.place}`)),
+          h('div', { class: 'wx-range' }, st.note || `${Math.round(w.max)}° / ${Math.round(w.min)}°`));
       };
-      // старая погода из памяти (3 ч – сутки): приглушена, в углу «5 ч назад» и спиннер, пока не придёт свежая
-      let ago = null;
-      const showAgo = (at, loading) => {
-        const hrs = Math.max(1, Math.floor((Date.now() - at) / 3600000));
-        ago = h('div', { class: 'wx-ago' }, ...(loading ? [h('span', { class: 'spinner' })] : []), h('span', {}, loading ? `${hrs} ч назад` : `${hrs} ч назад · нет сети`));
-        box.classList.add('is-old');
-        box.append(ago);
-      };
-      const clearAgo = () => { ago?.remove(); ago = null; box.classList.remove('is-old'); };
+      const hoursAgo = (at) => `${Math.max(1, Math.floor((Date.now() - at) / 3600000))} ч назад`;
       const fail = (text) => {
-        clearAgo();
-        box.classList.remove('is-loading');
+        box.classList.remove('is-loading', 'is-updating', 'is-old');
         box.classList.add('is-error');
         box.replaceChildren(h('div', { class: 'wx-ico', html: ICONS.cloud }), h('div', { class: 'w-muted' }, text));
       };
@@ -818,10 +812,9 @@ const Widgets = {
         clearTimeout(retryT);
         loadWeather(data.city, force).then(({ w, stale, at }) => {
           if (!alive) return;
+          // без сети: моложе 3 ч — «нет сети», старше — приглушено и «5 ч назад · нет сети»
           const old = stale && Date.now() - at >= WX_MEMORY;
-          clearAgo();
-          paint(w, stale && !old);
-          if (old) showAgo(at, false);
+          paint(w, !stale ? {} : old ? { note: `${hoursAgo(at)} · нет сети`, dim: true } : { note: 'нет сети' });
           if (stale) retryLater(); else attempt = 0;
         }).catch((e) => {
           if (!alive) return;
@@ -834,7 +827,7 @@ const Widgets = {
       const onOnline = () => { attempt = 0; load(); };
       const VIEWS = [['now', 'Сейчас'], ['mini', 'Мини'], ['details', 'Подробно'], ['hours', 'По часам'], ['week', 'Неделя']];
       ctx.menu(() => [
-        ['Обновить сейчас', () => { clearAgo(); ago = h('div', { class: 'wx-ago' }, h('span', { class: 'spinner' })); box.append(ago); load(true); }],
+        ['Обновить сейчас', () => { box.classList.add('is-updating'); load(true); }],
         ['Сменить город', () => ctx.modal({
           title: 'Город', fields: [{ key: 'city', label: 'Город', type: 'text', value: data.city, required: true }], submit: 'Готово',
           onSubmit: (v) => { if (v.city.trim()) { data.city = v.city.trim(); ctx.save(); ctx.rerender(); } },
@@ -847,7 +840,8 @@ const Widgets = {
       weatherCache(data.city).then((c) => {
         if (!alive) return;
         const age = c ? Date.now() - c.at : Infinity;
-        if (age < 24 * 3600 * 1000) { paint(c.w, false); if (age >= WX_MEMORY) showAgo(c.at, true); }
+        // старше 3 ч — переливается, как скелетон, а третьей строкой «5 ч назад», пока не придёт свежая
+        if (age < 24 * 3600 * 1000) paint(c.w, age >= WX_MEMORY ? { note: hoursAgo(c.at), updating: true } : {});
         load();
       });
       return { destroy: () => { alive = false; clearTimeout(retryT); window.removeEventListener('online', onOnline); } };

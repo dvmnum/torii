@@ -150,20 +150,22 @@ const oldWx = (hours, temp) => page.evaluate(async ([hours, temp]) => {
 const wxState = () => page.evaluate(() => {
   const b = document.querySelector('.w-weather');
   return { temp: b.querySelector('.wx-temp')?.textContent, old: b.classList.contains('is-old'), loading: b.classList.contains('is-loading'),
-    ago: b.querySelector('.wx-ago')?.textContent || '', spin: !!b.querySelector('.wx-ago .spinner') };
+    updating: b.classList.contains('is-updating'), place: b.querySelector('.wx-sub')?.textContent, line3: b.querySelector('.wx-range')?.textContent || '',
+    bg: !!b.querySelector('.wx-bg svg'), shimmer: getComputedStyle(b.querySelector('.wx-temp')).animationName };
 });
-// 5 часов назад, сеть медленная: сразу старая — приглушённая, «5 ч назад» со спиннером; потом свежая
+// 5 часов назад, сеть медленная: сразу старая — переливается, как скелетон, третьей строкой «5 ч назад»; потом свежая
 const slow = async (r) => { await new Promise(s => setTimeout(s, 1500)); r.fallback(); };
 await ctx.route(API, slow);
 await oldWx(5, 77);
 await page.reload();
 await page.waitForTimeout(500);
 let wm = await wxState();
-check(wm.temp === '77°' && wm.old && wm.spin && wm.ago === '5 ч назад', `погода: старше 3 ч — приглушена, «5 ч назад» и загрузка (${JSON.stringify(wm)})`);
+check(wm.temp === '77°' && wm.updating && wm.shimmer === 'wx-shimmer' && wm.line3 === '5 ч назад' && / · Москва$/.test(wm.place) && wm.bg, `погода: старше 3 ч — переливается, «5 ч назад» третьей строкой (${JSON.stringify(wm)})`);
 await page.locator('.grid-stack-item[gs-id="w-weather"]').screenshot({ path: `${out}/08b-weather-old.png` });
 await page.waitForTimeout(2000);
 wm = await wxState();
-check(wm.temp === '3°' && !wm.old && !wm.ago, `погода: свежая пришла — пометка ушла (${JSON.stringify(wm)})`);
+check(wm.temp === '3°' && !wm.updating && !wm.old && /^-?\d+° \/ -?\d+°$/.test(wm.line3), `погода: свежая пришла — третьей строкой макс/мин (${JSON.stringify(wm)})`);
+await page.locator('.grid-stack-item[gs-id="w-weather"]').screenshot({ path: `${out}/08c-weather-now.png` });
 await ctx.unroute(API, slow);
 // 2 часа назад без сети: сразу из памяти, как обычная, без «Смотрю в окно…» и пометки «ч назад»
 const off = (r) => r.abort('internetdisconnected');
@@ -172,13 +174,13 @@ await oldWx(2, 55);
 await page.reload();
 await page.waitForTimeout(150);
 wm = await wxState();
-check(wm.temp === '55°' && !wm.old && !wm.loading, `погода: моложе 3 ч — сразу из памяти (${JSON.stringify(wm)})`);
-// 5 часов назад без сети: приглушена, «5 ч назад · нет сети», без спиннера
+check(wm.temp === '55°' && !wm.old && !wm.loading && !wm.updating, `погода: моложе 3 ч — сразу из памяти (${JSON.stringify(wm)})`);
+// 5 часов назад без сети: приглушена, третьей строкой «5 ч назад · нет сети», не переливается
 await oldWx(5, 77);
 await page.reload();
 await page.waitForTimeout(1200);
 wm = await wxState();
-check(wm.temp === '77°' && wm.old && !wm.spin && wm.ago === '5 ч назад · нет сети', `погода: старая и без сети (${JSON.stringify(wm)})`);
+check(wm.temp === '77°' && wm.old && !wm.updating && wm.line3 === '5 ч назад · нет сети', `погода: старая и без сети (${JSON.stringify(wm)})`);
 await ctx.unroute(API, off);
 await page.evaluate(() => chrome.storage.local.remove('wx3:москва'));
 
@@ -1253,6 +1255,7 @@ const spill = await page.evaluate(() => [...document.querySelectorAll('.grid-sta
   return [...it.querySelectorAll('.w-body *')].filter((el) => {
     const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
     if (!r.width || !r.height || cs.visibility === 'hidden' || el.closest('[hidden]')) return false;
+    if (el.closest('.wx-bg')) return false; // облако погоды фоном нарочно уходит за край и обрезается
     // внутри прокручиваемого списка (дела, ссылки списком) — уходить за край можно, туда долистывают
     for (let p = el.parentElement; p && p !== it; p = p.parentElement) if (/auto|scroll/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight) return false;
     return r.left < w.left - 1 || r.right > w.right + 1 || r.top < w.top - 1 || r.bottom > w.bottom + 1;
