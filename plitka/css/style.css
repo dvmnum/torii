@@ -682,25 +682,19 @@ body.no-motion .clock-time .colon { animation: none; }
 .w-weather.is-updating :is(.wx-ico, .wx-dico) { animation: wx-pulse 1.6s ease-in-out infinite; }
 .w-weather.is-updating .wx-bg { animation: wx-pulse-bg 1.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .w-weather.is-updating * { animation: none !important; } }
-/* «Сейчас» (по рефу): сверху градусы, под ними «Дождь · Москва», внизу «12° / 1°»; облако — крупно из правого нижнего угла, обрезано краем */
-.w-weather.is-now { flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 0; padding: clamp(10px, 10cqh, 22px) clamp(14px, 7cqw, 26px); }
-.is-now .wx-temp { font-size: min(36cqh, 20cqw); }
-.is-now .wx-sub { margin-top: clamp(2px, 4cqh, 10px); font-size: clamp(11px, 11cqh, 15px); font-weight: 500; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
-.is-now .wx-range { margin-top: auto; font-size: clamp(11px, 10cqh, 14px); }
-.is-now .wx-bg { top: auto; bottom: -22%; right: -10%; transform: none; width: min(100cqh, 58cqw); opacity: .45; }
-.is-now .wx-bg svg { stroke-width: 1.1; }
-.w-weather.is-now.side-center { align-items: center; text-align: center; }
-.w-weather.is-now.side-right { align-items: flex-end; text-align: right; }
-.w-weather.is-now.side-right .wx-bg { right: auto; left: -10%; }
-/* низкий блок (в одну клетку): в строку — градусы и подпись, макс/мин прячем */
-@container (max-height: 96px) {
-  .w-weather.is-now { flex-direction: row; align-items: center; gap: clamp(8px, 4cqw, 16px); padding-block: 0; }
-  .is-now .wx-temp { font-size: min(56cqh, 22cqw); }
-  .is-now .wx-sub { margin-top: 0; }
-  .is-now .wx-range { display: none; }
-  .is-now .wx-bg { width: min(150cqh, 45cqw); bottom: -40%; }
-}
-.w-weather.is-updating .wx-sub span { color: transparent; }
+/* «Сейчас» (по рефу) в строку: градусы · город и под ним «макс / мин» (или «5 ч назад») · справа значок с подписью */
+.w-weather.is-now { gap: clamp(10px, 4cqw, 20px); }
+.is-now .wx-temp { font-size: min(46cqh, 17cqw); font-weight: 300; }
+.is-now .wx-meta { gap: clamp(1px, 3cqh, 5px); }
+.is-now .wx-place { font-size: clamp(14px, 19cqh, 26px); font-weight: 500; letter-spacing: -.01em; }
+.is-now .wx-range { font-size: clamp(11px, 10cqh, 13px); }
+.wx-cond { flex: none; margin-left: auto; display: flex; flex-direction: column; align-items: center; gap: clamp(2px, 3cqh, 6px); }
+.is-now .wx-cond .wx-ico { font-size: min(30cqh, 12cqw); }
+.is-now .wx-cond .wx-desc { font-size: clamp(10px, 9cqh, 12px); font-weight: 600; color: var(--ink-2); max-width: 22cqw; }
+.w-weather.is-now.side-center .wx-cond, .w-weather.is-now.side-right .wx-cond { margin-left: 0; }
+/* низкий блок (в одну клетку): без подписей — градусы, город, значок */
+@container (max-height: 96px) { .is-now .wx-range, .is-now .wx-cond .wx-desc { display: none; } .is-now .wx-cond .wx-ico { font-size: min(52cqh, 12cqw); } }
+@container (max-width: 300px) { .is-now .wx-cond .wx-desc { display: none; } }
 
 /* неделя */
 .w-weather.is-week { justify-content: space-between; gap: 2px; padding: 0 clamp(8px, 4cqw, 18px); }

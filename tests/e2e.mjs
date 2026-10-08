@@ -150,8 +150,8 @@ const oldWx = (hours, temp) => page.evaluate(async ([hours, temp]) => {
 const wxState = () => page.evaluate(() => {
   const b = document.querySelector('.w-weather');
   return { temp: b.querySelector('.wx-temp')?.textContent, old: b.classList.contains('is-old'), loading: b.classList.contains('is-loading'),
-    updating: b.classList.contains('is-updating'), place: b.querySelector('.wx-sub')?.textContent, line3: b.querySelector('.wx-range')?.textContent || '',
-    bg: !!b.querySelector('.wx-bg svg'), shimmer: getComputedStyle(b.querySelector('.wx-temp')).animationName };
+    updating: b.classList.contains('is-updating'), place: b.querySelector('.wx-place')?.textContent, line3: b.querySelector('.wx-range')?.textContent || '',
+    ico: !!b.querySelector('.wx-cond .wx-ico svg'), shimmer: getComputedStyle(b.querySelector('.wx-temp')).animationName };
 });
 // 5 часов назад, сеть медленная: сразу старая — переливается, как скелетон, третьей строкой «5 ч назад»; потом свежая
 const slow = async (r) => { await new Promise(s => setTimeout(s, 1500)); r.fallback(); };
@@ -160,7 +160,7 @@ await oldWx(5, 77);
 await page.reload();
 await page.waitForTimeout(500);
 let wm = await wxState();
-check(wm.temp === '77°' && wm.updating && wm.shimmer === 'wx-shimmer' && wm.line3 === '5 ч назад' && / · Москва$/.test(wm.place) && wm.bg, `погода: старше 3 ч — переливается, «5 ч назад» третьей строкой (${JSON.stringify(wm)})`);
+check(wm.temp === '77°' && wm.updating && wm.shimmer === 'wx-shimmer' && wm.line3 === '5 ч назад' && wm.place === 'Москва' && wm.ico, `погода: старше 3 ч — переливается, «5 ч назад» третьей строкой (${JSON.stringify(wm)})`);
 await page.locator('.grid-stack-item[gs-id="w-weather"]').screenshot({ path: `${out}/08b-weather-old.png` });
 await page.waitForTimeout(2000);
 wm = await wxState();

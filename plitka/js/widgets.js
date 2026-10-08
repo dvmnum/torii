@@ -790,12 +790,14 @@ const Widgets = {
           box.replaceChildren(h('div', { class: 'wx-ico', html: ICONS[ico] }), h('div', { class: 'wx-temp' }, `${Math.round(w.temp)}°`));
           return;
         }
-        // «Сейчас»: сверху крупно градусы, под ними «Дождь · Москва», внизу макс/мин (или пометка); значок — из правого нижнего угла
+        // «Сейчас» в строку: градусы, город и под ним макс/мин (или пометка), справа значок с подписью «Дождь»
         box.classList.add('is-now');
-        box.replaceChildren(bgIcon(ico),
+        box.replaceChildren(
           h('div', { class: 'wx-temp' }, `${Math.round(w.temp)}°`),
-          h('div', { class: 'wx-sub' }, desc, h('span', { translate: 'no' }, ` · ${w.place}`)),
-          h('div', { class: 'wx-range' }, st.note || `${Math.round(w.max)}° / ${Math.round(w.min)}°`));
+          h('div', { class: 'wx-meta' },
+            h('div', { class: 'wx-place', translate: 'no' }, w.place),
+            h('div', { class: 'wx-range' }, st.note || `${Math.round(w.max)}° / ${Math.round(w.min)}°`)),
+          h('div', { class: 'wx-cond' }, h('div', { class: 'wx-ico', html: ICONS[ico] }), h('div', { class: 'wx-desc' }, desc)));
       };
       const hoursAgo = (at) => `${Math.max(1, Math.floor((Date.now() - at) / 3600000))} ч назад`;
       const fail = (text) => {
