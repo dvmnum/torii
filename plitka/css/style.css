@@ -548,22 +548,64 @@ body.no-motion .clock-time .colon { animation: none; }
 .bm-sub[hidden] { display: none; }
 .bm-empty { padding: 8px; }
 
-/* закладки правятся прямо с вкладки: «⋯» на плитке при наведении, перетаскивание, бросок в папку */
+/* закладки правятся прямо с вкладки: правый клик — меню, перетаскивание, бросок в папку */
 .w-links .link[data-bm] { position: relative; touch-action: none; user-select: none; }
-.bm-more {
-  position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 7px;
-  display: grid; place-items: center; background: rgba(var(--fg), .14); color: var(--ink);
-  opacity: 0; transition: opacity .15s, background .15s;
-}
-.bm-more svg { width: 16px; height: 16px; }
-.link[data-bm]:hover .bm-more { opacity: 1; }
-.bm-more:hover { background: rgba(var(--fg), .26); }
 .bm-sorting .link[data-bm] { cursor: grabbing; }
-.bm-sorting .bm-more { display: none; }
 .link.bm-dragging { z-index: 5; opacity: .92; transition: none !important; pointer-events: none; }
 .link.bm-dragging .link-ico { box-shadow: 0 14px 28px -10px rgba(0,0,0,.7); }
 .link.bm-into .link-ico { transform: scale(1.14); box-shadow: 0 0 0 2px var(--accent); color: var(--accent); }
-@container (max-height: 52px) { .bm-more { width: 18px; height: 18px; top: 0; right: 0; } }
+/* «+» — плитка на месте будущей закладки: пунктирная, тише остальных */
+.link.bm-add { cursor: pointer; color: var(--ink-3); }
+.link.bm-add .link-ico { background: none; border: 1.5px dashed rgba(var(--fg), .28); box-shadow: none; color: var(--ink-3); }
+.link.bm-add .link-ico svg { width: 42%; height: 42%; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; }
+.link.bm-add:hover, .link.bm-add:hover .link-ico { color: var(--ink); border-color: rgba(var(--fg), .5); }
+.bm-sorting .bm-add { opacity: .3; }
+/* папка: внутри мини-иконки первых сайтов 2×2, как в iOS */
+/* отступы в px: проценты у padding считаются от ширины плитки, а не значка — иконки сжимались в точку */
+.link-ico.bm-folder-ico { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 3px; padding: 7px; place-items: stretch; box-sizing: border-box; }
+.link-ico.bm-folder-ico > span { width: 100%; aspect-ratio: 1; display: grid; place-items: center; overflow: hidden; border-radius: 22%; }
+.link-ico.bm-folder-ico img { width: 100%; height: 100%; border-radius: 22%; }
+.link-ico.bm-folder-ico .mono { width: 100%; height: 100%; display: grid; place-items: center; border-radius: 30%; background: rgba(var(--fg), .16); font-size: 8px; }
+.w-links.icons-big .link-folder .link-ico.bm-folder-ico, .w-links.icons-letter .link-folder .link-ico.bm-folder-ico { background: rgba(var(--fg), .1); border: 1px solid var(--line); }
+
+/* окошко папки поверх вкладки (как папка в iOS): раскрывается из плитки, вокруг — затемнение с размытием */
+.fp-overlay {
+  /* окошко живёт в body, а цвета плиток (--fg и производные) заданы только в .w-body — повторяем их здесь (светлые: фон окошка тёмный) */
+  --fg: 244, 244, 245;
+  --ink: rgb(var(--fg)); --ink-2: rgba(var(--fg), .66); --ink-3: rgba(var(--fg), .42);
+  --line: rgba(var(--fg), .10); --line-2: rgba(var(--fg), .18);
+  position: fixed; inset: 0; z-index: 65; display: grid; place-items: center; padding: 24px;
+  background: rgba(10, 10, 12, .28); backdrop-filter: blur(10px);
+  opacity: 0; transition: opacity .2s;
+}
+.fp-overlay.open { opacity: 1; }
+.fp-panel {
+  max-width: 100%; max-height: min(78vh, 680px); display: flex; flex-direction: column; overflow: hidden;
+  padding: 16px 14px 14px; border-radius: 28px;
+  background: rgba(30, 30, 32, .72); border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(30px) saturate(1.4);
+  box-shadow: 0 40px 100px -20px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.08);
+  transform: scale(.35); opacity: 0; transition: transform .28s var(--ease), opacity .2s;
+}
+.fp-overlay.open .fp-panel { transform: none; opacity: 1; }
+.fp-head { display: flex; align-items: center; gap: 6px; padding: 0 8px 10px; }
+.fp-back { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 9px; display: grid; place-items: center; background: rgba(255,255,255,.08); color: var(--ink); flex: none; }
+.fp-back[hidden] { display: none; }
+.fp-back svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.fp-back:hover { background: rgba(255,255,255,.16); }
+.fp-title { font-size: 19px; font-weight: 800; letter-spacing: -.01em; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fp-panel .fp-grid { flex: 1 1 auto; grid-template-columns: repeat(var(--cols, 3), 92px); justify-content: start; align-content: start; padding: 4px; gap: 10px 6px; overflow-y: auto; }
+.fp-panel .fp-grid .link-ico { width: 52px; height: 52px; }
+.fp-panel .fp-grid .link { color: var(--ink-2); }
+
+/* дерево всех закладок */
+.bm-pop.bm-tree { width: 320px; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.bmt-head { padding: 12px 14px 8px; font-size: 13px; font-weight: 800; color: var(--ink); border-bottom: 1px solid var(--line-2); }
+.bmt-list { padding: 6px; overflow-y: auto; max-height: min(70vh, 560px); }
+.bmt-chev { flex: none; width: 14px; height: 14px; display: grid; place-items: center; margin-right: -4px; color: var(--ink-3); transition: transform .15s; }
+.bmt-chev svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.bm-folder.open .bmt-chev { transform: rotate(90deg); }
+.bmt-count { margin-left: auto; padding-left: 8px; font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+.bm-tree-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* маленькое меню у курсора (правка закладок) */
 .pop-menu {

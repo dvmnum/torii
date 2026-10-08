@@ -83,7 +83,7 @@ const Bookmarks = {
       onSubmit: (v) => chrome.bookmarks.update(n.id, n.url ? { title: v.title.trim(), url: normalizeUrl(v.url) } : { title: v.title.trim() }),
     });
   },
-  add(ctx, folder) {
+  add(ctx, folder, parentId = Bookmarks.barId) {
     ctx.modal({
       title: folder ? 'Новая папка' : 'Новая закладка',
       fields: folder
@@ -91,7 +91,6 @@ const Bookmarks = {
         : [{ key: 'url', label: 'Адрес', type: 'text', placeholder: 'example.com', required: true }, { key: 'title', label: 'Название', type: 'text', placeholder: 'необязательно' }],
       submit: 'Добавить',
       onSubmit: (v) => {
-        const parentId = Bookmarks.barId;
         if (folder) return chrome.bookmarks.create({ parentId, title: v.title.trim() });
         const url = normalizeUrl(v.url);
         chrome.bookmarks.create({ parentId, url, title: v.title.trim() || hostOf(url) });
@@ -118,7 +117,9 @@ const Bookmarks = {
     const made = await chrome.bookmarks.create({ parentId, index, title: n.title, ...(n.url ? { url: n.url } : {}) });
     for (const c of n.children || []) await Bookmarks.restore(c, made.id);
   },
-  // меню для закладки или папки (правый клик или «⋯»)
+  // новый порядок внутри папки. Chrome при переносе вниз в той же папке считает индекс «до удаления» — поэтому +1; Firefox — итоговое место
+  moveTo: (id, parentId, from, to) => chrome.bookmarks.move(id, { parentId, index: to > from && !IS_FIREFOX ? to + 1 : to }),
+  // меню для закладки или папки (правый клик)
   menu(n, x, y, ctx, newTab) {
     const open = () => chrome.tabs?.create ? chrome.tabs.create({ url: n.url }) : window.open(n.url, '_blank', 'noopener');
     popMenu(x, y, n.url ? [
@@ -158,9 +159,8 @@ function popMenu(x, y, items) {
 }
 
 // перетаскивание закладок мышью: остальные расступаются на лету, брошенная на папку — уходит внутрь.
-// onMove(id, from, to) — новый порядок в строке, onInto(id, folderId) — в папку
-const DOTS_SVG = '<svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18" cy="12" r="1.6" fill="currentColor"/></svg>';
-function bmSortable(wrap, { list, onMove, onInto }) {
+// onMove(id, from, to) — новый порядок, onInto(id, folderId) — в папку, onStart — начали тянуть
+function bmSortable(wrap, { list = () => false, onStart, onMove, onInto }) {
   let st = null, quietUntil = 0;
   // после перетаскивания не открываем ссылку/папку, на которой отпустили
   wrap.addEventListener('click', (e) => { if (Date.now() < quietUntil) { e.preventDefault(); e.stopPropagation(); } }, true);
@@ -168,7 +168,7 @@ function bmSortable(wrap, { list, onMove, onInto }) {
   const items = () => [...wrap.querySelectorAll(':scope > [data-bm]')];
   wrap.addEventListener('pointerdown', (e) => {
     const el = e.target.closest('[data-bm]');
-    if (e.button !== 0 || !el || e.target.closest('.bm-more') || document.body.classList.contains('editing')) return;
+    if (e.button !== 0 || !el || document.body.classList.contains('editing')) return;
     st = { el, x0: e.clientX, y0: e.clientY, on: false, from: items().indexOf(el), ol: el.offsetLeft, ot: el.offsetTop, into: null };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -192,22 +192,29 @@ function bmSortable(wrap, { list, onMove, onInto }) {
     }
   };
   const setInto = (f) => { if (st.into !== f) { st.into?.classList.remove('bm-into'); f?.classList.add('bm-into'); st.into = f; } };
+  // место плитки в раскладке — без transform: пока соседи доезжают (FLIP), их экранные координаты врут,
+  // и проверка «над кем курсор» дёргала порядок туда-обратно
+  const spot = (s) => {
+    const p = s.offsetParent.getBoundingClientRect();
+    const left = p.left + s.offsetLeft - (s.offsetParent.scrollLeft || 0), top = p.top + s.offsetTop - (s.offsetParent.scrollTop || 0);
+    return { left, top, width: s.offsetWidth, height: s.offsetHeight, right: left + s.offsetWidth, bottom: top + s.offsetHeight };
+  };
   function move(e) {
     const { el } = st;
     if (!st.on) {
       if (Math.hypot(e.clientX - st.x0, e.clientY - st.y0) < 6) return;
       st.on = true;
-      closeBmPop?.();
+      onStart?.();
       el.classList.add('bm-dragging');
       wrap.classList.add('bm-sorting');
     }
     const over = items().find(s => {
       if (s === el) return false;
-      const r = s.getBoundingClientRect();
+      const r = spot(s);
       return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
     });
     if (over) {
-      const r = over.getBoundingClientRect();
+      const r = spot(over);
       const rx = (e.clientX - r.left) / r.width, ry = (e.clientY - r.top) / r.height;
       // середина папки — «внутрь», края — «рядом»
       const center = list() ? ry > .25 && ry < .75 : rx > .25 && rx < .75;
@@ -240,43 +247,159 @@ function bmSortable(wrap, { list, onMove, onInto }) {
 }
 const FOLDER_SVG = '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor" fill-opacity=".2"/><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 
-// содержимое папки — всплывающим списком у кнопки; вложенные папки раскрываются внутри
-let closeBmPop = null;
-// onMenu(n, x, y) — меню закладки по правому клику (правка, удаление)
-function openBookmarkFolder(anchor, node, newTab, onMenu) {
-  closeBmPop?.();
-  const ctxMenu = (n) => onMenu ? (e) => { e.preventDefault(); close(); onMenu(n, e.clientX, e.clientY); } : null;
-  const item = (n) => n.url
-    ? h('a', { class: 'bm-item', href: n.url, target: newTab ? '_blank' : null, rel: 'noopener', title: n.url, oncontextmenu: ctxMenu(n) },
-      h('span', { class: 'bm-ico' }, favicon(n.url, n.title, 32)), h('span', { class: 'bm-title', translate: 'no' }, n.title || hostOf(n.url)))
-    : (() => {
-      const sub = h('div', { class: 'bm-sub', hidden: true }, (n.children || []).map(item));
-      const btn = h('button', { type: 'button', class: 'bm-item bm-folder', oncontextmenu: ctxMenu(n), onclick: () => { sub.hidden = !sub.hidden; btn.classList.toggle('open', !sub.hidden); } },
-        h('span', { class: 'bm-ico', html: FOLDER_SVG }), h('span', { class: 'bm-title', translate: 'no' }, n.title || 'Папка'));
-      return h('div', {}, btn, sub);
-    })();
-  const pop = h('div', { class: 'bm-pop' }, (node.children || []).length ? node.children.map(item) : h('div', { class: 'w-muted bm-empty' }, 'Папка пустая'));
-  document.body.append(pop);
-  const a = anchor.getBoundingClientRect();
-  const W = pop.offsetWidth, H = Math.min(pop.offsetHeight, innerHeight - 24);
-  pop.style.left = Math.min(innerWidth - W - 12, Math.max(12, a.left)) + 'px';
-  pop.style.top = (a.bottom + 8 + H < innerHeight ? a.bottom + 8 : Math.max(12, a.top - 8 - H)) + 'px';
-  requestAnimationFrame(() => pop.classList.add('open'));
-  const at0 = a.top;
-  const onDown = (e) => { if (!pop.contains(e.target) && !anchor.contains(e.target)) close(); };
-  const onKey = (e) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); close(); } };
-  const onScroll = (e) => { if (!pop.contains(e.target) && Math.abs(anchor.getBoundingClientRect().top - at0) > 2) close(); };
+const PLUS_SVG = '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>';
+const TREE_SVG = '<svg viewBox="0 0 24 24"><path d="M4 5h6M4 5v14M4 12h5M4 19h5"/><rect x="11" y="3" width="9" height="4" rx="1.5"/><rect x="11" y="10" width="9" height="4" rx="1.5"/><rect x="11" y="17" width="9" height="4" rx="1.5"/></svg>';
+const BACK_SVG = '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>';
+const CHEV_SVG = '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>';
+// что-то из закладок открыто поверх (папка, дерево, меню, модалка) — Esc и клик мимо сначала для них
+const bmUiOpen = () => !!(closePopMenu || document.querySelector('#modal.open'));
+const bmUiTarget = (t) => !!t.closest?.('.pop-menu, #modal, .toast');
+
+// плитка закладки или папки; у папки вместо значка — мини-иконки первых сайтов внутри, как в iOS
+function bmTile(n, view, { onMenu, onFolder }) {
+  let el;
+  if (n.url) el = linkEl(n, view);
+  else {
+    const kids = (n.children || []).filter(c => c.url).slice(0, 4);
+    const ico = kids.length
+      ? h('span', { class: 'link-ico bm-folder-ico' }, kids.map(c => h('span', {}, favicon(c.url, c.title, 32))))
+      : h('span', { class: 'link-ico', html: FOLDER_SVG });
+    el = h('button', { type: 'button', class: 'link link-folder', title: n.title, onclick: () => onFolder(n, el) },
+      ico, h('span', { class: 'link-title', translate: 'no' }, n.title || 'Папка'));
+  }
+  el.dataset.bm = n.id;
+  if (n.url) el.dataset.url = '1';
+  el.draggable = false;
+  el.addEventListener('contextmenu', (e) => {
+    if (document.body.classList.contains('editing')) return;
+    e.preventDefault();
+    onMenu(n, e.clientX, e.clientY);
+  });
+  return el;
+}
+// «+» — плитка на месте будущей закладки
+function bmAddTile(ctx, parentId) {
+  const b = h('button', {
+    type: 'button', class: 'link bm-add', title: 'Добавить закладку или папку',
+    onclick: () => { const r = b.getBoundingClientRect(); popMenu(r.left, r.bottom + 4, [['Закладку', () => Bookmarks.add(ctx, false, parentId())], ['Папку', () => Bookmarks.add(ctx, true, parentId())]]); },
+  }, h('span', { class: 'link-ico', html: PLUS_SVG }), h('span', { class: 'link-title' }, 'Добавить'));
+  return b;
+}
+// пересчитать по событиям закладок (пачкой); → отписка
+function onBookmarksChange(fn) {
+  let t = 0;
+  const later = () => { clearTimeout(t); t = setTimeout(fn, 120); };
+  const evs = ['onCreated', 'onRemoved', 'onChanged', 'onMoved', 'onChildrenReordered'];
+  for (const e of evs) chrome.bookmarks[e]?.addListener(later);
+  return () => { clearTimeout(t); for (const e of evs) chrome.bookmarks[e]?.removeListener(later); };
+}
+
+// папка как в iOS: окошко поверх вкладки с плитками внутри (3–5 в ряд по количеству), вложенные — там же со стрелкой «назад».
+// Внутри — то же: правый клик, перетаскивание, «+». view — оформление плиток виджета, onMenu(n, x, y)
+let closeFolderPop = null;
+function openFolderPop(anchor, folderId, { view, ctx, onMenu }) {
+  closeFolderPop?.();
+  closeBmTree?.();
+  const stack = [folderId];
+  const cur = () => stack.at(-1);
+  const back = h('button', { type: 'button', class: 'fp-back', title: 'Назад', html: BACK_SVG, onclick: () => { stack.pop(); paint(); } });
+  const title = h('div', { class: 'fp-title', translate: 'no' });
+  const grid = h('div', { class: `w-links style-tiles icons-${view.icons || 'glass'} gap-auto fp-grid` });
+  const panel = h('div', { class: 'fp-panel', role: 'dialog' }, h('div', { class: 'fp-head' }, back, title), grid);
+  const ov = h('div', { class: 'fp-overlay' }, panel);
+  ov.addEventListener('mousedown', (e) => { if (e.target === ov) close(); });
+  bmSortable(grid, {
+    onMove: (id, from, to) => Bookmarks.moveTo(id, cur(), from, to),
+    onInto: (id, f) => chrome.bookmarks.move(id, { parentId: f }),
+  });
+  async function paint() {
+    const node = (await chrome.bookmarks.getSubTree(cur()).catch(() => []))[0];
+    if (!node) { if (stack.length > 1) { stack.pop(); return paint(); } return close(); }
+    title.textContent = node.title || 'Папка';
+    back.hidden = stack.length < 2;
+    const kids = node.children || [];
+    const n = kids.length + 1; // + «Добавить»
+    grid.style.setProperty('--cols', n <= 6 ? 3 : n <= 12 ? 4 : 5);
+    grid.replaceChildren(...kids.map(k => bmTile(k, view, { onMenu, onFolder: (f) => { stack.push(f.id); paint(); } })), bmAddTile(ctx, cur));
+  }
+  const off = onBookmarksChange(paint);
+  const onKey = (e) => {
+    if (e.key !== 'Escape' || bmUiOpen()) return;
+    e.stopImmediatePropagation();
+    if (stack.length > 1) { stack.pop(); paint(); } else close();
+  };
+  window.addEventListener('keydown', onKey, true);
+  document.body.append(ov);
+  paint().then(() => {
+    // раскрывается из плитки папки
+    const a = anchor.getBoundingClientRect(), p = panel.getBoundingClientRect();
+    panel.style.transformOrigin = `${a.left + a.width / 2 - p.left}px ${a.top + a.height / 2 - p.top}px`;
+    requestAnimationFrame(() => ov.classList.add('open'));
+  });
   function close() {
+    off();
+    window.removeEventListener('keydown', onKey, true);
+    ov.classList.remove('open');
+    setTimeout(() => ov.remove(), 220);
+    if (closeFolderPop === close) closeFolderPop = null;
+  }
+  closeFolderPop = close;
+}
+
+// все закладки браузера деревом (строка, «Другие», «Мобильные»): раскрытие папок, правый клик — то же меню
+let closeBmTree = null;
+function openBookmarkTree(anchor, { ctx, newTab, onMenu }) {
+  if (closeBmTree) return closeBmTree();
+  closeFolderPop?.();
+  const open = new Set();
+  const list = h('div', { class: 'bmt-list' });
+  const pop = h('div', { class: 'bm-pop bm-tree' }, h('div', { class: 'bmt-head' }, 'Все закладки'), list);
+  const item = (n, top) => {
+    if (n.url) {
+      return h('a', {
+        class: 'bm-item', href: n.url, target: newTab ? '_blank' : null, rel: 'noopener', title: n.url,
+        oncontextmenu: (e) => { e.preventDefault(); onMenu(n, e.clientX, e.clientY); },
+      }, h('span', { class: 'bm-ico' }, favicon(n.url, n.title, 32)), h('span', { class: 'bm-title', translate: 'no' }, n.title || hostOf(n.url)));
+    }
+    const isOpen = open.has(n.id);
+    const btn = h('button', {
+      type: 'button', class: 'bm-item bm-folder' + (isOpen ? ' open' : ''),
+      onclick: () => { isOpen ? open.delete(n.id) : open.add(n.id); paint(); },
+      // корневые папки браузера не переименовать и не удалить
+      oncontextmenu: (e) => { e.preventDefault(); if (!top) onMenu(n, e.clientX, e.clientY); },
+    }, h('span', { class: 'bmt-chev', html: CHEV_SVG }), h('span', { class: 'bm-ico', html: FOLDER_SVG }),
+    h('span', { class: 'bm-title', translate: 'no' }, n.title || 'Папка'), h('span', { class: 'bmt-count' }, String((n.children || []).length)));
+    return h('div', {}, btn, isOpen ? h('div', { class: 'bm-sub' }, (n.children || []).length ? n.children.map(c => item(c)) : h('div', { class: 'w-muted bm-empty' }, 'Папка пустая')) : null);
+  };
+  async function paint() {
+    const [root] = await chrome.bookmarks.getTree();
+    const tops = (root.children || []).filter(c => c.children?.length || c.folderType === 'bookmarks-bar' || c.id === Bookmarks.barId);
+    if (!open.size && !paint.done) { paint.done = true; tops.slice(0, 1).forEach(t => open.add(t.id)); } // строка закладок — раскрыта сразу
+    const st = list.scrollTop;
+    list.replaceChildren(...tops.map(t => item(t, true)));
+    list.scrollTop = st;
+  }
+  const off = onBookmarksChange(paint);
+  document.body.append(pop);
+  const place = () => {
+    const a = anchor.getBoundingClientRect();
+    const W = pop.offsetWidth, H = Math.min(pop.offsetHeight, innerHeight - 24);
+    pop.style.left = Math.min(innerWidth - W - 12, Math.max(12, a.right - W)) + 'px';
+    pop.style.top = (a.bottom + 8 + H < innerHeight ? a.bottom + 8 : Math.max(12, a.top - 8 - H)) + 'px';
+  };
+  paint().then(() => { place(); requestAnimationFrame(() => pop.classList.add('open')); });
+  const onDown = (e) => { if (!pop.contains(e.target) && !anchor.contains(e.target) && !bmUiTarget(e.target)) close(); };
+  const onKey = (e) => { if (e.key === 'Escape' && !bmUiOpen()) { e.stopImmediatePropagation(); close(); } };
+  document.addEventListener('mousedown', onDown, true);
+  window.addEventListener('keydown', onKey, true);
+  function close() {
+    off();
     pop.remove();
     document.removeEventListener('mousedown', onDown, true);
     window.removeEventListener('keydown', onKey, true);
-    window.removeEventListener('scroll', onScroll, true);
-    if (closeBmPop === close) closeBmPop = null;
+    if (closeBmTree === close) closeBmTree = null;
   }
-  document.addEventListener('mousedown', onDown, true);
-  window.addEventListener('keydown', onKey, true);
-  window.addEventListener('scroll', onScroll, true);
-  closeBmPop = close;
+  closeBmTree = close;
 }
 
 function linkTiles(list, data) {
@@ -478,53 +601,25 @@ Object.assign(Widgets, {
       GLASS_SETTING,
     ],
     render(body, data, ctx) {
-      let alive = true, t = 0;
+      let alive = true, off = null;
       const wrap = h('div', { class: `w-links style-${data.style} icons-${data.icons} gap-${data.gap || 'auto'}` });
-      const byId = new Map();
-      const menuAt = (n, x, y) => Bookmarks.menu(n, x, y, ctx, data.newTab);
-      const folderEl = (n) => {
-        const b = h('button', { type: 'button', class: 'link link-folder', title: n.title, onclick: () => openBookmarkFolder(b, n, data.newTab, menuAt) },
-          h('span', { class: 'link-ico', html: FOLDER_SVG }), h('span', { class: 'link-title' }, n.title || 'Папка'));
-        return b;
-      };
-      // плитка + «⋯» в углу (при наведении) и id закладки — для меню и перетаскивания
-      const tile = (n) => {
-        byId.set(n.id, n);
-        const el = n.url ? linkEl(n, data) : folderEl(n);
-        el.dataset.bm = n.id;
-        if (n.url) el.dataset.url = '1';
-        el.draggable = false;
-        el.append(h('button', {
-          type: 'button', class: 'bm-more', title: 'Ещё', tabindex: '-1', html: DOTS_SVG,
-          onclick: (e) => { e.preventDefault(); e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); menuAt(n, r.left, r.bottom + 4); },
-        }));
-        return el;
-      };
+      const onMenu = (n, x, y) => Bookmarks.menu(n, x, y, ctx, data.newTab);
+      const onFolder = (n, el) => openFolderPop(el, n.id, { view: data, ctx, onMenu });
       const paint = () => Bookmarks.bar().then((nodes) => {
         if (!alive) return;
-        byId.clear();
-        wrap.replaceChildren(...nodes.map(tile));
-        if (!nodes.length) wrap.replaceChildren(h('div', { class: 'w-muted' }, 'В строке закладок пока пусто'));
+        wrap.replaceChildren(...nodes.map(n => bmTile(n, data, { onMenu, onFolder })), bmAddTile(ctx, () => Bookmarks.barId));
       });
-      wrap.addEventListener('contextmenu', (e) => {
-        const el = e.target.closest('[data-bm]');
-        if (!el || document.body.classList.contains('editing')) return;
-        e.preventDefault();
-        menuAt(byId.get(el.dataset.bm), e.clientX, e.clientY);
-      });
-      // Chrome считает индекс при переносе вниз в той же папке «до удаления» — поэтому +1; Firefox — итоговое место
       bmSortable(wrap, {
         list: () => data.style === 'list',
-        onMove: (id, from, to) => chrome.bookmarks.move(id, { parentId: Bookmarks.barId, index: to > from && !IS_FIREFOX ? to + 1 : to }),
+        onStart: () => { closeFolderPop?.(); closeBmTree?.(); },
+        onMove: (id, from, to) => Bookmarks.moveTo(id, Bookmarks.barId, from, to),
         onInto: (id, folderId) => chrome.bookmarks.move(id, { parentId: folderId }),
       });
-      const add = h('button', {
-        class: 'w-add', type: 'button', title: 'Добавить закладку или папку', html: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
-        onclick: () => { const r = add.getBoundingClientRect(); popMenu(r.left, r.bottom + 4, [['Закладку', () => Bookmarks.add(ctx, false)], ['Папку', () => Bookmarks.add(ctx, true)]]); },
+      // все закладки деревом — кнопка в углу при наведении
+      const treeBtn = h('button', {
+        class: 'w-add bm-tree-btn', type: 'button', title: 'Все закладки', html: TREE_SVG,
+        onclick: () => openBookmarkTree(treeBtn, { ctx, newTab: data.newTab, onMenu }),
       });
-      // закладки поменяли в браузере — перерисовываемся (пачкой, если правок много)
-      const later = () => { clearTimeout(t); t = setTimeout(paint, 150); };
-      const evs = ['onCreated', 'onRemoved', 'onChanged', 'onMoved', 'onChildrenReordered'];
       Perm.has('bookmarks').then((ok) => {
         if (!alive) return;
         if (!ok) return permGate(body, 'bookmarks', 'Нужен доступ к закладкам — покажу твою строку закладок', ctx);
@@ -532,17 +627,17 @@ Object.assign(Widgets, {
           return body.append(h('div', { class: 'w-empty' }, h('div', { class: 'w-muted' }, 'Доступ есть — обнови вкладку'),
             h('button', { type: 'button', class: 'pill small', onclick: () => location.reload() }, 'Обновить')));
         }
-        body.append(wrap, add);
+        body.append(wrap, treeBtn);
         paint();
-        for (const e of evs) chrome.bookmarks[e]?.addListener(later);
+        off = onBookmarksChange(paint); // закладки поменяли здесь или в браузере — перерисовываемся
       });
       return {
         destroy: () => {
           alive = false;
-          clearTimeout(t);
-          closeBmPop?.();
+          off?.();
+          closeFolderPop?.();
+          closeBmTree?.();
           closePopMenu?.();
-          if (Bookmarks.available()) for (const e of evs) chrome.bookmarks[e]?.removeListener(later);
         },
       };
     },

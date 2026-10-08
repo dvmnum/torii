@@ -43,6 +43,8 @@ const barId = await page.evaluate(async () => {
   const f = await chrome.bookmarks.create({ parentId: bar.id, title: 'Работа' });
   await chrome.bookmarks.create({ parentId: f.id, title: 'Docs', url: 'https://docs.example/' });
   await chrome.bookmarks.create({ parentId: f.id, title: 'Mail', url: 'https://mail.example/' });
+  const sub = await chrome.bookmarks.create({ parentId: f.id, title: 'Архив' });
+  await chrome.bookmarks.create({ parentId: sub.id, title: 'Old', url: 'https://old.example/' });
   await chrome.storage.local.set({
     settings: {},
     widgets: [{ id: 'wb', type: 'bookmarks', data: {} }],
@@ -56,6 +58,10 @@ const W = '.grid-stack-item[gs-id="wb"]';
 const names = () => page.evaluate(async (barId) => (await chrome.bookmarks.getChildren(barId)).map(n => n.title), barId);
 const tiles = () => page.$$eval(`${W} [data-bm] .link-title`, els => els.map(e => e.textContent));
 check((await tiles()).join() === 'Alpha,Beta,Gamma,Delta,Работа', `видна строка закладок (${await tiles()})`);
+check(await page.locator(`${W} .w-links > .link:last-child.bm-add`).count() === 1 && await page.locator(`${W} .bm-more`).count() === 0, '«+» — последняя плитка, «⋯» на плитках нет');
+const mini = await page.$$eval(`${W} [data-bm] .bm-folder-ico > span`, els => els.map(e => { const r = e.getBoundingClientRect(), c = e.firstElementChild?.getBoundingClientRect(); return [Math.round(r.width), Math.round(c?.width || 0), e.firstElementChild?.tagName, e.textContent]; }));
+check(mini.length === 2 && mini.every(([w, cw]) => w >= 8 && cw >= 6), `папка: в значке мини-иконки сайтов внутри (${JSON.stringify(mini)})`);
+await page.locator(W).screenshot({ path: `${out}/bm-0-bar.png` });
 
 // правый клик → меню → «Изменить»
 await page.click(`${W} [data-bm]:nth-child(1)`, { button: 'right' });
@@ -70,9 +76,8 @@ await page.click('#modal-form button[type=submit]');
 await page.waitForTimeout(500);
 check((await names())[0] === 'Alpha 2' && (await tiles())[0] === 'Alpha 2', 'изменить: название поменялось и в браузере, и на вкладке');
 
-// «⋯» при наведении → удалить → «Вернуть»
-await page.hover(`${W} [data-bm]:nth-child(2)`);
-await page.click(`${W} [data-bm]:nth-child(2) .bm-more`);
+// удалить → «Вернуть»
+await page.click(`${W} [data-bm]:nth-child(2)`, { button: 'right' });
 await page.click('.pop-item:has-text("Удалить")');
 await page.waitForTimeout(500);
 check((await names()).join() === 'Alpha 2,Gamma,Delta,Работа', 'удалить: закладка ушла из браузера');
@@ -114,8 +119,7 @@ const inFolder = await page.evaluate(async (barId) => {
 check(inFolder.includes('Delta') && !(await names()).includes('Delta'), `в папку: закладка внутри (${inFolder})`);
 
 // «+» → «Закладку»
-await page.hover(W);
-await page.click(`${W} .w-add`);
+await page.click(`${W} .bm-add`);
 await page.click('.pop-item:has-text("Закладку")');
 await page.waitForTimeout(250);
 await page.fill('#modal-form input >> nth=0', 'example.org');
@@ -123,11 +127,57 @@ await page.click('#modal-form button[type=submit]');
 await page.waitForTimeout(500);
 check((await names()).at(-1) === 'example.org', `добавить: новая закладка в конце (${await names()})`);
 
+// папка как в iOS: окошко с плитками, вложенная — там же со стрелкой «назад», внутри свой «+»
+await page.click(`${W} [data-bm]:has-text("Работа")`);
+await page.waitForTimeout(450);
+const fp = await page.evaluate(() => {
+  const g = document.querySelector('.fp-overlay.open .fp-grid');
+  return g && { title: document.querySelector('.fp-title').textContent, tiles: [...g.querySelectorAll('[data-bm] .link-title')].map(e => e.textContent),
+    cols: getComputedStyle(g).gridTemplateColumns.split(' ').length, add: !!g.querySelector('.bm-add'), back: !document.querySelector('.fp-back').hidden };
+});
+check(fp && fp.title === 'Работа' && fp.tiles.join() === 'Docs,Mail,Архив,Delta' && fp.cols === 3 && fp.add && !fp.back, `папка: окошко с плитками (${JSON.stringify(fp)})`);
+await page.screenshot({ path: `${out}/bm-4-folder.png` });
+const addLook = await page.$eval('.fp-grid .bm-add .link-ico', e => { const s = getComputedStyle(e); return `${s.borderTopStyle} ${s.borderTopWidth}`; });
+check(/dashed/.test(addLook), `папка: «+» внутри — пунктирная плитка (${addLook})`);
+await page.click('.fp-grid [data-bm]:has-text("Архив")');
+await page.waitForTimeout(300);
+check((await page.textContent('.fp-title')) === 'Архив' && await page.locator('.fp-back:visible').count() === 1, 'папка: вложенная открылась там же, есть «назад»');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(250);
+check((await page.textContent('.fp-title')) === 'Работа', 'папка: Esc — на уровень выше');
+// перетаскивание внутри окошка: Docs — в конец
+const fb = async (t) => page.locator(`.fp-grid [data-bm]:has-text("${t}")`).boundingBox();
+const dd = await fb('Docs'), dl = await fb('Delta');
+await page.mouse.move(dd.x + dd.width / 2, dd.y + dd.height / 2);
+await page.mouse.down();
+await page.mouse.move(dd.x + dd.width / 2 + 15, dd.y + dd.height / 2, { steps: 3 });
+await page.mouse.move(dl.x + dl.width * .9, dl.y + dl.height / 2, { steps: 12 });
+await page.mouse.up();
+await page.waitForTimeout(600);
+const inF = await page.$$eval('.fp-grid [data-bm] .link-title', els => els.map(e => e.textContent));
+check(inF.join() === 'Mail,Архив,Delta,Docs', `папка: порядок внутри меняется перетаскиванием (${inF})`);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+check(await page.locator('.fp-overlay').count() === 0, 'папка: Esc закрывает окошко');
+
+// все закладки деревом
+await page.hover(W);
+await page.click(`${W} .bm-tree-btn`);
+await page.waitForTimeout(350);
+const tree = await page.$$eval('.bm-tree .bm-title', els => els.map(e => e.textContent));
+check(tree.includes('Работа') && tree.includes('example.org'), `дерево: строка закладок раскрыта (${tree.slice(0, 8)})`);
+await page.click('.bm-tree .bm-folder:has-text("Работа")');
+await page.waitForTimeout(200);
+check((await page.$$eval('.bm-tree .bm-title', els => els.map(e => e.textContent))).includes('Docs'), 'дерево: папка раскрывается');
+await page.screenshot({ path: `${out}/bm-5-tree.png` });
+await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
+
 // папку с содержимым — только после подтверждения, и её можно вернуть целиком
 await page.click(`${W} [data-bm]:has-text("Работа")`, { button: 'right' });
 await page.click('.pop-item:has-text("Удалить папку")');
 await page.waitForTimeout(250);
-check(await page.locator('#modal.open').count() === 1 && /Внутри: 3/.test(await page.textContent('#modal')), 'папка: спрашивает подтверждение');
+check(await page.locator('#modal.open').count() === 1 && /Внутри: 5/.test(await page.textContent('#modal')), 'папка: спрашивает подтверждение');
 await page.screenshot({ path: `${out}/bm-3-confirm.png` });
 await page.click('#modal-form button[type=submit]');
 await page.waitForTimeout(500);
@@ -138,14 +188,17 @@ const back = await page.evaluate(async (barId) => {
   const f = (await chrome.bookmarks.getChildren(barId)).find(n => n.title === 'Работа');
   return f ? (await chrome.bookmarks.getChildren(f.id)).map(n => n.title).join() : '';
 }, barId);
-check(back === 'Docs,Mail,Delta', `папка: вернулась со всем содержимым (${back})`);
+check(back === 'Mail,Архив,Delta,Docs', `папка: вернулась со всем содержимым (${back})`);
 
 // в раскрытой папке — то же меню по правому клику
 await page.click(`${W} [data-bm]:has-text("Работа")`);
-await page.waitForTimeout(250);
-await page.click('.bm-pop .bm-item:has-text("Docs")', { button: 'right' });
+await page.waitForTimeout(450);
+await page.click('.fp-grid [data-bm]:has-text("Docs")', { button: 'right' });
 await page.waitForTimeout(200);
 check(await page.locator('.pop-menu .pop-item:has-text("Изменить")').count() === 1, 'папка: меню и для закладок внутри');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(150);
+check(await page.locator('.fp-overlay.open').count() === 1, 'папка: Esc сначала закрывает меню, а не окошко');
 await page.keyboard.press('Escape');
 
 console.log('errors:', errors.length ? errors.join('\n') : 'none');
