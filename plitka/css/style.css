@@ -672,7 +672,7 @@ body.no-motion .clock-time .colon { animation: none; }
 .w-muted { color: var(--ink-3); font-size: clamp(11px, 11cqh, 14px); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* низкий блок: сначала прячем описание, потом и третью строку */
 @container (max-height: 90px) { .wx-meta .wx-desc { display: none; } }
-@container (max-height: 56px) { .wx-meta .wx-range { display: none; } }
+@container (max-height: 44px) { .wx-meta .wx-range { display: none; } }
 @container (max-width: 200px) { .wx-meta { display: none; } }
 /* старая погода обновляется — текст и значки переливаются, как скелетон; обновить не вышло — приглушено */
 .w-weather > * { transition: opacity .4s, filter .4s; }
@@ -683,10 +683,18 @@ body.no-motion .clock-time .colon { animation: none; }
 @keyframes wx-pulse-bg { 50% { opacity: .04; } }
 .w-weather.is-updating :is(.wx-temp, .wx-place, .wx-desc, .wx-sub, .wx-range, .wx-dname, .wx-dt, .wx-pop, .wx-stat b, .wx-stat span) {
   color: transparent; -webkit-background-clip: text; background-clip: text;
-  background-image: linear-gradient(100deg, rgba(var(--fg), .3) 35%, rgba(var(--fg), .95) 50%, rgba(var(--fg), .3) 65%); background-size: 250% 100%;
+  background-image: linear-gradient(100deg, rgba(var(--fg), .26) 35%, rgba(var(--fg), .58) 50%, rgba(var(--fg), .26) 65%); background-size: 250% 100%;
   animation: wx-shimmer 1.6s linear infinite;
 }
 .w-weather.is-updating .wx-dt span { color: transparent; }
+/* пока обновляется — всё серее, а вместо значка погоды кружок загрузки */
+.w-weather.is-updating { filter: saturate(.3); }
+.w-weather.is-updating .wx-ico { animation: none; position: relative; }
+.w-weather.is-updating .wx-ico svg { visibility: hidden; }
+.w-weather.is-updating .wx-ico::after {
+  content: ''; position: absolute; inset: 0; margin: auto; width: .72em; height: .72em; border-radius: 50%; box-sizing: border-box;
+  border: max(1.5px, .08em) solid rgba(var(--fg), .18); border-top-color: rgba(var(--fg), .6); animation: spin .8s linear infinite;
+}
 .w-weather.is-updating :is(.wx-ico, .wx-dico) { animation: wx-pulse 1.6s ease-in-out infinite; }
 .w-weather.is-updating .wx-bg { animation: wx-pulse-bg 1.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .w-weather.is-updating * { animation: none !important; } }
@@ -700,9 +708,15 @@ body.no-motion .clock-time .colon { animation: none; }
 .is-now .wx-cond .wx-ico { font-size: min(30cqh, 12cqw); }
 .is-now .wx-cond .wx-desc { font-size: clamp(10px, 9cqh, 12px); font-weight: 600; color: var(--ink-2); max-width: 22cqw; }
 .w-weather.is-now.side-center .wx-cond, .w-weather.is-now.side-right .wx-cond { margin-left: 0; }
-/* низкий блок (в одну клетку): без подписей — градусы, город, значок */
-@container (max-height: 96px) { .is-now .wx-range, .is-now .wx-cond .wx-desc { display: none; } .is-now .wx-cond .wx-ico { font-size: min(52cqh, 12cqw); } }
-@container (max-width: 300px) { .is-now .wx-cond .wx-desc { display: none; } }
+/* низкий блок (в одну клетку): «макс / мин» остаётся под городом, подпись «Дождь» — рядом со значком, а не под ним */
+@container (max-height: 96px) {
+  .is-now .wx-cond { flex-direction: row; gap: 6px; }
+  .is-now .wx-cond .wx-ico { font-size: min(46cqh, 11cqw); }
+  .is-now .wx-place { font-size: clamp(13px, 26cqh, 20px); }
+}
+/* прячем, только когда места нет совсем: сначала подпись у значка, потом «макс / мин», потом город */
+@container (max-width: 250px) { .is-now .wx-cond .wx-desc { display: none; } }
+@container (max-height: 44px) { .is-now .wx-range { display: none; } }
 
 /* неделя */
 .w-weather.is-week { justify-content: space-between; gap: 2px; padding: 0 clamp(8px, 4cqw, 18px); }
