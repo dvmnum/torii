@@ -58,7 +58,14 @@ const W = '.grid-stack-item[gs-id="wb"]';
 const names = () => page.evaluate(async (barId) => (await chrome.bookmarks.getChildren(barId)).map(n => n.title), barId);
 const tiles = () => page.$$eval(`${W} [data-bm] .link-title`, els => els.map(e => e.textContent));
 check((await tiles()).join() === 'Alpha,Beta,Gamma,Delta,Работа', `видна строка закладок (${await tiles()})`);
-check(await page.locator(`${W} .w-links > .link:last-child.bm-add`).count() === 1 && await page.locator(`${W} .bm-more`).count() === 0, '«+» — последняя плитка, «⋯» на плитках нет');
+check(await page.locator(`${W} .w-links > .link:last-child.bm-add`).count() === 1 && await page.locator(`${W} .bm-more, ${W} .bm-tree-btn`).count() === 0, '«+» — последняя плитка; ни «⋯», ни кнопки в углу');
+await page.mouse.move(5, 5);
+await page.waitForTimeout(300);
+const addOp = async () => +(await page.$eval(`${W} .bm-add`, e => getComputedStyle(e).opacity));
+const hidden = await addOp();
+await page.hover(`${W} [data-bm]:nth-child(1)`);
+await page.waitForTimeout(300);
+check(hidden === 0 && (await addOp()) === 1, `«+» виден только при наведении на блок (${hidden} → ${await addOp()})`);
 const mini = await page.$$eval(`${W} [data-bm] .bm-folder-ico > span`, els => els.map(e => { const r = e.getBoundingClientRect(), c = e.firstElementChild?.getBoundingClientRect(); return [Math.round(r.width), Math.round(c?.width || 0), e.firstElementChild?.tagName, e.textContent]; }));
 check(mini.length === 2 && mini.every(([w, cw]) => w >= 8 && cw >= 6), `папка: в значке мини-иконки сайтов внутри (${JSON.stringify(mini)})`);
 await page.locator(W).screenshot({ path: `${out}/bm-0-bar.png` });
@@ -160,9 +167,16 @@ await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
 check(await page.locator('.fp-overlay').count() === 0, 'папка: Esc закрывает окошко');
 
-// все закладки деревом
+// все закладки деревом: правый клик по пустому месту блока, и из меню «+»
+const wb = await page.locator(`${W} .w-links`).boundingBox();
+await page.mouse.click(wb.x + 6, wb.y + 6, { button: 'right' });
+await page.waitForTimeout(200);
+const emptyMenu = await page.$$eval('.pop-menu .pop-item', els => els.map(e => e.textContent));
+check(emptyMenu.join() === 'Добавить закладку,Добавить папку,Все закладки', `пустое место: своё меню (${emptyMenu})`);
+await page.keyboard.press('Escape');
 await page.hover(W);
-await page.click(`${W} .bm-tree-btn`);
+await page.click(`${W} .bm-add`);
+await page.click('.pop-item:has-text("Все закладки")');
 await page.waitForTimeout(350);
 const tree = await page.$$eval('.bm-tree .bm-title', els => els.map(e => e.textContent));
 check(tree.includes('Работа') && tree.includes('example.org'), `дерево: строка закладок раскрыта (${tree.slice(0, 8)})`);

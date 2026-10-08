@@ -96,7 +96,7 @@ const I18N = (() => {
     'Слово дня': 'Word of the day', 'Картинка': 'Picture', 'Панель закладок': 'Bookmarks bar',
     'Добавить закладку или папку': 'Add a bookmark or folder', 'Закладка': 'Bookmark', 'Закладка удалена': 'Bookmark deleted', 'Закладку': 'Bookmark', 'Папку': 'Folder',
     'Изменить': 'Edit', 'Новая закладка': 'New bookmark', 'Новая папка': 'New folder', 'Открыть в новой вкладке': 'Open in new tab', 'Открыть здесь': 'Open here',
-    'Папка удалена': 'Folder deleted', 'Сохранить': 'Save', 'Удалить папку': 'Delete folder', 'Все закладки': 'All bookmarks', 'Назад': 'Back',
+    'Папка удалена': 'Folder deleted', 'Сохранить': 'Save', 'Удалить папку': 'Delete folder', 'Все закладки': 'All bookmarks', 'Назад': 'Back', 'Добавить закладку': 'Add bookmark', 'Добавить папку': 'Add folder',
     'Цифровые или стрелочные, приветствие': 'Digital or analog, with greeting', 'Фокус и перерывы по таймеру': 'Focus and breaks on a timer',
     'Сколько осталось до события': 'Time left until an event', 'Список дел с галочками': 'Tasks with checkboxes', 'Быстрые заметки, сохраняются сами': 'Quick notes, saved automatically',
     'Отмечай привычки каждый день': 'Track habits daily', 'Поисковики и ИИ на выбор, калькулятор': 'Search engines and AI, a calculator',
