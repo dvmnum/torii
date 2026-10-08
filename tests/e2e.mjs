@@ -1056,8 +1056,22 @@ check(await page.locator('[gs-id="m-links"] .link').count() === 2, 'правый
 // свои иконки: цвет и картинка (выбор цвета/файла — системные окна, ставим напрямую), видны сразу
 await page.evaluate(() => LinkIcons.set('https://github.com', { color: '#ff3366' }));
 await page.waitForTimeout(300);
+const withIco = await page.$eval('[gs-id="m-links"] .link[data-i="0"] .link-ico', e => e.classList.contains('own-color') && e.childElementCount === 1 && getComputedStyle(e).backgroundColor);
+check(withIco === 'rgb(255, 51, 102)', `своя иконка: цвет — заливка, значок сайта поверх (${withIco})`);
+await page.evaluate(() => LinkIcons.set('https://github.com', { color: '#ff3366', noIcon: true }));
+await page.waitForTimeout(300);
 const ownColor = await page.$eval('[gs-id="m-links"] .link[data-i="0"] .link-ico', e => e.classList.contains('own-color') && !e.childElementCount && !e.textContent && getComputedStyle(e).backgroundColor);
-check(ownColor === 'rgb(255, 51, 102)', `своя иконка: цвет — сплошная заливка без значка (${ownColor})`);
+check(ownColor === 'rgb(255, 51, 102)', `своя иконка: «без значка» — сплошная заливка (${ownColor})`);
+// галочка в окне цвета сохраняет выбор
+await menuOf('[gs-id="m-links"] .link[data-i="0"]');
+await pick('Своя иконка: цвет…');
+check(await page.isChecked('#modal-form .field-toggle input'), 'своя иконка: галочка «без значка» в окне цвета отмечена');
+await page.click('#modal-form .field-toggle');
+await page.click('#modal-form button[type=submit]');
+await page.waitForTimeout(300);
+check(await page.locator('[gs-id="m-links"] .link[data-i="0"] .own-color > *').count() === 1, 'своя иконка: сняли галочку — значок вернулся на цвет');
+await page.evaluate(() => LinkIcons.set('https://github.com', { color: '#ff3366', noIcon: true }));
+await page.waitForTimeout(300);
 await page.locator('[gs-id="m-links"]').screenshot({ path: `${out}/71a-own-color.png` });
 // «Сбросить» в окне цвета — иконка сайта возвращается
 await menuOf('[gs-id="m-links"] .link[data-i="0"]');

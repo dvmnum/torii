@@ -227,7 +227,7 @@ const LinkIcons = {
     const out = {};
     for (const [k, v] of Object.entries(m && typeof m === 'object' ? m : {})) {
       if (typeof v?.img === 'string' && v.img.startsWith('data:image/') && v.img.length < 400000) out[k] = { img: v.img };
-      else if (/^#[0-9a-f]{6}$/i.test(v?.color || '')) out[k] = { color: v.color };
+      else if (/^#[0-9a-f]{6}$/i.test(v?.color || '')) out[k] = { color: v.color, ...(v.noIcon ? { noIcon: true } : {}) };
     }
     return out;
   },
@@ -261,10 +261,13 @@ const LinkIcons = {
       ['Своя иконка: картинка…', () => LinkIcons.pickImage(url)],
       ['Своя иконка: цвет…', () => ctx.modal({
         title: 'Цвет иконки',
-        fields: [{ key: 'color', label: 'Цвет', type: 'color', value: cur?.color || (/^#[0-9a-f]{6}$/i.test(brandColor(url)) ? brandColor(url) : '#8a7cff') }],
+        fields: [
+          { key: 'color', label: 'Цвет', type: 'color', value: cur?.color || (/^#[0-9a-f]{6}$/i.test(brandColor(url)) ? brandColor(url) : '#8a7cff') },
+          { key: 'noIcon', label: 'Без значка — только цвет', type: 'toggle', value: !!cur?.noIcon },
+        ],
         submit: 'Готово',
         // «Сбросить» в поле цвета — вернуть иконку сайта
-        onSubmit: (v) => LinkIcons.set(url, v.color ? { color: v.color } : null),
+        onSubmit: (v) => LinkIcons.set(url, v.color ? { color: v.color, ...(v.noIcon ? { noIcon: true } : {}) } : null),
       })],
       ...(cur ? [['Вернуть иконку сайта', () => LinkIcons.set(url, null)]] : []),
     ];
@@ -281,9 +284,9 @@ function linkEl(l, { newTab = false, icons = 'glass' } = {}) {
   const title = l.title || hostOf(l.url);
   const letter = (title.trim()[0] || '?').toUpperCase();
   const own = LinkIcons.get(l.url);
-  // своя: картинка на всю плитку или сплошной цвет без значка
+  // своя: картинка на всю плитку или сплошной цвет — со значком сайта поверх или без (noIcon)
   const ico = own?.img ? h('img', { src: own.img, alt: '' })
-    : own?.color ? null
+    : own?.noIcon ? null
     : icons === 'letter' ? h('span', { class: 'mono' }, letter)
     : favicon(l.url, l.title, icons === 'big' ? 128 : 64);
   const a = h('a', { class: 'link', href: l.url, title, target: newTab ? '_blank' : null, rel: 'noopener', style: `--brand:${own?.color || brandColor(l.url)}` },
