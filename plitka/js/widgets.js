@@ -307,7 +307,7 @@ const Widgets = {
     size: { w: 10, h: 4 }, min: { w: 3, h: 2 },
     defaults: { glass: false, style: 'digital', format: '24', seconds: false, greeting: true, date: true, align: 'middle-center' },
     settings: [
-      { key: 'style', label: 'Вид', type: 'select', options: [['digital', 'Цифровые'], ['analog', 'Стрелочные']] },
+      { key: 'style', label: 'Вид', type: 'select', options: [['digital', 'Цифровые'], ['duo', 'Дуо'], ['analog', 'Стрелочные']] },
       { key: 'format', label: 'Формат', type: 'select', options: [['24', '24 часа'], ['12', '12 часов']] },
       { key: 'seconds', label: 'Секунды', type: 'toggle' },
       { key: 'greeting', label: 'Приветствие', type: 'toggle' },
@@ -318,15 +318,25 @@ const Widgets = {
     render(body, data, ctx) {
       data.align = normAlign(data.align);
       const [v, hz] = data.align.split('-');
-      const analog = data.style === 'analog';
-      const time = analog ? analogFace(data.seconds) : h('div', { class: 'clock-time' });
+      const analog = data.style === 'analog', duo = data.style === 'duo';
+      // «Дуо»: часы сверху жирно, минуты под ними тонко
+      const dh = h('span', { class: 'dh' }), dm = h('span', { class: 'dm' });
+      const time = analog ? analogFace(data.seconds) : duo ? h('div', { class: 'clock-duo' }, dh, dm) : h('div', { class: 'clock-time' });
       const sub = h('div', { class: 'clock-sub' });
-      body.append(h('div', { class: `w-clock v-${v} h-${hz}` + (analog ? ' is-analog' : '') }, time, sub));
+      body.append(h('div', { class: `w-clock v-${v} h-${hz}` + (analog ? ' is-analog' : duo ? ' is-duo' : '') }, time, sub));
 
       const tick = () => {
         const d = new Date();
         if (analog) time.set(d);
-        else {
+        else if (duo) {
+          let hr = d.getHours();
+          const ampm = data.format === '12' ? (hr >= 12 ? 'PM' : 'AM') : '';
+          if (ampm) hr = hr % 12 || 12;
+          dh.textContent = ampm ? String(hr) : String(hr).padStart(2, '0');
+          dm.replaceChildren(String(d.getMinutes()).padStart(2, '0'),
+            ...(data.seconds ? [h('span', { class: 'sec' }, String(d.getSeconds()).padStart(2, '0'))] : []),
+            ...(ampm ? [h('span', { class: 'ampm' }, ampm)] : []));
+        } else {
           let hr = d.getHours();
           const mm = String(d.getMinutes()).padStart(2, '0');
           let suffix = '';
@@ -350,7 +360,8 @@ const Widgets = {
       const t = setInterval(tick, 1000);
       const set = (patch) => () => { Object.assign(data, patch); ctx.save(); ctx.rerender(); };
       ctx.menu(() => [
-        ['Цифровые', set({ style: 'digital' }), data.style !== 'analog' ? 'checked' : ''],
+        ['Цифровые', set({ style: 'digital' }), !['analog', 'duo'].includes(data.style) ? 'checked' : ''],
+        ['Дуо', set({ style: 'duo' }), data.style === 'duo' ? 'checked' : ''],
         ['Стрелочные', set({ style: 'analog' }), data.style === 'analog' ? 'checked' : ''],
         null,
         ['24 часа', set({ format: '24' }), data.format !== '12' ? 'checked' : ''],

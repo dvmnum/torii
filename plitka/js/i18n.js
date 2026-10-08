@@ -111,7 +111,7 @@ const I18N = (() => {
     'Скрыть этот сайт': 'Hide this site', 'Следующий поиск — в инкогнито': 'Next search in incognito', 'Следующий слайд': 'Next slide',
     'Сменить город': 'Change city', 'Снять отметку за сегодня': 'Unmark today', 'Ссылка': 'Link', 'Ссылка удалена': 'Link deleted',
     'Ссылок нет — правый клик, чтобы добавить': 'No links — right-click to add', 'Удалить блок': 'Remove block',
-    'Фокус 25 минут': 'Focus 25 minutes', 'Фокус 50 минут': 'Focus 50 minutes', 'Цвет иконки': 'Icon color', 'Без значка — только цвет': 'No icon — color only',
+    'Фокус 25 минут': 'Focus 25 minutes', 'Фокус 50 минут': 'Focus 50 minutes', 'Цвет иконки': 'Icon color', 'Без значка — только цвет': 'No icon — color only', 'Дуо': 'Duo',
     'Цифровые или стрелочные, приветствие': 'Digital or analog, with greeting', 'Фокус и перерывы по таймеру': 'Focus and breaks on a timer',
     'Сколько осталось до события': 'Time left until an event', 'Список дел с галочками': 'Tasks with checkboxes', 'Быстрые заметки, сохраняются сами': 'Quick notes, saved automatically',
     'Отмечай привычки каждый день': 'Track habits daily', 'Поисковики и ИИ на выбор, калькулятор': 'Search engines and AI, a calculator',

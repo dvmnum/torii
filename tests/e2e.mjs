@@ -1103,6 +1103,11 @@ mm = await menuOf('[gs-id="m-clock"] .w-clock');
 check(await page.locator('.pop-menu .pop-item.checked:text-is("Цифровые")').count() === 1, `часы: меню с галочкой (${mm})`);
 await pick('Стрелочные');
 check(await page.locator('[gs-id="m-clock"] .is-analog').count() === 1, 'часы: стрелочные из меню');
+await menuOf('[gs-id="m-clock"] .w-clock');
+await pick('Дуо');
+const duo = await page.evaluate(() => { const c = document.querySelector('[gs-id="m-clock"] .clock-duo'); return c && [c.querySelector('.dh').textContent, c.querySelector('.dm').firstChild.textContent, getComputedStyle(c.querySelector('.dh')).fontWeight, getComputedStyle(c.querySelector('.dm')).fontWeight]; });
+check(duo && /^\d{2}$/.test(duo[0]) && /^\d{2}$/.test(duo[1]) && +duo[2] > +duo[3], `часы: «Дуо» — часы жирно над минутами тонко (${duo})`);
+await page.locator('[gs-id="m-clock"]').screenshot({ path: `${out}/72-clock-duo.png` });
 // заметки: вставить дату в конец
 await menuOf('[gs-id="m-notes"] textarea');
 await pick('Вставить дату и время');
@@ -1240,6 +1245,7 @@ const mins2 = [
   ['bookmarks', 8, 1, 3, 1], ['topsites', 0, 2, 4, 1], ['recent', 4, 2, 3, 2], ['countdown', 7, 2, 3, 2, { align: 'top-left' }],
   ['clock', 10, 2, 3, 2, { seconds: true }], ['search', 13, 2, 6, 1, { height: 'large' }], ['habits', 19, 2, 5, 2],
   ['greeting', 0, 4, 3, 1, { sub: 'date' }], ['weather', 3, 4, 3, 1, { view: 'details' }],
+  ['clock', 6, 4, 3, 2, { style: 'duo', seconds: true }],
 ];
 await page.evaluate((list) => chrome.storage.local.set({
   settings: {},

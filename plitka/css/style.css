@@ -268,6 +268,14 @@ body.no-motion .clock-time .colon { animation: none; }
 /* основные цифры пропорциональные — с tnum единица слишком широкая */
 .clock-time .sec { display: inline-block; width: 1.3em; font-feature-settings: 'tnum' 1; }
 
+/* «Дуо»: часы жирно над минутами тонко; высота делится пополам, если есть строка с приветствием — чуть меньше */
+.clock-duo { display: flex; flex-direction: column; align-items: inherit; line-height: .8; letter-spacing: -.05em; font-size: min(40cqh, 34cqw); }
+.w-clock:has(.clock-sub:not([hidden])) .clock-duo { font-size: min(34cqh, 34cqw); }
+.clock-duo .dh { font-weight: 750; color: var(--ink); }
+.clock-duo .dm { font-weight: 200; color: var(--ink-2); display: flex; align-items: baseline; }
+.clock-duo .sec, .clock-duo .ampm { font-size: .3em; font-weight: 500; letter-spacing: 0; margin-left: .3em; color: var(--ink-3); font-feature-settings: 'tnum' 1; }
+.w-clock.is-duo { gap: 4cqh; }
+
 /* ================= ПРИВЕТСТВИЕ ================= */
 /* размер текста подбирает JS (fit) — крупно, но без обрезки */
 .w-greeting {
