@@ -1638,6 +1638,50 @@ await ptab('more');
 await page.screenshot({ path: `${out}/62-deutsch.png` });
 check(await page.locator('.panel .dd-btn:has-text("Deutsch")').count() === 1, 'deutsch: в выборе языка — Deutsch');
 await page.click('.panel [data-close]');
+// цитата — только по-русски: на немецком её нет ни на вкладке, ни в меню, но она не теряется и вернётся с русским
+await page.evaluate(() => chrome.storage.local.set({
+  settings: { lang: 'de' },
+  widgets: [{ id: 'q1', type: 'quote', data: {} }, { id: 'n1', type: 'notes', data: {} }],
+  layouts: { lg: { q1: { x: 0, y: 0, w: 8, h: 2 }, n1: { x: 10, y: 2, w: 5, h: 4 } } },
+}));
+await page.reload();
+await page.waitForTimeout(1200);
+check(await page.locator('[gs-id="q1"]').count() === 0 && await page.locator('[gs-id="n1"]').count() === 1, 'deutsch: цитаты на вкладке нет');
+await page.keyboard.press('e');
+await page.waitForTimeout(300);
+await page.click('#btn-add');
+await page.waitForTimeout(400);
+check(await page.locator('.add-item[data-type="quote"]').count() === 0 && await page.locator('.add-item[data-type="word"]').count() === 1, 'deutsch: в «+ Widget» цитаты нет');
+await page.keyboard.press('Escape');
+// двигаем заметки — раскладка сохраняется; цитата и её место должны остаться в хранилище
+const nb = await page.locator('[gs-id="n1"]').boundingBox();
+await page.mouse.move(nb.x + nb.width / 2, nb.y + nb.height / 2);
+await page.mouse.down();
+await page.mouse.move(nb.x + nb.width / 2 + 120, nb.y + nb.height / 2 + 60, { steps: 10 });
+await page.mouse.up();
+await page.waitForTimeout(600);
+await page.keyboard.press('Escape');
+const kept = await page.evaluate(async () => { const s = await chrome.storage.local.get(['widgets', 'layouts']); return { ids: s.widgets.map(w => w.id), q: s.layouts.lg?.q1 }; });
+check(kept.ids.includes('q1') && kept.q?.w === 8, `deutsch: цитата не потерялась при сохранении (${JSON.stringify(kept)})`);
+await page.evaluate(() => chrome.storage.local.set({ settings: { lang: 'ru' } }));
+await page.reload();
+await page.waitForTimeout(1000);
+check(await page.locator('[gs-id="q1"]').count() === 1, 'русский: цитата вернулась');
+// место цитаты на другом языке заняли — вернувшись, она не наезжает на блок и не сдвигает его, а встаёт на свободное место
+await page.evaluate(async () => {
+  const s = await chrome.storage.local.get('layouts');
+  s.layouts.lg.n1 = { x: 0, y: 0, w: 5, h: 4 }; // заметки — туда, где стоит цитата
+  await chrome.storage.local.set({ layouts: s.layouts, settings: { lang: 'ru' } });
+});
+await page.reload();
+await page.waitForTimeout(1000);
+const clash = await page.evaluate(() => {
+  const g = (id) => { const n = document.querySelector(`[gs-id="${id}"]`).gridstackNode; return { x: n.x, y: n.y, w: n.w, h: n.h }; };
+  const a = g('q1'), b = g('n1');
+  const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  return { q1: a, n1: b, overlap };
+});
+check(!clash.overlap && clash.n1.x === 0 && clash.n1.y === 0, `место цитаты занято — она встала на свободное, заметки не сдвинуты (${JSON.stringify(clash)})`);
 await page.evaluate(() => chrome.storage.local.set({ settings: {} }));
 
 const real = errors.filter(e => !/Failed to load resource/i.test(e));

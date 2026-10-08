@@ -926,6 +926,7 @@ Object.assign(Widgets, {
 
   quote: {
     title: 'Цитата',
+    ruOnly: true, // тексты цитат по-русски и не переводятся — на других языках блока нет (app.js: away)
     size: { w: 8, h: 2 }, min: { w: 4, h: 2 },
     defaults: { glass: false, shift: 0, align: 'middle-left' },
     settings: [ALIGN_SETTING, GLASS_SETTING],

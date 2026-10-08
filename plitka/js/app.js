@@ -120,6 +120,13 @@
   // layout — общие для всех экранов виджеты { id, type, data } + x/y/w/h текущего диапазона;
   // layouts — { md?, lg? }: позиции { [id]: { x, y, w, h } }
   let { widgets: layout, layouts } = await loadState();
+  // блоки только для русского (ruOnly — цитата: тексты не переводятся). На другом языке их не видно, но они не теряются:
+  // лежат в away и сохраняются вместе со всеми (allWidgets), вернёшь русский — на месте
+  let away = [];
+  const langHidden = (i) => !!Widgets[i.type]?.ruOnly && I18N.lang() !== 'ru';
+  function splitAway() { away = layout.filter(langHidden); layout = layout.filter(i => !langHidden(i)); }
+  const allWidgets = () => [...layout, ...away];
+  splitAway();
   layout.forEach(fillDefaults);
   // сохранённые раскладки: список и какая сейчас на экране (сами блоки активной — в widgets/layouts, остальных — scene:<id>)
   let scenes = cleanScenes(boot.scenes);
@@ -503,7 +510,7 @@
   const live = new Map(); // id -> { el, body, inst }
 
   const saveLayout = debounce(() => {
-    Store.set('widgets', stripGeom(layout));
+    Store.set('widgets', stripGeom(allWidgets()));
     Store.set('layouts', layouts);
   }, 250);
   const saveSettings = debounce(() => persistSettings(), 250);
@@ -524,7 +531,7 @@
       settings: () => settings,
       save: saveLayout,
       // сохранить сразу и дождаться — перед уходом со страницы (поиск, переход по ссылке)
-      saveNow: () => Promise.all([Store.set('widgets', stripGeom(layout)), Store.set('layouts', layouts)]),
+      saveNow: () => Promise.all([Store.set('widgets', stripGeom(allWidgets())), Store.set('layouts', layouts)]),
       rerender: () => renderWidget(item),
       modal: openModal,
       toast,
@@ -720,7 +727,9 @@
   // пользователь что-то поменял — у текущего диапазона теперь своя раскладка
   function commitPositions() {
     if (bucket === 'sm') return;
-    shown = layouts[bucket] = Object.fromEntries(layout.map(i => [i.id, geom(i)]));
+    // места спрятанных на этом языке блоков (away) не теряем
+    const keep = Object.fromEntries(away.filter(i => shown?.[i.id]).map(i => [i.id, shown[i.id]]));
+    shown = layouts[bucket] = { ...keep, ...Object.fromEntries(layout.map(i => [i.id, geom(i)])) };
     saveLayout();
   }
 
@@ -796,7 +805,7 @@
     if (addMenu.childElementCount) return; // пока грузился скрипт, меню уже собрал другой клик
     const ART = typeof WIDGET_ART === 'undefined' ? {} : WIDGET_ART;
     for (const [g, gTitle] of WIDGET_GROUPS) {
-      const items = Object.entries(Widgets).filter(([, def]) => (def.group || 'mood') === g);
+      const items = Object.entries(Widgets).filter(([, def]) => (def.group || 'mood') === g && !(def.ruOnly && I18N.lang() !== 'ru'));
       if (!items.length) continue;
       addMenu.append(h('div', { class: 'add-group' }, gTitle),
         ...items.map(([type, def]) => h('button', { class: 'add-item', type: 'button', 'data-type': type, onclick: () => { addWidget(type); closeAddMenu(); } },
@@ -2054,6 +2063,7 @@
   function resetLayout() {
     unmountAll();
     ({ widgets: layout, layouts } = defaultState());
+    splitAway();
     layout.forEach(fillDefaults);
     mountAll();
     saveLayout();
@@ -2079,7 +2089,7 @@
   // (картинку пишем, только если она поменялась с прошлого раза — stashScene.img)
   async function stashScene() {
     const { bgImage, ...rest } = settings;
-    await Store.set('scene:' + scenes.active, { widgets: stripGeom(layout), layouts: structuredClone(layouts), settings: { ...rest, bgImage: null } });
+    await Store.set('scene:' + scenes.active, { widgets: stripGeom(allWidgets()), layouts: structuredClone(layouts), settings: { ...rest, bgImage: null } });
     stashScene.img ??= {};
     if (stashScene.img[scenes.active] === bgImage) return;
     stashScene.img[scenes.active] = bgImage;
@@ -2100,6 +2110,7 @@
     closeInspector?.();
     unmountAll();
     layout = st.widgets;
+    splitAway();
     layouts = st.layouts;
     layout.forEach(fillDefaults);
     mountAll();
@@ -2134,7 +2145,7 @@
     const id = 's' + Math.random().toString(36).slice(2, 9);
     scenes.list.push({ id, name: `${I18N.t('Раскладка')} ${n}` });
     if (kind !== 'copy') applySettings(cleanSettings({}));
-    applyState(kind === 'copy' ? { widgets: structuredClone(stripGeom(layout)), layouts: structuredClone(layouts) } : defaultState());
+    applyState(kind === 'copy' ? { widgets: structuredClone(stripGeom(allWidgets())), layouts: structuredClone(layouts) } : defaultState());
     scenes.active = id;
     saveScenes();
     paintSceneButtons();
@@ -2248,12 +2259,12 @@
     // (у каждой — блоки, настройки и своя картинка-фон)
     const states = {};
     for (const s of scenes.list) {
-      if (s.id === scenes.active) { states[s.id] = { widgets: stripGeom(layout), layouts }; continue; }
+      if (s.id === scenes.active) { states[s.id] = { widgets: stripGeom(allWidgets()), layouts }; continue; }
       const raw = await Store.get('scene:' + s.id, null);
       if (raw?.settings) raw.settings = { ...raw.settings, bgImage: await Store.get('sceneimg:' + s.id, null) };
       states[s.id] = raw;
     }
-    const data = { app: 'torii', v: 3, settings, widgets: stripGeom(layout), layouts, scenes: { ...scenes, states }, linkIcons: LinkIcons.map };
+    const data = { app: 'torii', v: 3, settings, widgets: stripGeom(allWidgets()), layouts, scenes: { ...scenes, states }, linkIcons: LinkIcons.map };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = h('a', { href: URL.createObjectURL(blob), download: 'torii-backup.json' });
     a.click();
