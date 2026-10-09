@@ -208,6 +208,16 @@ check(await page.locator('.pop-menu .pop-item:has-text("Изменить")').cou
 await page.keyboard.press('Escape');
 await page.waitForTimeout(150);
 check(await page.locator('.fp-overlay.open').count() === 1, 'папка: Esc сначала закрывает меню, а не окошко');
+// «Изменить» из окошка папки — окно правки поверх папки, а не под ней
+await page.click('.fp-grid [data-bm]:has-text("Docs")', { button: 'right' });
+await page.click('.pop-item:has-text("Изменить")');
+await page.waitForTimeout(300);
+const onTop = await page.evaluate(() => { const r = document.querySelector('#modal-form').getBoundingClientRect(); return !!document.elementFromPoint(r.left + r.width / 2, r.top + 20)?.closest('#modal'); });
+check(onTop, 'папка: окно правки открывается поверх окошка папки');
+await page.screenshot({ path: `${out}/bm-6-edit-over-folder.png` });
+await page.keyboard.press('Escape');
+await page.waitForTimeout(250);
+check(await page.locator('#modal.open').count() === 0 && await page.locator('.fp-overlay.open').count() === 1, 'папка: Esc закрыл правку, окошко папки осталось');
 await page.keyboard.press('Escape');
 
 console.log('errors:', errors.length ? errors.join('\n') : 'none');

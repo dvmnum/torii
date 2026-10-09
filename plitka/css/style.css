@@ -567,7 +567,7 @@ body.no-motion .clock-time .colon { animation: none; }
   --fg: 244, 244, 245;
   --ink: rgb(var(--fg)); --ink-2: rgba(var(--fg), .66); --ink-3: rgba(var(--fg), .42);
   --line: rgba(var(--fg), .10); --line-2: rgba(var(--fg), .18);
-  position: fixed; inset: 0; z-index: 65; display: grid; place-items: center; padding: 24px;
+  position: fixed; inset: 0; z-index: 38; display: grid; place-items: center; padding: 24px; /* над панелью (30) и инспектором (35), но под модалкой (40), тостами (50) и меню (60+): правка и «Вернуть» из папки — поверх неё */
   background: rgba(10, 10, 12, .28); backdrop-filter: blur(10px);
   opacity: 0; transition: opacity .2s;
 }
