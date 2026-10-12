@@ -13,7 +13,7 @@ Captures — les anglaises (`store/screenshots/en/`). Confidentialité et autori
 Torii transforme ton nouvel onglet en tableau de bord personnel — organisé par toi, pas par un modèle.
 
 DISPOSITION LIBRE
-Ce qui distingue Torii des autres pages de nouvel onglet : les widgets ne sont pas coincés dans une colonne centrée. Fais-les glisser n’importe où et redimensionne-les par n’importe quel coin — la grille garde tout bien aligné. Les dispositions pour grand écran et pour portable sont mémorisées séparément.
+L’essentiel avec Torii : c’est toi qui décides de la disposition. Fais glisser les widgets n’importe où et redimensionne-les par n’importe quel coin — la grille garde tout bien aligné. Les dispositions pour grand écran et pour portable sont mémorisées séparément.
 
 WIDGETS
 • Horloge — numérique, duo ou analogique, avec message d’accueil et date

@@ -14,7 +14,7 @@ Rebuild: `npm run store`.
 Torii turns your new tab into a personal dashboard — laid out by you, not by a template.
 
 FREE-FORM LAYOUT
-What sets Torii apart from other new tab pages: widgets aren't stuck in a single centered column. Drag them anywhere and resize them from any corner — the grid keeps everything neatly aligned. Layouts for wide monitors and laptops are remembered separately.
+The main thing in Torii: you decide the layout. Drag widgets anywhere and resize them from any corner — the grid keeps everything neatly aligned. Layouts for wide monitors and laptops are remembered separately.
 
 WIDGETS
 • Clock — digital, duo or analog, with a greeting and the date

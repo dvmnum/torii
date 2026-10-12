@@ -13,7 +13,7 @@ Capturas — las inglesas (`store/screenshots/en/`). Prácticas de privacidad y 
 Torii convierte tu nueva pestaña en un panel personal, organizado por ti y no por una plantilla.
 
 DISEÑO LIBRE
-Lo que distingue a Torii de otras nuevas pestañas: los widgets no están atrapados en una columna centrada. Arrástralos a cualquier sitio y redimensiónalos desde cualquier esquina; la cuadrícula lo mantiene todo alineado. Los diseños para monitores anchos y portátiles se guardan por separado.
+Lo principal de Torii: el diseño lo decides tú. Arrastra los widgets a cualquier sitio y redimensiónalos desde cualquier esquina; la cuadrícula lo mantiene todo alineado. Los diseños para monitores anchos y portátiles se guardan por separado.
 
 WIDGETS
 • Reloj — digital, dúo o analógico, con saludo y fecha

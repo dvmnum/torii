@@ -13,7 +13,7 @@ Capturas — as em inglês (`store/screenshots/en/`). Privacidade e permissões 
 O Torii transforma sua nova aba em um painel pessoal — organizado por você, não por um modelo.
 
 LAYOUT LIVRE
-O que diferencia o Torii de outras novas abas: os widgets não ficam presos em uma coluna centralizada. Arraste-os para qualquer lugar e redimensione por qualquer canto — a grade mantém tudo alinhado. Os layouts para monitores largos e notebooks são guardados separadamente.
+O principal no Torii: o layout é você quem decide. Arraste os widgets para qualquer lugar e redimensione por qualquer canto — a grade mantém tudo alinhado. Os layouts para monitores largos e notebooks são guardados separadamente.
 
 WIDGETS
 • Relógio — digital, duo ou analógico, com saudação e data

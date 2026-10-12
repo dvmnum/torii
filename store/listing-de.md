@@ -13,7 +13,7 @@ Screenshots — die englischen (`store/screenshots/en/`). Datenschutz und Berech
 Torii macht deinen neuen Tab zu einem persönlichen Dashboard — angeordnet von dir, nicht von einer Vorlage.
 
 FREIES LAYOUT
-Was Torii von anderen Neuer-Tab-Seiten unterscheidet: Die Widgets stecken nicht in einer Spalte in der Mitte. Zieh sie an jede Stelle und ändere ihre Größe an jeder Ecke — das Raster hält alles sauber ausgerichtet. Layouts für breite Monitore und Laptops werden getrennt gespeichert.
+Das Wichtigste an Torii: Das Layout bestimmst du. Zieh die Widgets an jede Stelle und ändere ihre Größe an jeder Ecke — das Raster hält alles sauber ausgerichtet. Layouts für breite Monitore und Laptops werden getrennt gespeichert.
 
 WIDGETS
 • Uhr — digital, Duo oder analog, mit Begrüßung und Datum
