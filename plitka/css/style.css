@@ -558,6 +558,9 @@ body.no-motion .clock-time .colon { animation: none; }
 .link-ico.bm-folder-ico { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 3px; padding: 7px; place-items: stretch; box-sizing: border-box; }
 .link-ico.bm-folder-ico > span { width: 100%; aspect-ratio: 1; display: grid; place-items: center; overflow: hidden; border-radius: 22%; }
 .link-ico.bm-folder-ico img { width: 100%; height: 100%; border-radius: 22%; }
+/* иконка ещё грузится: не мелькает битой картинкой, в папке на её месте — мягкая заглушка, а не пустота */
+img.fav-wait { opacity: 0; }
+.link-ico.bm-folder-ico > span:has(> img.fav-wait) { background: rgba(var(--fg), .14); }
 .link-ico.bm-folder-ico .mono { width: 100%; height: 100%; display: grid; place-items: center; border-radius: 30%; background: rgba(var(--fg), .16); font-size: 8px; }
 .w-links.icons-big .link-folder .link-ico.bm-folder-ico, .w-links.icons-letter .link-folder .link-ico.bm-folder-ico { background: rgba(var(--fg), .1); border: 1px solid var(--line); }
 

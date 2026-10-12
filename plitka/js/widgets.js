@@ -30,24 +30,59 @@ function faviconUrl(pageUrl, size = 64) {
   return faviconSources(pageUrl, size)[0] || '';
 }
 
-// <img> с цепочкой запасных источников; если всё упало — буква
+// Какой источник иконки сработал для сайта: { [host]: [номер источника | -1 — буква, когда] }.
+// Со второго открытия грузим сразу рабочий адрес (он уже в кэше браузера), без цепочки неудачных запросов.
+// Раз в неделю проверяем заново — вдруг у сайта появилась иконка.
+const FavSrc = {
+  KEY: 'favsrc', TTL: 7 * 864e5, map: null, t: 0,
+  load() {
+    if (!this.map) try { this.map = JSON.parse(localStorage.getItem(this.KEY)) || {}; } catch { this.map = {}; }
+    return this.map;
+  },
+  get(host) {
+    const e = this.load()[host];
+    return e && Date.now() - e[1] < this.TTL ? e[0] : null;
+  },
+  set(host, i) {
+    const m = this.load();
+    if (m[host]?.[0] === i) return;
+    m[host] = [i, Date.now()];
+    clearTimeout(this.t);
+    this.t = setTimeout(() => { try { localStorage.setItem(this.KEY, JSON.stringify(m)); } catch {} }, 500);
+  },
+};
+
+// <img> с цепочкой запасных источников; если всё упало — буква. Пока грузится — класс .fav-wait (под ним заглушка)
 function favicon(pageUrl, title, size = 64) {
   const srcs = faviconSources(pageUrl, size);
-  const letter = (title || hostOf(pageUrl) || '?').trim()[0]?.toUpperCase() || '?';
-  const img = document.createElement('img');
-  img.alt = '';
-  img.loading = 'lazy';
-  let i = 0;
-  const next = () => {
-    if (i < srcs.length) { img.src = srcs[i++]; return; }
+  const host = hostOf(pageUrl);
+  const letter = (title || host || '?').trim()[0]?.toUpperCase() || '?';
+  const mono = () => {
     const m = document.createElement('span');
     m.className = 'mono';
     m.textContent = letter;
-    img.replaceWith(m);
+    return m;
   };
-  img.addEventListener('error', next);
+  const known = FavSrc.get(host);
+  if (known === -1 || !srcs.length) return mono();
+  const img = document.createElement('img');
+  img.alt = '';
+  img.decoding = 'async';
+  img.className = 'fav-wait';
+  let i = known ?? 0, tiny = false;
+  const next = () => {
+    if (i < srcs.length) { img.src = srcs[i++]; return; }
+    // букву запоминаем, только если сервисы ответили «иконки нет»; ошибка сети (нет интернета) — не повод
+    if (tiny) FavSrc.set(host, -1);
+    img.replaceWith(mono());
+  };
+  img.addEventListener('error', () => { tiny = false; next(); });
   // крошечная картинка (заглушка-глобус 16px или прозрачный 1×1 у Яндекса) — следующий источник, а после последнего — буква
-  img.addEventListener('load', () => { if (img.naturalWidth && img.naturalWidth < 17) next(); });
+  img.addEventListener('load', () => {
+    if (img.naturalWidth && img.naturalWidth < 17) { tiny = true; return next(); }
+    img.classList.remove('fav-wait');
+    FavSrc.set(host, i - 1);
+  });
   next();
   return img;
 }
