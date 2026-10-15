@@ -34,8 +34,22 @@ await page.goto(url);
 await page.waitForTimeout(800);
 
 // поставить раскладку: блоки, позиции, фон-заготовка, язык; потом перезагрузить и дать фону и иконкам появиться
-async function scene({ preset, lang = 'ru', widgets, extra = {}, scenes = null }) {
-  await page.evaluate(async ({ preset, lang, widgets, extra, scenes }) => {
+// своя картинка-фон для главного снимка: большой сине-зелёный треугольник с размытыми краями под широкой рифлёнкой —
+// рисуем на холсте здесь же (своя графика, без чужих прав); в Torii так может сделать любой: своя картинка + узор «Рифлёное стекло»
+const TRIANGLE = () => page.evaluate(() => {
+  const c = document.createElement('canvas'); c.width = 2560; c.height = 1600;
+  const g = c.getContext('2d');
+  g.fillStyle = '#080c18'; g.fillRect(0, 0, 2560, 1600);
+  const gr = g.createLinearGradient(0, 1600, 2560, 0);
+  gr.addColorStop(0, '#1d4bff'); gr.addColorStop(0.55, '#14a6d6'); gr.addColorStop(1, '#22e3a0');
+  g.filter = 'blur(120px)';
+  g.fillStyle = gr; g.beginPath(); g.moveTo(1280, 160); g.lineTo(2867, 1800); g.lineTo(-307, 1800); g.closePath(); g.fill();
+  return c.toDataURL('image/jpeg', 0.92);
+});
+const RIBBED = { mode: 'ribbed', density: 0, warp: 0.2, grain: 0.12, speed: 0.15, clear: null };
+
+async function scene({ preset, lang = 'ru', widgets, extra = {}, scenes = null, image = null }) {
+  await page.evaluate(async ({ preset, lang, widgets, extra, scenes, image }) => {
     const p = Mesh.PRESETS.find(x => x.id === preset);
     const { id: _id, title: _t, ...mesh } = p;
     await chrome.storage.local.clear();
@@ -47,8 +61,9 @@ async function scene({ preset, lang = 'ru', widgets, extra = {}, scenes = null }
       } })),
       layouts: { lg: Object.fromEntries(widgets.map(([, x, y, w, h], i) => ['s' + i, { x, y, w, h }])) },
       ...(scenes ? { scenes } : {}),
+      ...(image ? { bgImage: image } : {}),
     });
-  }, { preset, lang, widgets, extra, scenes });
+  }, { preset, lang, widgets, extra, scenes, image });
   await page.reload();
   await page.waitForTimeout(2500); // фон и погода
   // иконки сайтов — ждём, пока все картинки догрузятся (или сдадутся в букву-заглушку), до 15 с
@@ -98,7 +113,7 @@ for (const lang of ['ru', 'en']) {
     ['weather', 0, 0, 6, 3, { view: 'details' }], ['notes', 19, 0, 5, 5, { text: t.notes }],
   ];
   // 1. главный экран
-  await scene({ preset: 'lagoon', lang, widgets: main });
+  await scene({ preset: 'lagoon', lang, widgets: main, image: await TRIANGLE(), extra: { photo: RIBBED } });
   await shot(lang, '1-main.png');
 
   // 2. редактор: блоки двигаются и растягиваются, каталог виджетов
