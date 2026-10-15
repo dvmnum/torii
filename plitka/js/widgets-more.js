@@ -63,12 +63,20 @@ function permGate(body, perm, text, ctx) {
 const Bookmarks = {
   available: () => !!chrome.bookmarks?.getTree,
   barId: null, // id самой строки закладок — куда добавлять новые
-  bar: () => new Promise((resolve) => chrome.bookmarks.getTree((tree) => {
-    const root = tree[0];
-    const bar = root.children.find(c => c.folderType === 'bookmarks-bar' || c.id === 'toolbar_____') || root.children[0];
-    Bookmarks.barId = bar?.id ?? null;
-    resolve(Bookmarks.visible(bar?.children));
-  })),
+  // Читаем только строку закладок, а не всё дерево: у кого тысячи закладок, getTree на каждую перерисовку заметно тормозил.
+  // Корень — '0' в Chrome, 'root________' в Firefox; его дети — несколько верхних папок без содержимого.
+  async bar() {
+    if (!Bookmarks.barId) {
+      const top = await chrome.bookmarks.getChildren(IS_FIREFOX ? 'root________' : '0').catch(() => null)
+        || (await chrome.bookmarks.getTree())[0].children;
+      const bar = top.find(c => c.folderType === 'bookmarks-bar' || c.id === 'toolbar_____') || top[0];
+      Bookmarks.barId = bar?.id ?? null;
+      if (!Bookmarks.barId) return [];
+    }
+    const [bar] = await chrome.bookmarks.getSubTree(Bookmarks.barId).catch(() => []);
+    if (!bar) { Bookmarks.barId = null; return []; } // строку не нашли (странный профиль) — в следующий раз поищем заново
+    return Bookmarks.visible(bar.children);
+  },
   // без разделителей (они есть только в Firefox) — у них нет ни адреса, ни детей
   visible: (list) => (list || []).filter(n => n.type !== 'separator'),
   // плоский список ссылок: прямые закладки и первый уровень папок
