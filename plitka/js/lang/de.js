@@ -2,6 +2,7 @@
 // Грузится только при выборе языка (I18N.setLang). Новая строка в EN — добавь перевод сюда (npm run i18n покажет пропуски).
 I18N.add('de', {
   dict: {
+    'Finding Torii useful?': 'Ist Torii nützlich für dich?', 'Rate it': 'Bewerten', 'If you have a moment, rate it in the store. It really helps a new extension: that’s how others find it.': 'Wenn du kurz Zeit hast, bewerte es im Store. Das hilft einer neuen Erweiterung sehr: So finden andere sie.',
     '+ Add greeting': '+ Begrüßung hinzufügen', '+ Copy current': '+ Aktuelles kopieren', '+ Current background': '+ Aktueller Hintergrund', '+ Default': '+ Standard',
     '+ Images': '+ Bilder', '+ Link': '+ Link', '+ Point': '+ Punkt', '+ Widget': '+ Widget',
     '12-hour': '12 Stunden', '24-hour': '24 Stunden', 'A rare word and its meaning': 'Ein seltenes Wort und seine Bedeutung',

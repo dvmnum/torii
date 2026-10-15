@@ -10,8 +10,12 @@
   const TRIBUTE_URL = 'https://web.tribute.tg/d/RJo'; // донат через Telegram — для англоязычных
   const ruDonate = () => I18N.lang() === 'ru'; // русским — Boosty, остальным — Tribute
   const SITE_URL = 'https://dvmnum.github.io/torii/';
+// оценка в магазине (askRateOnce): Chromium — отзывы в Chrome Web Store, Firefox — страница отзывов AMO
+const RATE_URL_CWS = 'https://chromewebstore.google.com/detail/eimplcpjlibipimkmaipfkidbdagknof/reviews';
+const RATE_URL_FF = 'https://addons.mozilla.org/firefox/addon/torii-new-tab/reviews/';
   const REPO_URL = 'https://github.com/dvmnum/torii';
   const HEART_SVG = '<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>';
+const STAR_SVG = '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>';
 
   // иконка вкладки: часы и помодоро — «живые», перерисовываются
   const TAB_ICONS = [['logo', 'Torii'], ['emoji', 'Эмодзи'], ['letter', 'Буква'], ['clock', 'Часы'], ['pomodoro', 'Помодоро'], ['image', 'Своя']];
@@ -110,7 +114,7 @@
 
   // всё для первого кадра — одним запросом. Картинка-фон лежит отдельным ключом bgImage (мегабайты):
   // иначе её перечитывали бы и перезаписывали вместе с настройками на каждый шаг любого ползунка
-  const boot = await Store.getMany({ settings: {}, bgImage: null, widgets: null, layouts: null, scenes: null, opens: 0, donateDone: false, donateDay: null, linkIcons: {} });
+  const boot = await Store.getMany({ settings: {}, bgImage: null, widgets: null, layouts: null, scenes: null, opens: 0, donateDone: false, donateDay: null, rateOpens: 0, rateSince: null, rateDone: false, linkIcons: {} });
   LinkIcons.load(boot.linkIcons); // свои иконки ссылок — до отрисовки блоков
   let settings = cleanSettings(boot.settings);
   persistSettings.img = boot.bgImage;
@@ -2309,12 +2313,62 @@
   }
 
   // ---------- тосты ----------
+  // Стопкой, как уведомления в iOS: новый сверху, прежние выглядывают из-под него уменьшенными (--i — номер от нового),
+  // видно не больше трёх. Наведёшь — стопка раскрывается списком, а таймеры замирают (успеть нажать «Вернуть»).
+  // Такой же текст без кнопки не дублируется: у тоста растёт счётчик ×2 и заново идёт таймер.
+  // Новый — первым в DOM: page.click('.toast-btn…') в тестах берёт свежий.
+  // контейнер — лениво и без const на уровне IIFE: toast() может позваться при загрузке раньше этой строки (TDZ)
+  function toastBox() {
+    let box = document.querySelector('body > .toasts');
+    if (box) return box;
+    box = h('div', { class: 'toasts' });
+    box.addEventListener('mouseenter', () => { box._hover = true; for (const t of box.children) t._pause?.(); });
+    box.addEventListener('mouseleave', () => { box._hover = false; for (const t of box.children) t._resume?.(); });
+    document.body.append(box);
+    return box;
+  }
+  // --i — место в стопке; back — не передний (в свёрнутой стопке без текста), far — дальше третьего (скрыт до раскрытия).
+  // По классам, а не :first-child: уходящий тост ещё секунду в DOM, а вперёд уже встал следующий.
+  function restackToasts() {
+    [...toastBox().querySelectorAll('.toast:not(.out)')].forEach((t, i) => {
+      t.style.setProperty('--i', i);
+      t.classList.toggle('back', i > 0);
+      t.classList.toggle('far', i > 2);
+    });
+  }
+
   function toast(text, actionText, action) {
-    const t = h('div', { class: 'toast' }, h('span', {}, text),
-      actionText ? h('button', { class: 'toast-btn', onclick: () => { action(); t.remove(); } }, actionText) : null);
-    document.body.append(t);
+    const toasts = toastBox();
+    const same = !actionText && [...toasts.children].find(t => !t.classList.contains('out') && !t._action && t._text === text);
+    if (same) {
+      same._n = (same._n || 1) + 1;
+      same.querySelector('.toast-n').textContent = '×' + same._n;
+      same.classList.remove('bump'); void same.offsetWidth; same.classList.add('bump');
+      same._restart();
+      toasts.prepend(same); restackToasts();
+      return;
+    }
+    const close = () => {
+      if (t.classList.contains('out')) return;
+      clearTimeout(t._timer);
+      t.classList.add('out');
+      restackToasts();
+      setTimeout(() => t.remove(), 350);
+    };
+    const t = h('div', { class: 'toast', role: 'status' }, h('span', {}, text), h('span', { class: 'toast-n' }),
+      actionText ? h('button', { class: 'toast-btn', onclick: () => { action(); close(); } }, actionText) : null);
+    t._text = text; t._action = !!actionText;
+    const life = actionText ? 5000 : 2500;
+    let left = life, started = 0;
+    t._pause = () => { clearTimeout(t._timer); left -= Date.now() - started; };
+    t._resume = () => { started = Date.now(); t._timer = setTimeout(close, Math.max(left, 1200)); };
+    t._restart = () => { clearTimeout(t._timer); left = life; if (!toasts._hover) t._resume(); };
+    toasts.prepend(t);
+    // лишние (дальше четвёртого) — уходят, чтобы стопка не росла бесконечно
+    [...toasts.querySelectorAll('.toast:not(.out)')].slice(4).forEach(x => { clearTimeout(x._timer); x.classList.add('out'); setTimeout(() => x.remove(), 350); });
+    restackToasts();
     requestAnimationFrame(() => t.classList.add('show'));
-    setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, actionText ? 5000 : 2500);
+    if (!toasts._hover) t._resume(); else started = Date.now();
   }
 
   // ---------- правый клик ----------
@@ -2383,7 +2437,7 @@
   }
 
   slideshowOnLoad(); // после всего: слайд-шоу само решит, пора ли сменить фон
-  askDonateOnce();
+  if (!askDonateOnce() || /[?&]rate(&|$)/.test(location.search)) askRateOnce(); // две карточки за одно открытие не показываем
 
   // Предложение поддержать автора: с третьего открытия вкладки, не чаще раза в день, пока человек не ответит.
   // Любая кнопка («Не сейчас» или «Поддержать») — больше никогда (donateDone). Счётчик открытий пишем, только пока
@@ -2393,11 +2447,11 @@
     const q = location.search;
     const force = /[?&]donate(&|$)/.test(q);
     if (!force) {
-      if (boot.donateDone || (navigator.webdriver && !q.includes('donate-test'))) return;
+      if (boot.donateDone || (navigator.webdriver && !q.includes('donate-test'))) return false;
       const opens = Number(boot.opens) || 0;
-      if (opens < 2) { Store.set('opens', opens + 1); return; } // первое и второе открытие — тишина
+      if (opens < 2) { Store.set('opens', opens + 1); return false; } // первое и второе открытие — тишина
       const today = new Date().toDateString();
-      if (boot.donateDay === today) return; // сегодня уже показывали
+      if (boot.donateDay === today) return true; // сегодня уже показывали — и оценку сегодня не просим
       Store.set('donateDay', today);
     }
     setTimeout(() => {
@@ -2418,8 +2472,42 @@
       document.body.append(card);
       requestAnimationFrame(() => card.classList.add('on'));
     }, 2500); // не в момент открытия — сначала вкладка, потом просьба
+    return true;
+  }
+
+  // Просьба оценить в магазине: когда Torii уже пожил у человека — не раньше 10-го открытия и 5 дней с первого.
+  // Один раз: любая кнопка — больше никогда (rateDone). Без награды и без «поставь пятёрку» — так требуют правила магазинов.
+  // rateOpens пишем, только пока < 10; rateSince — время первого открытия. ?rate — показать сразу (проверка вида).
+  function askRateOnce() {
+    const force = /[?&]rate(&|$)/.test(location.search);
+    if (!force) {
+      if (boot.rateDone || navigator.webdriver) return;
+      if (!boot.rateSince) { Store.set('rateSince', Date.now()); return; }
+      const opens = Number(boot.rateOpens) || 0;
+      if (opens < 10) { Store.set('rateOpens', opens + 1); return; }
+      if (Date.now() - boot.rateSince < 5 * 864e5) return;
+    }
+    const url = IS_FIREFOX ? RATE_URL_FF : RATE_URL_CWS;
+    setTimeout(() => {
+      const close = () => {
+        Store.set('rateDone', true);
+        for (const k of ['rateOpens', 'rateSince']) Store.remove(k);
+        card.classList.remove('on');
+        setTimeout(() => card.remove(), 300);
+      };
+      const card = h('div', { class: 'donate-ask', role: 'dialog' },
+        h('span', { class: 'da-ico star', html: STAR_SVG }),
+        h('div', { class: 'da-text' },
+          h('b', {}, 'Torii пригодился?'),
+          h('span', {}, 'Если не сложно — оцени его в магазине. Новому расширению это очень помогает: так его находят другие.')),
+        h('div', { class: 'da-actions' },
+          h('a', { class: 'pill small pill-accent', href: url, target: '_blank', rel: 'noopener', onclick: close }, 'Оценить'),
+          h('button', { type: 'button', class: 'pill small', onclick: close }, 'Не сейчас')));
+      document.body.append(card);
+      requestAnimationFrame(() => card.classList.add('on'));
+    }, 2500);
   }
   requestAnimationFrame(() => document.body.classList.remove('is-loading'));
   console.info(`[plitka] вкладка готова через ${Math.round(performance.now())} мс`);
-  window.__plitka = { grid, get layout() { return layout; }, get layouts() { return layouts; }, get bucket() { return bucket; }, settings: () => settings, setEditing };
+  window.__plitka = { grid, get layout() { return layout; }, get layouts() { return layouts; }, get bucket() { return bucket; }, settings: () => settings, setEditing, toast };
 })();
