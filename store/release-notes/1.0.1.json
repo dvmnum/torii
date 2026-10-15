@@ -1,0 +1,4 @@
+{
+  "en-US": "• Site icons appear faster: Torii remembers where each site's icon loaded from and goes straight there next time\n• Bookmark folders no longer look empty while icons load",
+  "ru": "• Иконки сайтов появляются быстрее: Torii запоминает, откуда загрузилась иконка каждого сайта, и в следующий раз берёт её сразу оттуда\n• Папки закладок больше не выглядят пустыми, пока грузятся иконки"
+}

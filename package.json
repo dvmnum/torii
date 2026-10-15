@@ -13,6 +13,7 @@
     "test:firefox": "node tests/firefox.mjs",
     "test:bookmarks": "node tests/bookmarks.mjs",
     "build": "node scripts/build.mjs",
+    "release": "node scripts/release.mjs",
     "store": "node scripts/store-shots.mjs && node scripts/store-promo.mjs",
     "site": "node scripts/site-assets.mjs",
     "site:serve": "node scripts/serve-site.mjs"

@@ -5,3 +5,4 @@ tests/shots/
 Thumbs.db
 dist/
 .claude/
+.env
