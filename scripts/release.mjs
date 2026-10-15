@@ -59,6 +59,11 @@ async function cwsToken() {
 }
 
 async function cws() {
+  // ключей Google нет (Google Cloud из России не завести) — в CWS заливаем руками
+  if (!process.env.CWS_REFRESH_TOKEN) {
+    log(`CWS: ключей нет — залей руками: консоль разработчика → Torii → Пакет → Загрузить новый пакет →\n     ${path.relative(root, zip('chrome'))} → Отправить на проверку`);
+    return;
+  }
   const token = await cwsToken();
   const auth = { authorization: `Bearer ${token}` };
   const item = `publishers/${env('CWS_PUBLISHER_ID')}/items/${CWS_ITEM}`;
