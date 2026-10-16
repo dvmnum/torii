@@ -6,10 +6,10 @@
 2. Написать «что нового» в `store/release-notes/<версия>.json` (`en-US` и `ru`) — это заметки к версии в Firefox.
 3. `npm run release` — соберёт архивы, зальёт в Chrome Web Store и Firefox и отправит на проверку.
 
-Дополнительно:
-- `npm run release -- --check` — только проверить, что ключи работают (ничего не заливает).
-- `npm run release -- --listing` — в Firefox ещё обновить описания на всех языках из `store/listing-*.md`.
-- `npm run release -- --only cws` или `--only amo` — только один магазин.
+Дополнительно (флаги — через `node scripts/release.mjs`: в PowerShell `npm run release -- --флаг` теряет `--`, и флаг уходит самому npm):
+- `node scripts/release.mjs --check` — только проверить, что ключи работают (ничего не заливает).
+- `node scripts/release.mjs --listing` — в Firefox ещё обновить описания на всех языках из `store/listing-*.md`.
+- `node scripts/release.mjs --only cws` или `--only amo` — только один магазин.
 
 Описание в Chrome Web Store через API не меняется — его, если поменялось, по-прежнему вставлять руками в консоли разработчика.
 
@@ -55,12 +55,12 @@
    - войди тем аккаунтом, где консоль CWS. Google предупредит, что приложение не проверено, — это твоё же приложение: «Дополнительно» → «Перейти»;
    - **Exchange authorization code for tokens** → скопируй **Refresh token** → `CWS_REFRESH_TOKEN=`.
 
-> В режиме «Testing» Google может отозвать refresh token через 7 дней. Если `npm run release -- --check` начнёт писать `invalid_grant` — повтори шаг 6 и замени токен. Чтобы не повторять, на шаге 4 можно перевести приложение в «In production» (проверка Google для этого не нужна, пока ты единственный пользователь).
+> В режиме «Testing» Google может отозвать refresh token через 7 дней. Если `node scripts/release.mjs --check` начнёт писать `invalid_grant` — повтори шаг 6 и замени токен. Чтобы не повторять, на шаге 4 можно перевести приложение в «In production» (проверка Google для этого не нужна, пока ты единственный пользователь).
 
 ## Проверка
 
 ```bash
-npm run release -- --check
+node scripts/release.mjs --check
 ```
 
 Должно написать «AMO: ключи в порядке» (и про CWS — «залей руками», если ключей Google нет).
