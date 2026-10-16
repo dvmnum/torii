@@ -10,6 +10,8 @@
   const TRIBUTE_URL = 'https://web.tribute.tg/d/RJo'; // донат через Telegram — для англоязычных
   const ruDonate = () => I18N.lang() === 'ru'; // русским — Boosty, остальным — Tribute
   const SITE_URL = 'https://dvmnum.github.io/torii/';
+// «Мои картинки» — сколько последних своих фонов хранить (myImagesSection)
+const MY_IMAGES_MAX = 8;
 // оценка в магазине (askRateOnce): Chromium — отзывы в Chrome Web Store, Firefox — страница отзывов AMO
 const RATE_URL_CWS = 'https://chromewebstore.google.com/detail/eimplcpjlibipimkmaipfkidbdagknof/reviews';
 const RATE_URL_FF = 'https://addons.mozilla.org/firefox/addon/torii-new-tab/reviews/';
@@ -1239,8 +1241,10 @@ const STAR_SVG = '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.
     const hex = h('input', { type: 'text', class: 'cp-hex', maxlength: 7, spellcheck: 'false' });
     const bgColors = [...new Set(settings.bgImage ? [] : settings.mesh.points.map(p => p.color))];
     const quick = h('div', { class: 'cp-quick' }, [...bgColors, ...QUICK_COLORS.filter(c => !bgColors.includes(c))].slice(0, 18).map(c =>
-      h('button', { type: 'button', title: c, style: `--c:${c}`, onclick: () => { hsv = hexToHsv(c); paint(true); } })));
-    const pop = h('div', { class: 'cp' }, sv, hue, h('div', { class: 'cp-row' }, swatch, hex), quick);
+      h('button', { type: 'button', title: c, style: `--c:${c}`, onclick: () => { hsv = hexToHsv(c); paint(true); close(); } }))); // готовый цвет — выбрал и закрыл
+    // «Готово» — видно, как закрыть (раньше только клик мимо или Esc, и пикер казался зависшим)
+    const done = h('button', { type: 'button', class: 'cp-done', title: 'Готово', html: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>', onclick: () => close() });
+    const pop = h('div', { class: 'cp' }, sv, hue, h('div', { class: 'cp-row' }, swatch, hex, done), quick);
 
     const paint = (emit) => {
       const c = hsvToHex(hsv);
@@ -1272,6 +1276,7 @@ const STAR_SVG = '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.
       if (!v.startsWith('#')) v = '#' + v;
       if (/^#[0-9a-f]{6}$/i.test(v)) { hsv = hexToHsv(v.toLowerCase()); paint(true); }
     });
+    hex.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); close(); } });
 
     // Esc закрывает только пикер; клик мимо — тоже
     const onKey = (e) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); close(); } };
@@ -1769,6 +1774,7 @@ const STAR_SVG = '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.
 
     return [
       img ? section('Своя картинка', ...photo) : null,
+      myImagesSection(),
       section(img ? 'Или заготовка' : 'Фон', meshPresets(), meshRow, !img && meshOpen ? bgEditor() : null),
       section('Движение', h('label', { class: 'field field-toggle' }, labelInfo('Живой фон', 'Выключи — фон и эффекты замрут (меньше нагрузка на ноутбуке).'), h('span', { class: 'switch' }, motion, h('i')))),
       section('Слайд-шоу', ...slideshowSettings()),
@@ -1791,16 +1797,7 @@ const STAR_SVG = '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.
       const id = 's' + Math.random().toString(36).slice(2, 9);
       if (settings.bgImage) {
         await Store.set('slide:' + id, settings.bgImage);
-        const thumb = await new Promise((res) => {
-          const im = new Image();
-          im.onload = () => {
-            const t = h('canvas', { width: 160, height: 100 });
-            const k = Math.max(160 / im.width, 100 / im.height);
-            t.getContext('2d').drawImage(im, (160 - im.width * k) / 2, (100 - im.height * k) / 2, im.width * k, im.height * k);
-            res(t.toDataURL('image/jpeg', 0.8));
-          };
-          im.src = settings.bgImage;
-        });
+        const thumb = await thumbOf(settings.bgImage);
         setS({ items: [...settings.slides.items, { id, kind: 'image', thumb }] });
       } else {
         setS({ items: [...settings.slides.items, { id, kind: 'mesh', mesh: structuredClone(settings.mesh) }] });
@@ -2012,10 +2009,98 @@ const STAR_SVG = '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.
 
   async function loadBgImage(file) {
     const done = busy('Загружаю картинку…');
-    const { full } = await shrinkImage(file).finally(done);
+    const { full, thumb } = await shrinkImage(file).finally(done);
     setSetting('bgImage', full);
     meshOpen = true; // сразу показываем эффекты картинки
+    await rememberImage(full, thumb);
     renderSettings();
+  }
+
+  // ---------- «Мои картинки»: последние свои фоны ----------
+  // Сменил фон на заготовку — картинка не пропадает: последние MY_IMAGES_MAX живут в галерее во вкладке «Фон».
+  // Список — ключ myImages [{ id, thumb, sig }], сама картинка — myimg:<id>. sig — отпечаток dataURL (длина + выборка
+  // символов), чтобы одну и ту же картинку не хранить дважды. Общие для всех раскладок, едут в бэкапе.
+  function imgSig(d) {
+    let s = d.length.toString(36) + ':';
+    for (let i = 1; i <= 24; i++) s += d.charCodeAt(Math.floor(d.length * i / 25)).toString(36);
+    return s;
+  }
+  async function myImages() {
+    const l = await Store.get('myImages', []);
+    return Array.isArray(l) ? l.filter(x => x && typeof x.id === 'string' && typeof x.sig === 'string' && typeof x.thumb === 'string' && x.thumb.startsWith('data:image/')) : [];
+  }
+  // превью 160×100 для списков
+  function thumbOf(src) {
+    return new Promise((res) => {
+      const im = new Image();
+      im.onload = () => {
+        const t = h('canvas', { width: 160, height: 100 });
+        const k = Math.max(160 / im.width, 100 / im.height);
+        t.getContext('2d').drawImage(im, (160 - im.width * k) / 2, (100 - im.height * k) / 2, im.width * k, im.height * k);
+        res(t.toDataURL('image/jpeg', 0.8));
+      };
+      im.onerror = () => res(null);
+      im.src = src;
+    });
+  }
+  // картинку — в начало галереи (уже есть — просто поднять); лишние сверх MY_IMAGES_MAX — удаляются
+  async function rememberImage(full, thumb) {
+    if (!full) return;
+    const sig = imgSig(full);
+    let list = await myImages();
+    const was = list.find(x => x.sig === sig);
+    if (was) list = [was, ...list.filter(x => x !== was)];
+    else {
+      thumb ||= await thumbOf(full);
+      if (!thumb) return;
+      const id = 'm' + Math.random().toString(36).slice(2, 9);
+      await Store.set('myimg:' + id, full);
+      list = [{ id, thumb, sig }, ...list];
+      for (const x of list.slice(MY_IMAGES_MAX)) Store.remove('myimg:' + x.id);
+      list = list.slice(0, MY_IMAGES_MAX);
+    }
+    await Store.set('myImages', list);
+  }
+  // секция во вкладке «Фон»; заполняется асинхронно и прячется, пока галерея пуста.
+  // Картинка, что стоит фоном сейчас (загружена до появления галереи), попадает в неё при первом открытии.
+  function myImagesSection() {
+    const box = h('div', { class: 'my-imgs' }); // не .slides — тот класс у слайд-шоу (тест считает его кадры)
+    const sec = section('Мои картинки', box);
+    sec.hidden = true;
+    (async () => {
+      if (settings.bgImage) await rememberImage(settings.bgImage);
+      const list = await myImages();
+      if (!list.length || !sec.isConnected) return;
+      const cur = settings.bgImage ? imgSig(settings.bgImage) : null;
+      box.replaceChildren(...list.map(it => h('div', { class: 'slide' + (it.sig === cur ? ' current' : ''), title: it.sig === cur ? 'Сейчас на фоне' : 'Сделать фоном' },
+        h('button', {
+          type: 'button', class: 'slide-thumb',
+          onclick: async () => {
+            const full = await Store.get('myimg:' + it.id, null);
+            if (!full) { await Store.set('myImages', (await myImages()).filter(x => x.id !== it.id)); renderSettings(); return toast('Картинка не нашлась'); }
+            setSetting('bgImage', full);
+            sampleImage();
+            rememberImage(full); // поднять в начало
+            renderSettings();
+          },
+        }, h('img', { src: it.thumb, alt: '' })),
+        h('button', {
+          type: 'button', class: 'slide-del', title: 'Удалить из «Моих картинок»', html: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+          onclick: async () => {
+            const full = await Store.get('myimg:' + it.id, null);
+            await Store.set('myImages', (await myImages()).filter(x => x.id !== it.id));
+            await Store.remove('myimg:' + it.id);
+            renderSettings();
+            if (full) toast('Картинка удалена', 'Вернуть', async () => {
+              await Store.set('myimg:' + it.id, full);
+              await Store.set('myImages', [it, ...(await myImages())].slice(0, MY_IMAGES_MAX));
+              renderSettings();
+            });
+          },
+        }))));
+      sec.hidden = false;
+    })();
+    return sec;
   }
 
   // ---------- слайд-шоу: свои картинки и фоны вперемешку ----------
@@ -2268,7 +2353,13 @@ const STAR_SVG = '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.
       if (raw?.settings) raw.settings = { ...raw.settings, bgImage: await Store.get('sceneimg:' + s.id, null) };
       states[s.id] = raw;
     }
-    const data = { app: 'torii', v: 3, settings, widgets: stripGeom(allWidgets()), layouts, scenes: { ...scenes, states }, linkIcons: LinkIcons.map };
+    // «Мои картинки» — вместе с самими картинками (без них бэкап их бы не спас)
+    const gallery = [];
+    for (const it of await myImages()) {
+      const full = await Store.get('myimg:' + it.id, null);
+      if (full) gallery.push({ thumb: it.thumb, full });
+    }
+    const data = { app: 'torii', v: 3, settings, widgets: stripGeom(allWidgets()), layouts, scenes: { ...scenes, states }, linkIcons: LinkIcons.map, myImages: gallery };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = h('a', { href: URL.createObjectURL(blob), download: 'torii-backup.json' });
     a.click();
@@ -2305,6 +2396,9 @@ const STAR_SVG = '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.
       }
       await Store.set('scenes', sc);
       if (d.linkIcons) await Store.set('linkIcons', LinkIcons.clean(d.linkIcons)); // свои иконки ссылок (бэкапы с 0.13)
+      // «Мои картинки» (бэкапы с 1.0.4) — добавляем к своим, с конца, чтобы порядок из бэкапа сохранился
+      const okImg = (s) => typeof s === 'string' && s.startsWith('data:image/');
+      if (Array.isArray(d.myImages)) for (const g of d.myImages.slice(0, MY_IMAGES_MAX).reverse()) if (okImg(g?.full)) await rememberImage(g.full, okImg(g.thumb) ? g.thumb : undefined);
       location.reload();
     } catch (e) {
       console.info('[import]', e.message);

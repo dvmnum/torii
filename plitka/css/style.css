@@ -1274,7 +1274,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px;
 .panel.peek .panel-tabs { opacity: 0; }
 
 /* слайд-шоу */
-.slides { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.slides, .my-imgs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .slide { position: relative; }
 .slide-thumb { width: 100%; aspect-ratio: 16 / 10; padding: 0; border-radius: 9px; border: 1px solid var(--line-2); overflow: hidden; background: #111; display: block; }
 .slide-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -1356,6 +1356,9 @@ body.bg-fade #bg-mesh, body.bg-fade #bg .bg-image { opacity: 0 !important; }
   background: rgba(255,255,255,.05); border: 1px solid var(--line-2); border-radius: 8px; padding: 8px 10px; outline: 0; user-select: text;
 }
 .cp-hex:focus { border-color: var(--accent); }
+.cp-done { width: 30px; height: 30px; flex: none; border: 0; border-radius: 8px; display: grid; place-items: center; background: var(--accent); color: #fff; cursor: pointer; }
+.cp-done svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.cp-done:hover { filter: brightness(1.1); }
 .cp-quick { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
 .cp-quick button { aspect-ratio: 1; border-radius: 7px; border: 1px solid var(--line-2); background: var(--c); padding: 0; transition: transform .15s var(--ease); }
 .cp-quick button:hover { transform: scale(1.12); }

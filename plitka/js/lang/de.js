@@ -2,6 +2,7 @@
 // Грузится только при выборе языка (I18N.setLang). Новая строка в EN — добавь перевод сюда (npm run i18n покажет пропуски).
 I18N.add('de', {
   dict: {
+    'My images': 'Meine Bilder', 'Current background': 'Aktueller Hintergrund', 'Set as background': 'Als Hintergrund festlegen', 'Remove from My images': 'Aus „Meine Bilder“ entfernen', 'Image not found': 'Bild nicht gefunden',
     'Finding Torii useful?': 'Ist Torii nützlich für dich?', 'Rate it': 'Bewerten', 'If you have a moment, rate it in the store. It really helps a new extension: that’s how others find it.': 'Wenn du kurz Zeit hast, bewerte es im Store. Das hilft einer neuen Erweiterung sehr: So finden andere sie.',
     '+ Add greeting': '+ Begrüßung hinzufügen', '+ Copy current': '+ Aktuelles kopieren', '+ Current background': '+ Aktueller Hintergrund', '+ Default': '+ Standard',
     '+ Images': '+ Bilder', '+ Link': '+ Link', '+ Point': '+ Punkt', '+ Widget': '+ Widget',

@@ -513,8 +513,14 @@ await page.click('.inspector .color-btn');
 await page.waitForTimeout(200);
 await page.click('.cp-quick button[title="#141418"]');
 await page.screenshot({ path: `${out}/27-widget-style-modal.png` });
-await page.keyboard.press('Escape');
-check(await page.locator('.inspector').count() === 1, 'оформление: Esc закрыл пикер, инспектор на месте');
+await page.waitForTimeout(150);
+check(await page.locator('.cp').count() === 0 && await page.locator('.inspector').count() === 1, 'оформление: готовый цвет выбран — пикер закрылся сам, инспектор на месте');
+// пикер закрывается и кнопкой «Готово»
+await page.click('.inspector .color-btn');
+await page.waitForTimeout(200);
+await page.click('.cp-done');
+await page.waitForTimeout(150);
+check(await page.locator('.cp').count() === 0 && await page.locator('.inspector').count() === 1, 'оформление: «Готово» закрыл пикер');
 await page.keyboard.press('Escape'); // закрыть инспектор — всё уже применилось
 await page.keyboard.press('Escape');
 await page.waitForTimeout(400);
@@ -551,6 +557,17 @@ const ph = await page.evaluate(() => ({ img: !!window.__plitka.settings().bgImag
 check(ph.img && ph.on && ph.photo.mode === 'frosted', 'картинка: загружена, по умолчанию матовое стекло на WebGL');
 check(await page.locator('.mesh-editor .clear-rect:not([hidden])').count() === 1 && await page.locator('.mesh-editor .mesh-dot').count() === 0, 'картинка: редактор открыт, есть чистая область, нет точек меша');
 await page.screenshot({ path: `${out}/29-photo-editor.png` });
+
+// «Мои картинки»: сменил фон на заготовку — картинка не пропала, возвращается кликом по миниатюре
+await page.waitForTimeout(400);
+check(await page.locator('.my-imgs .slide').count() === 1 && await page.locator('.my-imgs .slide.current').count() === 1, 'мои картинки: загруженная картинка в галерее и отмечена текущей');
+const imgBefore = await page.evaluate(() => window.__plitka.settings().bgImage);
+await page.click('.mesh-preset[data-preset="aurora"]');
+await page.waitForTimeout(500);
+check(!(await page.evaluate(() => window.__plitka.settings().bgImage)) && await page.locator('.my-imgs .slide').count() === 1, 'мои картинки: после заготовки картинка осталась в галерее');
+await page.click('.my-imgs .slide-thumb');
+await page.waitForTimeout(800);
+check(await page.evaluate((b) => window.__plitka.settings().bgImage === b, imgBefore), 'мои картинки: клик по миниатюре вернул ту же картинку');
 
 // двигаем и растягиваем чистую область
 const cr = await page.locator('.clear-rect').boundingBox();
