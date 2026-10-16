@@ -34,7 +34,7 @@ await page.goto(url);
 await page.waitForTimeout(800);
 
 // поставить раскладку: блоки, позиции, фон-заготовка, язык; потом перезагрузить и дать фону и иконкам появиться
-// своя картинка-фон для главного снимка: большой сине-зелёный треугольник с размытыми краями под широкой рифлёнкой —
+// своя картинка-фон для снимка «живые фоны»: большой сине-зелёный треугольник с размытыми краями под широкой рифлёнкой —
 // рисуем на холсте здесь же (своя графика, без чужих прав); в Torii так может сделать любой: своя картинка + узор «Рифлёное стекло»
 const TRIANGLE = () => page.evaluate(() => {
   const c = document.createElement('canvas'); c.width = 2560; c.height = 1600;
@@ -113,7 +113,7 @@ for (const lang of ['ru', 'en']) {
     ['weather', 0, 0, 6, 3, { view: 'details' }], ['notes', 19, 0, 5, 5, { text: t.notes }],
   ];
   // 1. главный экран
-  await scene({ preset: 'lagoon', lang, widgets: main, image: await TRIANGLE(), extra: { photo: RIBBED } });
+  await scene({ preset: 'aurora', lang, widgets: main, extra: { fx: { bloom: .3, vignette: .25 } } });
   await shot(lang, '1-main.png');
 
   // 2. редактор: блоки двигаются и растягиваются, каталог виджетов
@@ -128,8 +128,8 @@ for (const lang of ['ru', 'en']) {
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
 
-  // 3. живые фоны: неон и панель с заготовками
-  await scene({ preset: 'neon', lang, widgets: [['clock', 2, 3, 10, 4], ['search', 1, 7, 12, 1]], extra: { fx: { particles: .35, vignette: .3 } } });
+  // 3. живые фоны: своя картинка (треугольник) под рифлёным стеклом и панель с узорами
+  await scene({ preset: 'neon', lang, widgets: [['clock', 2, 3, 10, 4], ['search', 1, 7, 12, 1]], image: await TRIANGLE(), extra: { photo: RIBBED, bgDim: 0.12 } });
   await page.click('#btn-settings');
   await page.waitForTimeout(3500); // миниатюры заготовок рисуются по одной
   await shot(lang, '3-backgrounds.png');
