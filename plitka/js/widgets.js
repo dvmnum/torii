@@ -52,78 +52,6 @@ const FavSrc = {
   },
 };
 
-// Иконки «как погода» — сразу из памяти, без сети. Пиксели можно сохранить только с favicon.yandex.net (отдаёт CORS;
-// Google s2 — нет), поэтому: первый раз показываем как обычно (Google → Яндекс → буква), а в фоне берём иконку у Яндекса,
-// ужимаем до 96px и кладём в ключ favimgs { [host]: [dataURL | '' — у Яндекса нет, когда] }. Тёмная иконка на прозрачном
-// (GitHub, ChatGPT) на тёмной плитке пропала бы — ей белая подложка, как делает Google. Раз в две недели — заново.
-// Иконки стандартных ссылок лежат в пакете (icons/sites/) — новая вкладка с первого открытия без пустых плиток.
-const FavImg = {
-  KEY: 'favimgs', TTL: 14 * 864e5, MAX: 160, map: {}, t: 0, queue: [], busy: 0, asked: new Set(),
-  BUNDLED: new Set(['youtube.com', 'github.com', 'web.telegram.org', 'habr.com', 'kinopoisk.ru', 'claude.ai']),
-  load(m) { if (m && typeof m === 'object' && !Array.isArray(m)) this.map = m; },
-  get(host) {
-    if (this.BUNDLED.has(host)) return `icons/sites/${host}.webp`;
-    const e = this.map[host];
-    if (!e) return null;
-    if (Date.now() - e[1] > this.TTL) this.learn(host); // старая — показываем, но тихо обновляем
-    return typeof e[0] === 'string' && e[0].startsWith('data:image/') ? e[0] : null;
-  },
-  has(host) { return this.BUNDLED.has(host) || !!this.map[host]; },
-  // в очередь (по две за раз, в простое) — не мешаем первой отрисовке вкладки
-  learn(host) {
-    if (!host || this.asked.has(host) || this.BUNDLED.has(host)) return;
-    this.asked.add(host);
-    this.queue.push(host);
-    this.pump();
-  },
-  pump() {
-    while (this.busy < 2 && this.queue.length) {
-      const host = this.queue.shift();
-      this.busy++;
-      const idle = window.requestIdleCallback || ((f) => setTimeout(f, 300));
-      idle(() => this.fetchOne(host).finally(() => { this.busy--; this.pump(); }));
-    }
-  },
-  async fetchOne(host) {
-    let data = '';
-    try {
-      const r = await fetch(`https://favicon.yandex.net/favicon/v2/${encodeURIComponent(host)}?size=120`, { signal: AbortSignal.timeout(8000) });
-      if (!r.ok) return;
-      const bmp = await createImageBitmap(await r.blob());
-      if (bmp.width >= 17) data = iconPlate(bmp); // 1×1 — у Яндекса иконки нет: запоминаем пустую, чтобы не спрашивать каждый раз
-    } catch { return; } // нет сети — попробуем в другой раз
-    this.map[host] = [data, Date.now()];
-    const keys = Object.keys(this.map);
-    if (keys.length > this.MAX) keys.sort((a, b) => this.map[a][1] - this.map[b][1]).slice(0, keys.length - this.MAX).forEach(k => delete this.map[k]);
-    clearTimeout(this.t);
-    this.t = setTimeout(() => Store.set(this.KEY, this.map), 800);
-  },
-};
-// картинку иконки → dataURL 96×96; тёмная на прозрачном — на белую скруглённую подложку
-function iconPlate(bmp) {
-  const S = 96;
-  const c = document.createElement('canvas');
-  c.width = c.height = S;
-  const g = c.getContext('2d', { willReadFrequently: true });
-  g.drawImage(bmp, 0, 0, S, S);
-  const d = g.getImageData(0, 0, S, S).data;
-  let a = 0, lum = 0;
-  for (let i = 0; i < d.length; i += 4) {
-    const w = d[i + 3] / 255;
-    a += w;
-    lum += w * (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
-  }
-  const cover = a / (S * S), mean = a ? lum / a : 1;
-  if (cover < 0.92 && mean < 0.28) {
-    g.clearRect(0, 0, S, S);
-    g.fillStyle = '#fff';
-    g.beginPath(); g.roundRect(0, 0, S, S, S * 0.22); g.fill();
-    const p = S * 0.14;
-    g.drawImage(bmp, p, p, S - 2 * p, S - 2 * p);
-  }
-  return c.toDataURL('image/webp', 0.9);
-}
-
 // <img> с цепочкой запасных источников; если всё упало — буква. Пока грузится — класс .fav-wait (под ним заглушка)
 function favicon(pageUrl, title, size = 64) {
   const srcs = faviconSources(pageUrl, size);
@@ -135,17 +63,6 @@ function favicon(pageUrl, title, size = 64) {
     m.textContent = letter;
     return m;
   };
-  // своя копия (из пакета или из памяти) — сразу, без сети
-  const saved = host && FavImg.get(host);
-  if (saved) {
-    const img = document.createElement('img');
-    img.alt = '';
-    img.src = saved;
-    // файл из пакета пропал (или битый dataURL) — забываем и идём обычным путём
-    img.addEventListener('error', () => { delete FavImg.map[host]; FavImg.BUNDLED.delete(host); img.replaceWith(favicon(pageUrl, title, size)); }, { once: true });
-    return img;
-  }
-  if (host && !FavImg.has(host)) FavImg.learn(host);
   const known = FavSrc.get(host);
   if (known === -1 || !srcs.length) return mono();
   const img = document.createElement('img');

@@ -116,8 +116,7 @@ const STAR_SVG = '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.
 
   // всё для первого кадра — одним запросом. Картинка-фон лежит отдельным ключом bgImage (мегабайты):
   // иначе её перечитывали бы и перезаписывали вместе с настройками на каждый шаг любого ползунка
-  const boot = await Store.getMany({ settings: {}, bgImage: null, widgets: null, layouts: null, scenes: null, opens: 0, donateDone: false, donateDay: null, rateOpens: 0, rateSince: null, rateDone: false, linkIcons: {}, favimgs: {} });
-  FavImg.load(boot.favimgs); // сохранённые иконки сайтов — до отрисовки блоков, чтобы появились сразу
+  const boot = await Store.getMany({ settings: {}, bgImage: null, widgets: null, layouts: null, scenes: null, opens: 0, donateDone: false, donateDay: null, rateOpens: 0, rateSince: null, rateDone: false, linkIcons: {} });
   LinkIcons.load(boot.linkIcons); // свои иконки ссылок — до отрисовки блоков
   let settings = cleanSettings(boot.settings);
   persistSettings.img = boot.bgImage;
