@@ -681,25 +681,26 @@ img.fav-wait { opacity: 0; }
 .w-weather > * { transition: opacity .4s, filter .4s; }
 .w-weather.is-old > * { opacity: .4; filter: saturate(.5); }
 .w-weather.is-old > .wx-bg { opacity: .06; }
-@keyframes wx-shimmer { from { background-position: 125% 0; } to { background-position: -125% 0; } }
+/* обновление — «волна по строкам»: градусы, город, строка под ним загораются по очереди и гаснут, с паузой.
+   Медленно (2.6 с) и не до белого: на пике текст всё ещё полупрозрачный */
+@keyframes wx-wave { 0%, 60%, 100% { color: rgba(var(--fg), .34); } 25% { color: rgba(var(--fg), .62); } }
 @keyframes wx-pulse { 50% { opacity: .35; } }
 @keyframes wx-pulse-bg { 50% { opacity: .04; } }
-.w-weather.is-updating :is(.wx-temp, .wx-place, .wx-desc, .wx-sub, .wx-range, .wx-dname, .wx-dt, .wx-pop, .wx-stat b, .wx-stat span) {
-  color: transparent; -webkit-background-clip: text; background-clip: text;
-  background-image: linear-gradient(100deg, rgba(var(--fg), .26) 35%, rgba(var(--fg), .58) 50%, rgba(var(--fg), .26) 65%); background-size: 250% 100%;
-  animation: wx-shimmer 1.6s linear infinite;
+.w-weather.is-updating :is(.wx-temp, .wx-place, .wx-desc, .wx-sub, .wx-range, .wx-dname, .wx-dt, .wx-dt span, .wx-pop, .wx-stat b, .wx-stat span) {
+  color: rgba(var(--fg), .34); animation: wx-wave 2.6s ease-in-out infinite;
 }
-.w-weather.is-updating .wx-dt span { color: transparent; }
+.w-weather.is-updating :is(.wx-place, .wx-dname, .wx-stat b) { animation-delay: .25s; }
+.w-weather.is-updating :is(.wx-range, .wx-sub, .wx-desc, .wx-dt, .wx-dt span, .wx-pop, .wx-stat span) { animation-delay: .5s; }
 /* пока обновляется — всё серее, а вместо значка погоды кружок загрузки */
 .w-weather.is-updating { filter: saturate(.3); }
 .w-weather.is-updating .wx-ico { animation: none; position: relative; }
 .w-weather.is-updating .wx-ico svg { visibility: hidden; }
 .w-weather.is-updating .wx-ico::after {
   content: ''; position: absolute; inset: 0; margin: auto; width: .72em; height: .72em; border-radius: 50%; box-sizing: border-box;
-  border: max(1.5px, .08em) solid rgba(var(--fg), .18); border-top-color: rgba(var(--fg), .6); animation: spin .8s linear infinite;
+  border: max(1.5px, .08em) solid rgba(var(--fg), .18); border-top-color: rgba(var(--fg), .5); animation: spin 1.6s linear infinite;
 }
-.w-weather.is-updating :is(.wx-ico, .wx-dico) { animation: wx-pulse 1.6s ease-in-out infinite; }
-.w-weather.is-updating .wx-bg { animation: wx-pulse-bg 1.6s ease-in-out infinite; }
+.w-weather.is-updating :is(.wx-ico, .wx-dico) { animation: wx-pulse 2.6s ease-in-out infinite; }
+.w-weather.is-updating .wx-bg { animation: wx-pulse-bg 2.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .w-weather.is-updating * { animation: none !important; } }
 /* «Сейчас» (по рефу) в строку: градусы · город и под ним «макс / мин» (или «5 ч назад») · справа значок с подписью */
 .w-weather.is-now { gap: clamp(10px, 4cqw, 20px); }

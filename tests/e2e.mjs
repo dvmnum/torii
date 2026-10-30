@@ -162,7 +162,7 @@ await oldWx(5, 77);
 await page.reload();
 await page.waitForTimeout(500);
 let wm = await wxState();
-check(wm.temp === '77°' && wm.updating && wm.shimmer === 'wx-shimmer' && wm.line3 === '5 ч назад' && wm.place === 'Москва' && wm.spin === 'spin' && !wm.desc, `погода: старше 3 ч — переливается, кружок вместо значка без подписи, «5 ч назад» внизу (${JSON.stringify(wm)})`);
+check(wm.temp === '77°' && wm.updating && wm.shimmer === 'wx-wave' && wm.line3 === '5 ч назад' && wm.place === 'Москва' && wm.spin === 'spin' && !wm.desc, `погода: старше 3 ч — переливается, кружок вместо значка без подписи, «5 ч назад» внизу (${JSON.stringify(wm)})`);
 await page.locator('.grid-stack-item[gs-id="w-weather"]').screenshot({ path: `${out}/08b-weather-old.png` });
 await page.waitForTimeout(2000);
 wm = await wxState();
